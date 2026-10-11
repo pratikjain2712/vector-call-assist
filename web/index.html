@@ -114,6 +114,9 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
 #scan-video { width: 100%; border-radius: 8px; background: #000; display: block; aspect-ratio: 4 / 3; object-fit: cover; }
 .msgline { margin: 0; font-size: 0.92rem; color: var(--no); }
 .msgline:empty { display: none; }
+.fields.one { grid-template-columns: minmax(0, 1fr); }
+.pill[data-sync="wait"] summary::before { background: var(--maybe); }
+.pill[data-sync="off"] summary::before { background: var(--no); }
 
 /* ---- Workspace, once paired ---- */
 .topbar { background: var(--bg); border-bottom: 1px solid var(--line); position: relative; z-index: 20; }
@@ -207,6 +210,21 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
 
 </head>
 <body>
+<!-- Step 0: sign in (only when a Supabase project is set up in js/config.js). -->
+<section class="gate" id="signin" hidden>
+  <div class="gate-card">
+    <span class="label">Vector 2.0 call guide</span>
+    <h1 id="signin-title">Sign in</h1>
+    <p id="signin-text">Use the work email your institute invited. We'll email you a sign-in link; no password needed.</p>
+    <div id="signin-form" class="fields one">
+      <label class="field"><span class="label">Work email</span><input id="signin-email" type="email" autocomplete="email" inputmode="email" placeholder="you@institute.com"></label>
+      <button class="primary big" id="signin-send" type="button">Email me a sign-in link</button>
+    </div>
+    <div class="tools" id="signin-actions"></div>
+    <p class="msgline" id="signin-msg" role="status"></p>
+  </div>
+</section>
+
 <!-- Step 1: pair a phone. Nothing else is shown until this browser is paired. -->
 <section class="gate" id="gate" hidden>
   <div class="gate-card">
@@ -243,6 +261,13 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
     <div class="topbar-in">
       <h1 class="brand">Vector <span>call guide</span></h1>
       <label class="me"><span class="label">You</span><input id="me-name" type="text" autocomplete="off" value="Pratik" title="Your name, used in the script"></label>
+      <details class="pill" id="cloud-panel" hidden>
+        <summary><span id="cloud-summary">Synced</span></summary>
+        <div class="pill-menu">
+          <p class="hint" id="cloud-status"></p>
+          <button class="plain" id="cloud-signout" type="button">Sign out</button>
+        </div>
+      </details>
       <details class="pill" id="link-panel">
         <summary><span id="link-summary">Phone connected</span></summary>
         <div class="pill-menu">
@@ -308,6 +333,9 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="js/config.js"></script>
+<script src="js/cloud.js"></script>
 <script src="js/phone-link.js"></script>
 <script src="js/call-session.js"></script>
 <script>
@@ -740,6 +768,7 @@ function setCallSummary(sessionId, text) {
 
 function finishCall(sessionId, patch, summary) {
   CallRecords.update(sessionId, patch);
+  cloudSync(sessionId);
   setCallSummary(sessionId, summary);
   note(summary);
 }
@@ -839,7 +868,7 @@ function finishRecord(label, code) {
     objections: state.objs.join("; "), objectionList: state.objs.slice(),
     notes: sheet ? String(sheet.rows[sheet.idx][sheet.cols.notes] || "") : "", saveStatus: "saved",
   };
-  if (state.callId && CallRecords.get(state.callId)) { CallRecords.update(state.callId, patch); return; }
+  if (state.callId && CallRecords.get(state.callId)) { CallRecords.update(state.callId, patch); cloudSync(state.callId); return; }
   const id = (crypto.randomUUID && crypto.randomUUID()) || ("m-" + Date.now() + "-" + Math.random().toString(16).slice(2));
   const phone = sheet ? String(sheet.rows[sheet.idx][sheet.cols.phone]).trim() : "";
   CallRecords.add(Object.assign({
@@ -849,12 +878,107 @@ function finishRecord(label, code) {
     detection: "", callStatus: "", updatedAt: Date.now(),
   }, patch));
   state.callId = id;
+  cloudSync(id);
+}
+
+/* ---- Cloud sync (js/cloud.js) ----
+   A call is uploaded once it is settled: the outcome is tapped and, for laptop calls, the phone has
+   reported the result (or two minutes have passed). A later change to an uploaded call is sent as a
+   correction row that points at the earlier one, so the cloud history is never rewritten. */
+const SCRIPT_ID = "vector-2.0-sales";
+const SCRIPT_VERSION = 1;
+const CLOUD_OUTCOME = {
+  end_won: "won", end_followup: "interested", end_callback: "callback", end_details: "other",
+  end_noanswer: "no_answer", end_lost: "not_interested", end_wrong: "other", end_dnc: "not_interested",
+};
+
+function cloudRow(r) {
+  const objs = r.objectionList || [];
+  const dialMs = r.dialWallMs || (r.outcomeAtMs ? r.outcomeAtMs - (r.scriptSeconds || 0) * 1000 : 0);
+  return {
+    script_id: SCRIPT_ID, script_version: SCRIPT_VERSION,
+    script_step: (r.outcomeCode || "").slice(0, 80) || null,   // the end card reached, e.g. end_details
+    objection: objs.length ? String(objs[objs.length - 1]).slice(0, 80) : null,
+    outcome: CLOUD_OUTCOME[r.outcomeCode] || "other",
+    dialled_at: dialMs ? new Date(dialMs).toISOString() : null,
+    connected_seconds: r.connectedSeconds == null ? null : Math.max(0, Math.round(r.connectedSeconds)),
+    phone_session_id: r.source === "laptop" ? String(r.sessionId).slice(0, 80) : null,
+  };
+}
+
+function cloudSync(sessionId) {
+  if (!Cloud.enabled || !Cloud.hasSeat()) return;
+  const r = CallRecords.get(sessionId);
+  if (!r || r.saveStatus !== "saved" || !r.outcomeCode || (r.outcomeAtMs || 0) < Cloud.since()) return;
+  const settled = r.source !== "laptop" || CALL_FINAL[r.callStatus] || Date.now() - (r.outcomeAtMs || 0) > 120000;
+  if (!settled) return;
+  const row = cloudRow(r);
+  const sig = JSON.stringify(row);
+  const sent = (r.cloud && r.cloud.sent) || [];
+  if (sent.length && sent[sent.length - 1].sig === sig) return;   // nothing new to send
+  const id = crypto.randomUUID();
+  const full = Object.assign({ id: id, client_record_id: (sent.length ? r.sessionId + "~" + (sent.length + 1) : r.sessionId).slice(0, 80),
+    corrects_id: sent.length ? sent[sent.length - 1].id : null }, row);
+  // Marked as sent first: queueing announces a change, and that must not offer this call again.
+  CallRecords.update(sessionId, { cloud: { sent: sent.concat([{ id: id, sig: sig }]) } });
+  if (!Cloud.enqueue(full)) CallRecords.update(sessionId, { cloud: { sent: sent } });
+}
+
+/* Laptop calls whose outcome was tapped before the phone's result came in. */
+function cloudSweep() {
+  if (!Cloud.enabled || !Cloud.hasSeat()) return;
+  CallRecords.all().forEach((r) => { if (r.saveStatus === "saved") cloudSync(r.sessionId); });
+}
+
+function renderCloud(c) {
+  const pill = $("cloud-panel");
+  pill.hidden = !c.enabled || !c.email;
+  if (pill.hidden) return;
+  const waiting = c.pending > 0;
+  pill.dataset.sync = c.status === "offline" || c.status === "error" ? "off" : waiting ? "wait" : "ok";
+  $("cloud-summary").textContent = c.status === "offline" ? "Cloud offline" : waiting ? c.pending + " to sync" : "Synced";
+  $("cloud-status").textContent = "Signed in as " + c.email + (c.seatLabel ? " (" + c.seatLabel + ")" : "") + ". " +
+    (waiting ? c.pending + " call result(s) waiting to upload; they upload automatically when the connection is back. " : "All call results are uploaded. ") +
+    (c.failed ? c.failed + " could not be uploaded. " : "") + "Lead names and numbers never leave this browser.";
+}
+
+function renderSignin(c) {
+  const msg = $("signin-msg"), actions = $("signin-actions");
+  actions.textContent = "";
+  $("signin-form").hidden = !(c.status === "signed_out" || c.status === "link_sent" || c.status === "error");
+  if (c.status === "starting") { $("signin-title").textContent = "Signing in…"; $("signin-text").textContent = "Checking your account."; msg.textContent = ""; }
+  else if (c.status === "link_sent") { $("signin-title").textContent = "Check your email"; $("signin-text").textContent = "We sent a sign-in link. Open it on this computer, in this browser. You can close this tab; the link opens Vector signed in."; }
+  else if (c.status === "no_seat") {
+    $("signin-title").textContent = "No active seat";
+    $("signin-text").textContent = "You're signed in as " + c.email + ", but this account has no active seat. Ask your institute admin to assign you one, then try again.";
+    actions.appendChild(tool("signin-retry", "Try again", () => Cloud.retry(), "primary"));
+    actions.appendChild(tool("signin-out", "Sign out", () => Cloud.signOut(), "plain"));
+  } else if (c.status === "error") {
+    $("signin-title").textContent = "Sign in";
+    $("signin-text").textContent = "Use the work email your institute invited. We'll email you a sign-in link; no password needed.";
+    msg.textContent = "Could not reach the Vector cloud: " + c.lastError;
+    actions.appendChild(tool("signin-retry", "Try again", () => Cloud.retry(), "plain"));
+  } else { $("signin-title").textContent = "Sign in"; $("signin-text").textContent = "Use the work email your institute invited. We'll email you a sign-in link; no password needed."; }
+}
+
+async function sendSigninLink() {
+  const btn = $("signin-send");
+  btn.disabled = true;
+  $("signin-msg").textContent = "";
+  try { await Cloud.sendLink($("signin-email").value); }
+  catch (e) { $("signin-msg").textContent = e.message; }
+  finally { btn.disabled = false; }
 }
 
 function refreshLinkPanel() {
   const paired = PhoneLink.isPaired();
-  // Pairing comes first: until a phone is paired, only the pairing screen is shown.
-  $("gate").hidden = paired; $("app").hidden = !paired;
+  const c = Cloud.info();
+  // With the cloud set up, signing in comes first; then pairing; then the workspace.
+  const needSignin = c.enabled && !(c.status === "ready" || c.status === "offline");
+  $("signin").hidden = !needSignin;
+  if (needSignin) renderSignin(c);
+  $("gate").hidden = needSignin || paired; $("app").hidden = needSignin || !paired;
+  renderCloud(c);
   if (paired) { stopScan(); $("cert-box").hidden = true; $("gate-msg").textContent = ""; }
   renderHealth();
 }
@@ -1167,6 +1291,16 @@ refreshLinkPanel();
 render();
 resumeLastCall();
 checkPhone();
+let cloudStatus = "";
+Cloud.onChange((c) => {
+  refreshLinkPanel();
+  if (c.status !== cloudStatus) { cloudStatus = c.status; if (c.status === "ready") cloudSweep(); }   // catch up after signing in
+});
+Cloud.init();
+setInterval(cloudSweep, 30000);
+$("signin-send").addEventListener("click", sendSigninLink);
+$("signin-email").addEventListener("keydown", (ev) => { if (ev.key === "Enter") sendSigninLink(); });
+$("cloud-signout").addEventListener("click", () => { $("cloud-panel").open = false; Cloud.signOut(); });
 setInterval(checkPhone, 15000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) checkPhone(); });
 </script>
