@@ -1,14 +1,16 @@
-/* Per-call records, kept in this browser (vca2-calls): calls placed from the laptop through the phone,
+/* Per-call records, kept in this browser (IndexedDB via Vault, key "calls"; never localStorage): calls placed from the laptop through the phone,
    and calls finished in the script without the phone ("manual"). Exported as the Calls tab of the
    results workbook. Times are shown as ISO 8601 with offset. */
 (function () {
-  const KEY = 'vca2-calls';
+  const KEY = 'calls';
 
   function all() {
-    try { const v = JSON.parse(localStorage.getItem(KEY) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+    const v = Vault.get(KEY);
+    return Array.isArray(v) ? v : [];
   }
   function write(list) {
-    try { localStorage.setItem(KEY, JSON.stringify(list)); return true; } catch (e) { return false; }
+    Vault.set(KEY, list);   // in memory at once; the IndexedDB copy is written in the background
+    return true;
   }
   function get(sessionId) { return all().find((r) => r.sessionId === sessionId) || null; }
 

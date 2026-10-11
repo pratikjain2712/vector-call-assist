@@ -48,15 +48,41 @@ object LinkKeyStore {
     }
 
     /** The plain key, or null if not paired or the Keystore entry is gone. */
-    fun load(c: Context): ByteArray? = try {
-        val p = prefs(c)
-        val wrapped = p.getString(KEY_WRAPPED, null) ?: return null
-        val iv = p.getString(KEY_IV, null) ?: return null
+    fun load(c: Context): ByteArray? {
+        return try {
+            val p = prefs(c)
+            val wrapped = p.getString(KEY_WRAPPED, null) ?: return null
+            val iv = p.getString(KEY_IV, null) ?: return null
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, wrapKey(), GCMParameterSpec(128, LinkCrypto.unb64(iv)))
+            cipher.doFinal(LinkCrypto.unb64(wrapped))
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Wraps a short secret (the certificate password) with the same Keystore key. Returns "iv.ciphertext"
+     * in Base64, which is safe to keep in prefs. Throws if the Keystore is unavailable.
+     */
+    fun wrapText(text: String): String {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.DECRYPT_MODE, wrapKey(), GCMParameterSpec(128, LinkCrypto.unb64(iv)))
-        cipher.doFinal(LinkCrypto.unb64(wrapped))
-    } catch (e: Exception) {
-        null
+        cipher.init(Cipher.ENCRYPT_MODE, wrapKey())
+        val wrapped = cipher.doFinal(text.toByteArray(Charsets.UTF_8))
+        return LinkCrypto.b64(cipher.iv) + "." + LinkCrypto.b64(wrapped)
+    }
+
+    /** The secret from [wrapText], or null if it cannot be opened (for example, the Keystore entry is gone). */
+    fun unwrapText(blob: String): String? {
+        val parts = blob.split('.')
+        if (parts.size != 2) return null
+        return try {
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, wrapKey(), GCMParameterSpec(128, LinkCrypto.unb64(parts[0])))
+            String(cipher.doFinal(LinkCrypto.unb64(parts[1])), Charsets.UTF_8)
+        } catch (e: Exception) {
+            null
+        }
     }
 
     fun clear(c: Context) {

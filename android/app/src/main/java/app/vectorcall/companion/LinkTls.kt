@@ -1,6 +1,7 @@
 package app.vectorcall.companion
 
 import android.content.Context
+import android.content.SharedPreferences
 import org.bouncycastle.asn1.DEROctetString
 import org.bouncycastle.asn1.x500.X500Name
 import org.bouncycastle.asn1.x509.Extension
@@ -25,11 +26,13 @@ import javax.net.ssl.SSLContext
  *
  * The certificate names the phone's current Wi-Fi address. The browser asks you to accept it once
  * (the website shows the page to open). It is recreated only when the phone's address changes.
- * The key is stored in the app's private files as a PKCS#12 file; its password is in private prefs.
+ * The key is stored in the app's private files as a PKCS#12 file. Its password is wrapped with an
+ * Android Keystore key (see LinkKeyStore) and kept in private prefs, never in clear.
  */
 object LinkTls {
     private const val PREFS = "vector_link"
-    private const val KEY_PW = "tls_pw"
+    private const val KEY_PW_PLAIN = "tls_pw"            // older versions kept the password here, in clear
+    private const val KEY_PW_WRAPPED = "tls_pw_wrapped"  // current: wrapped by the Keystore (LinkKeyStore)
     private const val KEY_IP = "tls_ip"
     private const val FILE = "link_tls.p12"
     private const val ALIAS = "vector-link"
@@ -41,18 +44,41 @@ object LinkTls {
         val app = c.applicationContext
         val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val file = File(app.filesDir, FILE)
-        val savedPw = prefs.getString(KEY_PW, null)
-        if (savedPw == null || prefs.getString(KEY_IP, null) != ip || !file.exists()) {
-            val pw = randomPassword()
-            build(file, pw, ip)
-            prefs.edit().putString(KEY_PW, pw).putString(KEY_IP, ip).apply()
+        val saved = password(prefs)
+        val pw = if (saved == null || prefs.getString(KEY_IP, null) != ip || !file.exists()) {
+            val fresh = randomPassword()
+            build(file, fresh, ip)
+            prefs.edit()
+                .putString(KEY_PW_WRAPPED, LinkKeyStore.wrapText(fresh))
+                .remove(KEY_PW_PLAIN)
+                .putString(KEY_IP, ip)
+                .apply()
+            fresh
+        } else {
+            saved
         }
-        val pw = prefs.getString(KEY_PW, null) ?: error("missing certificate password")
         val ks = KeyStore.getInstance("PKCS12")
         file.inputStream().use { ks.load(it, pw.toCharArray()) }
         val kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
         kmf.init(ks, pw.toCharArray())
         return SSLContext.getInstance("TLS").apply { init(kmf.keyManagers, null, null) }
+    }
+
+    /**
+     * The certificate password, or null if there is none or it cannot be opened. An install from before
+     * this change kept it in clear: that value is wrapped once and the plain copy removed. The password
+     * itself does not change, so the existing PKCS#12 file still opens and the laptop stays paired.
+     */
+    private fun password(prefs: SharedPreferences): String? {
+        val plain = prefs.getString(KEY_PW_PLAIN, null)
+        val wrapped = prefs.getString(KEY_PW_WRAPPED, null)
+        if (wrapped == null && plain != null) {
+            // If wrapping throws, nothing is removed and the next start tries again.
+            prefs.edit().putString(KEY_PW_WRAPPED, LinkKeyStore.wrapText(plain)).remove(KEY_PW_PLAIN).apply()
+            return plain
+        }
+        if (plain != null) prefs.edit().remove(KEY_PW_PLAIN).apply()
+        return wrapped?.let { LinkKeyStore.unwrapText(it) }
     }
 
     private fun build(file: File, pw: String, ip: String) {

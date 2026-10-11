@@ -57,6 +57,11 @@ android {
         jvmTarget = "17"
     }
 
+    buildFeatures {
+        // LinkServer reads BuildConfig.DEBUG to allow the localhost origins in debug builds only.
+        buildConfig = true
+    }
+
     packaging {
         resources {
             // bcprov and bcpkix both ship this file; without the exclude the APK merge step fails.

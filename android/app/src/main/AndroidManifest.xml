@@ -61,9 +61,10 @@
             </intent-filter>
         </service>
 
+        <!-- Receives BOOT_COMPLETED from the system, which does not need the receiver to be exported. -->
         <receiver
             android:name=".BootReceiver"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>

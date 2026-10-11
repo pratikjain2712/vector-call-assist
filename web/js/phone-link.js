@@ -1,7 +1,8 @@
 /* Vector link: pairs this browser with the Vector Companion app on the phone and sends encrypted
    requests over HTTPS on the Wi-Fi. Must match android/.../LinkCrypto.kt and LinkServer.kt (protocol v2). */
 (function () {
-  const STORE = 'vca2-link';
+  const STORE = 'vca2-link';        // localStorage: the phone's address only, not secret
+  const KEY = 'link-key';           // Vault (IndexedDB): the AES key, non-extractable
   const ALPHA = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
   const DEFAULT_PORT = 8765;
   const enc = new TextEncoder();
@@ -13,8 +14,32 @@
   const cleanHost = (v) => String(v || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
   const validHost = (h) => /^(\d{1,3}\.){3}\d{1,3}(:\d{1,5})?$/.test(h);
 
-  function load() { try { return JSON.parse(localStorage.getItem(STORE) || 'null'); } catch (e) { return null; } }
-  function save(v) { try { localStorage.setItem(STORE, JSON.stringify(v)); } catch (e) {} }
+  let linkKey = null;               // CryptoKey for this browser's link, kept in memory after Vault loads
+  const hostRecord = () => {
+    try { const v = JSON.parse(localStorage.getItem(STORE) || 'null'); return v && typeof v.host === 'string' ? v.host : ''; }
+    catch (e) { return ''; }
+  };
+  const saveHost = (host) => { try { localStorage.setItem(STORE, JSON.stringify({ host: host })); } catch (e) {} };
+  const legacyRecord = () => {
+    try { const v = JSON.parse(localStorage.getItem(STORE) || 'null'); return v && v.ek ? v : null; } catch (e) { return null; }
+  };
+  /* Non-extractable: the page can use the key for this link but cannot read its bytes back. */
+  const importLinkKey = (bytes) => crypto.subtle.importKey('raw', bytes, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+
+  /* Loads the key from Vault. A key saved by the older version (in localStorage) moves to Vault and leaves localStorage. */
+  const ready = (async () => {
+    try { await Vault.ready; } catch (e) {}
+    linkKey = Vault.get(KEY);
+    const legacy = legacyRecord();
+    if (legacy) {
+      try {
+        linkKey = await importLinkKey(unb64(legacy.ek));
+        const saved = await Vault.set(KEY, linkKey);
+        // Without IndexedDB the key stays in memory for this page only; the old copy is dropped either way.
+        if (saved || !Vault.persistent()) saveHost(legacy.host);
+      } catch (e) {}
+    }
+  })();
 
   /* Accepts dashes, spaces, lower case, and I/L as 1, O as 0, as the phone does. */
   function normalizeSecret(input) {
@@ -57,6 +82,7 @@
 
   /* Pair with the phone. Throws an Error with a message a person can read. */
   async function pair(hostInput, codeInput) {
+    await ready;
     const host = cleanHost(hostInput);
     if (!validHost(host.includes(':') ? host : host + ':' + DEFAULT_PORT)) {
       throw new Error('Enter the phone address shown in the app, for example 192.168.1.20:8765.');
@@ -76,15 +102,18 @@
     } catch (e) { throw unreachable(hostPort); }
     const j = await res.json().catch(() => ({ ok: false, error: 'unexpected reply (HTTP ' + res.status + ')' }));
     if (!j.ok) throw new Error(j.error || 'pairing refused');
-    save({ host: hostPort, ek: b64(encKey), lastSeq: 0 });
+    linkKey = await importLinkKey(encKey);
+    await Vault.set(KEY, linkKey);   // in memory even when IndexedDB is unavailable
+    saveHost(hostPort);
     return hostPort;
   }
 
   /* One encrypted request. op: ping | dial | hangup | status | result | events. */
   async function request(op, extra) {
-    const st = load();
-    if (!st) throw new Error('This browser is not paired with the phone yet.');
-    const key = await crypto.subtle.importKey('raw', unb64(st.ek), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+    await ready;
+    const host = hostRecord();
+    if (!linkKey || !host) throw new Error('This browser is not paired with the phone yet.');
+    const key = linkKey;
     const path = '/api';
     const ts = String(Date.now());
     const nonce = b64(crypto.getRandomValues(new Uint8Array(16)));
@@ -95,12 +124,12 @@
 
     let res;
     try {
-      res = await fetch('https://' + st.host + path, {
+      res = await fetch('https://' + host + path, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain', 'X-Vca-Ts': ts, 'X-Vca-Nonce': nonce },
         body: b64(concat(iv, ct)),
       });
-    } catch (e) { throw unreachable(st.host); }
+    } catch (e) { throw unreachable(host); }
 
     const text = await res.text();
     if (!res.ok) {
@@ -133,13 +162,18 @@
   }
 
   window.PhoneLink = {
-    isPaired: () => !!load(),
-    host: () => (load() || {}).host || '',
+    ready: ready,
+    isPaired: () => !!linkKey && !!hostRecord(),
+    host: () => (linkKey ? hostRecord() : ''),
     certUrl: (host) => 'https://' + host + '/',
     pair,
     parseQr,
     request,
-    forget: () => { try { localStorage.removeItem(STORE); } catch (e) {} },
+    forget: () => {
+      linkKey = null;
+      Vault.remove(KEY);
+      try { localStorage.removeItem(STORE); } catch (e) {}
+    },
     normalizeSecret,
     toE164,
   };

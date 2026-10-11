@@ -1,5 +1,6 @@
 package app.vectorcall.companion
 
+import app.vectorcall.companion.BuildConfig
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -13,9 +14,9 @@ import android.os.Handler
 import android.os.Looper
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.BufferedReader
+import java.io.BufferedInputStream
+import java.io.ByteArrayOutputStream
 import java.io.InputStream
-import java.io.InputStreamReader
 import java.io.OutputStream
 import java.net.Inet4Address
 import java.net.InetSocketAddress
@@ -51,13 +52,15 @@ import java.util.concurrent.TimeUnit
 object LinkServer {
     const val PORT = 8765
 
-    // Origins allowed to call the phone. The laptop test copy runs at http://localhost:8000
-    // (plain http from a secure localhost origin avoids the browser mixed-content block).
-    private val ALLOWED_ORIGINS = setOf(
-        "https://pratikjain2712.github.io",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-    )
+    // Origins allowed to call the phone. Release builds allow only the published site. The laptop test copy
+    // (http://localhost:8000, plain http from a secure localhost origin) is allowed in debug builds only.
+    private val ALLOWED_ORIGINS: Set<String> = buildSet {
+        add("https://pratikjain2712.github.io")
+        if (BuildConfig.DEBUG) {
+            add("http://localhost:8000")
+            add("http://127.0.0.1:8000")
+        }
+    }
 
     private const val PREFS = "vector_link"
     private const val KEY_ENABLED = "link_enabled"
@@ -66,6 +69,9 @@ object LinkServer {
     private const val SKEW_MS = 60_000L
     private const val DIAL_GAP_MS = 5_000L
     private const val MAX_BODY = 16_384
+    private const val MAX_REQUEST_LINE = 1_024   // "POST /api HTTP/1.1" needs about 20 bytes
+    private const val MAX_HEADER_COUNT = 50
+    private const val MAX_HEADER_BYTES = 8_192   // all header lines together, and each line on its own
     private const val JSON = "application/json"
     private const val NOTIFY_CHANNEL = "vector_link_calls"
     private const val NOTIFY_ID = 4201
@@ -256,7 +262,7 @@ object LinkServer {
             val bytes = body.toByteArray(Charsets.UTF_8)
             val reason = when (status) {
                 200 -> "OK"; 204 -> "No Content"; 400 -> "Bad Request"; 401 -> "Unauthorized"
-                403 -> "Forbidden"; 404 -> "Not Found"; 413 -> "Payload Too Large"; else -> "Error"
+                403 -> "Forbidden"; 404 -> "Not Found"; 413 -> "Payload Too Large"; 431 -> "Request Header Fields Too Large"; else -> "Error"
             }
             val sb = StringBuilder()
             sb.append("HTTP/1.1 ").append(status).append(' ').append(reason).append("\r\n")
@@ -298,17 +304,47 @@ object LinkServer {
         }
     }
 
-    private fun serve(inp: InputStream, out: OutputStream, ctx: Context) {
-        val input = BufferedReader(InputStreamReader(inp, Charsets.UTF_8))
-        val requestLine = input.readLine() ?: return
-        val parts = requestLine.split(' ')
-        val headers = HashMap<String, String>()
+    /** A request line or header that is longer or more numerous than allowed; [status] is the reply. */
+    private class TooLarge(val status: Int) : Exception()
+
+    /** One line without its CRLF, at most [max] bytes. Null at end of stream. */
+    private fun readLine(inp: InputStream, max: Int, status: Int): String? {
+        val line = ByteArrayOutputStream()
         while (true) {
-            val line = input.readLine() ?: break
-            if (line.isEmpty()) break
-            val i = line.indexOf(':')
-            if (i > 0) headers[line.substring(0, i).trim().lowercase()] = line.substring(i + 1).trim()
+            val b = inp.read()
+            if (b < 0) return if (line.size() == 0) null else String(line.toByteArray(), Charsets.UTF_8)
+            if (b == '\n'.code) break
+            if (b == '\r'.code) continue
+            if (line.size() >= max) throw TooLarge(status)
+            line.write(b)
         }
+        return String(line.toByteArray(), Charsets.UTF_8)
+    }
+
+    private fun serve(inp: InputStream, out: OutputStream, ctx: Context) {
+        // Byte-level reads with limits, so a client cannot make the phone buffer an unbounded line.
+        val input = BufferedInputStream(inp)
+        val headers = HashMap<String, String>()
+        val requestLine: String = try {
+            readLine(input, MAX_REQUEST_LINE, 400) ?: return
+        } catch (e: TooLarge) {
+            return Reply(out, null).send(400, "text/plain", "request line too long")
+        }
+        try {
+            var count = 0
+            var bytes = 0
+            while (true) {
+                val line = readLine(input, MAX_HEADER_BYTES, 431) ?: break
+                if (line.isEmpty()) break
+                bytes += line.toByteArray(Charsets.UTF_8).size + 2
+                if (++count > MAX_HEADER_COUNT || bytes > MAX_HEADER_BYTES) throw TooLarge(431)
+                val i = line.indexOf(':')
+                if (i > 0) headers[line.substring(0, i).trim().lowercase()] = line.substring(i + 1).trim()
+            }
+        } catch (e: TooLarge) {
+            return Reply(out, null).send(e.status, "text/plain", "request headers too large")
+        }
+        val parts = requestLine.split(' ')
         val origin = headers["origin"]?.takeIf { it in ALLOWED_ORIGINS }
         val reply = Reply(out, origin)
         if (parts.size < 2) return reply.send(400, "text/plain", "bad request")
@@ -323,14 +359,14 @@ object LinkServer {
         if (method == "OPTIONS") return reply.send(204, null, "")
         val len = headers["content-length"]?.toIntOrNull() ?: 0
         if (len < 0 || len > MAX_BODY) return reply.send(413, JSON, errJson("body too large"))
-        val buf = CharArray(len)
+        val buf = ByteArray(len)
         var read = 0
         while (read < len) {
             val n = input.read(buf, read, len - read)
             if (n < 0) break
             read += n
         }
-        val body = String(buf, 0, read)
+        val body = String(buf, 0, read, Charsets.UTF_8)
 
         when {
             method == "POST" && path == "/pair" -> pair(reply, body, ctx)

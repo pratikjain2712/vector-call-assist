@@ -11,7 +11,7 @@ Words used in this guide:
 
 ## 1. Before you start
 
-1. An Android phone for each rep, with a working SIM card. Calls go out on this SIM.
+1. An Android phone for each rep, with a working SIM card. Calls go out on the phone's default SIM.
 2. Calling credit on that SIM. Calls use credit as normal.
 3. Phone and laptop on the same Wi-Fi network. The link works over Wi-Fi only, not mobile data.
 4. A Windows laptop with Chrome or Edge installed. Use one of these two browsers. Firefox has not been tested for calls yet.
@@ -34,7 +34,7 @@ Open Vector Companion. It asks for access one item at a time. Tap Allow each tim
 
 1. **Calls (needed).** Lets the app place the calls you start and see when they connect and end.
 2. **Phone state (needed).** Lets the app see each call's status and list your SIM cards. It does not read contacts or messages.
-3. **Notifications (recommended).** Shows a note while the link runs, so Android does not stop it.
+3. **Notifications (needed).** Shows a note while the link runs, so Android does not stop it.
 4. **Call log (optional).** Lets the app measure exact talk time. You can skip it.
 
 **If you tap Don't allow:** The pairing QR code stays hidden until the needed permissions are allowed. To allow them later:
@@ -79,7 +79,7 @@ Some phones, including Nothing phones, stop background apps to save battery. The
 
 1. On the phone, the app shows **Ready for calls**.
 2. On the laptop, open a test lead. Use your own second number, not a customer's number.
-3. Click **Call**. Your second phone rings, using the SIM you chose.
+3. Click **Call** (it shows the lead's first name). Your second phone rings on the phone's default SIM.
 4. Answer, talk briefly, then end the call on the phone.
 5. Check the laptop shows the call result.
 
@@ -93,12 +93,12 @@ A seat is one rep, with one laptop and one phone.
 
 ## 9. When the phone shows offline or the Call button is disabled
 
-The Call button is greyed out when the laptop cannot reach the phone. The message under the lead says why. Try these steps in order.
+The Call button is greyed out when the laptop cannot reach the phone. The banner at the top of the page says why. Try these steps in order.
 
 1. On the phone, check that the app says **Ready for calls**. If it says **Link is off**, tap **Turn link on**.
-2. Check that both devices are on the same Wi-Fi. If the phone says it is not on Wi-Fi, tap **Open Wi-Fi settings**.
+2. Check that both devices are on the same Wi-Fi. If the Phone setup card shows Wi-Fi as not connected, tap **Fix** next to **Wi-Fi**.
 3. Set the phone's date and time to automatic. The page shows a clock message if they are wrong.
-4. If the page says the phone is not paired, pair again (section 4).
+4. If the page says the phone no longer recognises this browser, pair again (section 4).
 5. Close and reopen Vector Companion, then reload the laptop page.
 6. If it is still offline, ask the person who runs your Wi-Fi to let devices see each other.
 
