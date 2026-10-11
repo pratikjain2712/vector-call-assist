@@ -38,6 +38,7 @@ class MainActivity : Activity() {
     private lateinit var logView: TextView
     private lateinit var logScroll: ScrollView
     private lateinit var numberInput: EditText
+    private lateinit var linkStatus: TextView
     private lateinit var simSpinner: Spinner
     private lateinit var callLogBox: CheckBox
     private var sims: List<Dialer.Sim> = emptyList()
@@ -63,6 +64,7 @@ class MainActivity : Activity() {
         renderLog()
         loadSims()
         refreshStatus()
+        refreshLink()
     }
 
     override fun onPause() {
@@ -166,6 +168,19 @@ class MainActivity : Activity() {
             button("Hang up") { hangUp() },
         ))
         root.addView(button("They answered — tap at the moment you hear them") { Sessions.markAnswered() })
+
+        // 4. Laptop link (Phase 3 spike)
+        root.addView(heading("4 · Laptop link (spike)"))
+        linkStatus = TextView(this).apply {
+            textSize = 13f
+            setTextIsSelectable(true)
+        }
+        root.addView(linkStatus)
+        root.addView(row(
+            button("Start link + code") { startLink() },
+            button("New code") { LinkServer.newPairingCode(); refreshLink() },
+            button("Stop link") { LinkServer.stop(); refreshLink() },
+        ))
 
         // 3. Log
         root.addView(heading("3 · Scenario and log"))
@@ -367,6 +382,29 @@ class MainActivity : Activity() {
         } else {
             clearArmed = now
             toast("Tap Clear again within 3 seconds to delete the log")
+        }
+    }
+
+    private fun startLink() {
+        try {
+            LinkServer.start(this)
+        } catch (e: Exception) {
+            toast("Could not start link: ${e.javaClass.simpleName}")
+        }
+        refreshLink()
+    }
+
+    private fun refreshLink() {
+        val running = LinkServer.isRunning()
+        val addresses = LinkServer.lanAddresses().map { "$it:${LinkServer.PORT}" }
+            .joinToString(" or ").ifEmpty { "no Wi-Fi address" }
+        linkStatus.text = buildString {
+            append("Link: ").append(if (running) "running" else "stopped").append('\n')
+            append("Address: ").append(addresses).append('\n')
+            if (running) {
+                append("Pairing code: ").append(LinkServer.activeCode() ?: "none, tap New code").append('\n')
+            }
+            append("Paired: ").append(if (LinkServer.isPaired(this@MainActivity)) "yes" else "no")
         }
     }
 

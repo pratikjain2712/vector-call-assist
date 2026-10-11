@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vector link spike</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 16px; max-width: 640px; color: #1a1a1a; }
+  label { display: block; margin-top: 12px; font-size: 14px; }
+  input { font-size: 16px; padding: 8px; width: 100%; box-sizing: border-box; margin-top: 4px; }
+  button { font-size: 16px; padding: 8px 14px; margin: 12px 6px 0 0; }
+  pre { background: #f3f3f3; padding: 10px; white-space: pre-wrap; word-break: break-word; font-size: 13px; min-height: 120px; }
+  .note { font-size: 13px; color: #555; }
+</style>
+</head>
+<body>
+<h2>Vector link spike</h2>
+<p class="note">Phase 3 test page. Open the phone app, tap <b>Start link + code</b>, then fill in the address and code it shows.
+Chrome may ask to let this site reach devices on your local network: choose <b>Allow</b>.</p>
+
+<label>Phone address
+  <input id="host" placeholder="192.168.1.20:8765" autocomplete="off">
+</label>
+<label>Pairing code (6 digits, valid 2 minutes)
+  <input id="code" inputmode="numeric" maxlength="6" autocomplete="off">
+</label>
+<button id="pair">Pair</button>
+<button id="ping">Ping</button>
+<button id="events">Fetch events</button>
+
+<label>Number to dial (E.164, for example +919876543210)
+  <input id="number" placeholder="+919876543210" autocomplete="off">
+</label>
+<button id="dial">Dial from phone</button>
+
+<pre id="log"></pre>
+
+<script>
+// Must match android/.../LinkCrypto.kt exactly. See docs/phase3-spike.md.
+const STORE = 'vca-link-spike';
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+const $ = id => document.getElementById(id);
+
+const b64 = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes)));
+const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const concat = (a, b) => { const o = new Uint8Array(a.length + b.length); o.set(a); o.set(b, a.length); return o; };
+
+function say(msg) {
+  $('log').textContent += new Date().toLocaleTimeString() + '  ' + msg + '\n';
+  $('log').scrollTop = $('log').scrollHeight;
+}
+
+function baseUrl() {
+  return 'http://' + $('host').value.trim().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+}
+
+async function hmac(keyBytes, msgBytes) {
+  const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return new Uint8Array(await crypto.subtle.sign('HMAC', key, msgBytes));
+}
+
+function loadStore() {
+  try { return JSON.parse(localStorage.getItem(STORE) || 'null'); } catch (e) { return null; }
+}
+
+async function pair() {
+  const code = $('code').value.trim();
+  if (!/^\d{6}$/.test(code)) return say('Enter the 6-digit code shown on the phone.');
+  const nonce = b64(crypto.getRandomValues(new Uint8Array(16)));
+
+  const res = await fetch(baseUrl() + '/pair', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, nonce }),
+  });
+  const j = await res.json();
+  if (!j.ok) return say('Pairing refused: ' + (j.error || res.status));
+
+  const pairingKey = await hmac(enc.encode(code), enc.encode('vca-pair-v1|' + nonce));
+  const encKey = await hmac(pairingKey, enc.encode('vca-enc-v1'));
+  localStorage.setItem(STORE, JSON.stringify({ host: $('host').value.trim(), ek: b64(encKey), lastSeq: 0 }));
+  say('Paired. The phone now accepts requests from this browser.');
+}
+
+async function call(op, extra = {}) {
+  const st = loadStore();
+  if (!st) throw new Error('Not paired yet.');
+  const key = await crypto.subtle.importKey('raw', unb64(st.ek), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+
+  const path = '/api';
+  const ts = String(Date.now());
+  const nonce = b64(crypto.getRandomValues(new Uint8Array(16)));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const aad = enc.encode(`POST\n${path}\n${ts}\n${nonce}`);
+  const ct = new Uint8Array(await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv, additionalData: aad }, key, enc.encode(JSON.stringify({ op, ...extra }))));
+
+  const res = await fetch('http://' + st.host + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain', 'X-Vca-Ts': ts, 'X-Vca-Nonce': nonce },
+    body: b64(concat(iv, ct)),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    let msg = text;
+    try { msg = JSON.parse(text).error || text; } catch (e) { }
+    throw new Error('Phone said HTTP ' + res.status + ': ' + msg);
+  }
+
+  const raw = unb64(text);
+  const plain = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: raw.slice(0, 12), additionalData: enc.encode('RESP\n' + nonce) },
+    key, raw.slice(12));
+  return JSON.parse(dec.decode(plain));
+}
+
+function guarded(fn) {
+  return async () => {
+    try { await fn(); }
+    catch (e) {
+      const hint = e instanceof TypeError ? ' (network blocked: check the local-network prompt, Wi-Fi, and the address)' : '';
+      say('Error: ' + e.message + hint);
+    }
+  };
+}
+
+$('pair').onclick = guarded(pair);
+$('ping').onclick = guarded(async () => say('Ping: ' + JSON.stringify(await call('ping'))));
+
+$('events').onclick = guarded(async () => {
+  const st = loadStore();
+  const r = await call('events', { after: st ? st.lastSeq || 0 : 0 });
+  if (!r.ok) return say('Events: ' + JSON.stringify(r));
+  r.events.forEach(e => say(`#${e.seq} ${e.at} ${e.type} ${e.detail || ''}`));
+  if (r.events.length && st) {
+    st.lastSeq = r.events[r.events.length - 1].seq;
+    localStorage.setItem(STORE, JSON.stringify(st));
+  }
+  say(`Received ${r.events.length} event(s).`);
+});
+
+$('dial').onclick = guarded(async () => {
+  const number = $('number').value.trim();
+  if (!/^\+[1-9]\d{7,14}$/.test(number)) return say('Use the full number with country code, for example +919876543210.');
+  if (!confirm('Dial ' + number + ' from the phone?')) return say('Dial cancelled.');
+  const r = await call('dial', { number });
+  say('Dial: ' + JSON.stringify(r));
+});
+</script>
+</body>
+</html>
