@@ -82,5 +82,5 @@ Fixes after the test: Stop link no longer logs when already stopped, New code do
 - **Dial** shows a notification on the phone for each laptop-started call.
 - **The server** restarts with the monitor service after a reboot if the link was on.
 - **Allowed origin:** only `https://pratikjain2712.github.io`. Test from the Pages address.
-- **Website:** `web/js/phone-link.js` (pairing and encrypted requests), `web/js/call-session.js` (per-call records, CSV export), and the "Call from laptop" controls in `web/index.html`. Lead sheets: CSV is read as text (leading zeros kept); numeric phone cells in spreadsheets are flagged.
+- **Website:** `web/js/phone-link.js` (pairing and encrypted requests), `web/js/call-session.js` (per-call records, the Calls tab of the results download), and the "Call from laptop" controls in `web/index.html`. Lead sheets: CSV is read as text (leading zeros kept); numeric phone cells in spreadsheets are flagged.
 - **Not yet verified on a phone:** the Android build of the v2 files (first CI compile), the Keystore wrap on Android 16, and the call-log result on your phone. The browser flow is tested against a mock phone (`mock-phone.mjs`, `e2e.py`).

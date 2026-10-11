@@ -1,5 +1,6 @@
-/* Per-call records for calls placed from the laptop, kept in this browser (vca2-calls),
-   and the CSV export. Times come from the phone's clock and are shown as ISO 8601 with offset. */
+/* Per-call records, kept in this browser (vca2-calls): calls placed from the laptop through the phone,
+   and calls finished in the script without the phone ("manual"). Exported as the Calls tab of the
+   results workbook. Times are shown as ISO 8601 with offset. */
 (function () {
   const KEY = 'vca2-calls';
 
@@ -39,52 +40,45 @@
       (off >= 0 ? '+' : '-') + p(Math.floor(a / 60)) + ':' + p(a % 60);
   }
 
+  /* The Calls tab: one row per call attempt, built for dashboards. Fixed columns first, then one
+     column per script question (the answer picked, blank if not asked) and one per objection
+     ("Yes" if raised). Questions and objections come from the page so new ones get a column automatically. */
   const COLUMNS = [
-    'Session ID', 'Lead name', 'Phone', 'Dialled at', 'Line in use at', 'Call ended at',
-    'Total call time (s)', 'Connected time (s)', 'Answered', 'Duration source', 'Call status',
-    'Outcome', 'Objections raised', 'Notes', 'Save status', 'Updated at',
+    'Session ID', 'Call source', 'Lead row', 'Lead name', 'Phone',
+    'Dialled at', 'Line in use at', 'Call ended at', 'Total call time (s)', 'Connected time (s)',
+    'Answered', 'Duration source', 'Call status',
+    'Outcome', 'Outcome code', 'Outcome at', 'Stage reached', 'Script time (s)', 'Answer path',
+    'Objections raised', 'Notes', 'Save status', 'Updated at',
   ];
+  const num = (v) => (v == null || v === '' ? '' : Number(v));
 
-  /* Formula-injection guard: a leading = + - @ would make Excel run the cell as a formula. */
-  function guard(v) {
-    const s = v == null ? '' : String(v);
-    return /^[=+\-@]/.test(s) ? "'" + s : s;
-  }
-  function quote(s) {
-    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-  }
-  function textCell(v) { return quote(guard(v)); }
-  /* Phone numbers are written as ="+91…" so Excel keeps them as text (no scientific notation, no lost +). */
-  function phoneCell(v) { return v ? quote('="' + String(v).replace(/"/g, '') + '"') : ''; }
-
-  function row(r) {
-    const total = r.offhookWallMs && r.endWallMs ? Math.round((r.endWallMs - r.offhookWallMs) / 1000) : '';
-    return [
-      textCell(r.sessionId), textCell(r.leadName), phoneCell(r.phoneE164 || r.phone),
-      iso(r.dialWallMs), iso(r.offhookWallMs), iso(r.endWallMs),
-      total, r.connectedSeconds == null ? '' : r.connectedSeconds,
-      r.answered == null ? '' : (r.answered ? 'yes' : 'no'), textCell(r.detection || ''), textCell(r.callStatus || ''),
-      textCell(r.outcome || ''), textCell(r.objections || ''), textCell(r.notes || ''),
-      textCell(r.saveStatus || ''), iso(r.updatedAt),
-    ].join(',');
+  /* questions: [{ key, label }], objections: [chip text]. Returns rows for SheetJS aoa_to_sheet. */
+  function toAoa(list, questions, objections) {
+    const header = COLUMNS.concat(questions.map((q) => 'Q: ' + q.label), objections.map((o) => 'Objection: ' + o));
+    const rows = list.slice().sort((a, b) => (a.dialWallMs || a.outcomeAtMs || 0) - (b.dialWallMs || b.outcomeAtMs || 0)).map((r) => {
+      const total = r.offhookWallMs && r.endWallMs ? Math.round((r.endWallMs - r.offhookWallMs) / 1000) : '';
+      const answers = r.answers || {};
+      const raised = r.objectionList || (r.objections ? String(r.objections).split('; ') : []);
+      return [
+        r.sessionId || '', r.source || 'laptop', r.rowIndex == null ? '' : r.rowIndex + 2, r.leadName || '', r.phoneE164 || r.phone || '',
+        iso(r.dialWallMs), iso(r.offhookWallMs), iso(r.endWallMs), total, num(r.connectedSeconds),
+        r.answered == null ? '' : (r.answered ? 'yes' : 'no'), r.detection || '', r.callStatus || '',
+        r.outcome || '', r.outcomeCode || '', iso(r.outcomeAtMs), r.stageReached || '', num(r.scriptSeconds), r.path || '',
+        raised.join('; '), r.notes || '', r.saveStatus || '', iso(r.updatedAt),
+      ].concat(
+        questions.map((q) => answers[q.key] || ''),
+        objections.map((o) => (raised.includes(o) ? 'Yes' : '')),
+      );
+    });
+    return [header].concat(rows);
   }
 
-  /* UTF-8 with a byte-order mark (so Excel shows ₹ and names correctly), CRLF line endings. */
-  function toCsv(list) {
-    return '﻿' + [COLUMNS.join(',')].concat(list.map(row)).join('\r\n') + '\r\n';
+  /* Latest call for one sheet row, or null. Records made before sheetName existed match any sheet. */
+  function latestFor(sheetName, rowIndex) {
+    return all()
+      .filter((r) => r.rowIndex === rowIndex && (r.sheetName == null || r.sheetName === sheetName))
+      .sort((a, b) => (b.outcomeAtMs || b.dialWallMs || 0) - (a.outcomeAtMs || a.dialWallMs || 0))[0] || null;
   }
 
-  function download(filename, list) {
-    const blob = new Blob([toCsv(list)], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 4000);
-  }
-
-  window.CallRecords = { all, get, add, update, iso, toCsv, download, COLUMNS };
+  window.CallRecords = { all, get, add, update, iso, toAoa, latestFor, COLUMNS };
 })();

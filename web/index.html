@@ -317,6 +317,8 @@ const OBJECTIONS = [
 const WORD = { yes: "Yes", no: "No", maybe: "Maybe", next: "Next" };
 const KEY = { yes: "Y", no: "N", maybe: "M", next: "Enter" };
 const LABEL = { open: "Right person", wrong_person: "Lead available", intro: "Has time", intro_maybe: "Okay with questions", frame: "Agreed to talk", ni_soft: "Gen-AI on radar", send_details: "Okay to check back", callback: "Gave callback time", q_work: "Working engineer", fresher: "Python good", q_python: "Comfortable with Python", python_no: "Will do pre-work", q_genai: "Tried Gen-AI", burned: "Past course was recorded", trust: "Open to hear more", q_scale: "Can answer scaling question", experienced: "Done it all in production", q_goal: "Wants Gen-AI role", goal_no: "Projects would help", goal_no2: "Okay to send details", pitch1: "Following the pitch", trust_brand: "Okay to continue", pitch2: "Projects interesting", pitch3: "Is what they want", diff: "Wants timings", pitch_no: "Worry answered", time: "Timings doable", time_no: "Recordings help", time_no2: "Can adjust", fee: "Fine with fee", fee_maybe: "Okay after refund", fee_no: "Would join if fee was no issue", fee_only: "Okay to wait on payment options", close: "Send link now", think: "Ready after worry", followup: "Follow-up agreed" };
+// Every script question that has a real choice, in script order. Each gets its own column in the Calls tab.
+const QUESTIONS = Object.keys(FLOW).filter((k) => LABEL[k]).map((k) => ({ key: k, label: LABEL[k] }));
 const RESULT_COLS = ["Call outcome", "Called at", "Call duration", "Answers", "Objections raised", "Notes"];
 const RESULT_KEYS = ["outcome", "at", "duration", "answers", "objections", "notes"];
 const $ = (id) => document.getElementById(id);
@@ -360,6 +362,28 @@ function writeResult(s, st, label, when) {
   r[c.objections] = st.objs.join("; ");
 }
 function exportAoa(s) { return [s.header].concat(s.rows); }
+/* Leads tab: the sheet plus the latest call's phone results. Filled at export time because the phone's
+   call log answers after the outcome is tapped. A row with no record keeps what the file already had. */
+const LEAD_EXTRA = ["Outcome code", "Answered", "Connected time (s)", "Session ID"];
+function leadsAoa(s) {
+  const header = s.header.slice();
+  const at = LEAD_EXTRA.map((name) => {
+    let c = header.findIndex((h) => String(h).toLowerCase() === name.toLowerCase());
+    if (c < 0) { header.push(name); c = header.length - 1; }
+    return c;
+  });
+  const rows = s.rows.map((r, i) => {
+    const out = r.slice(); while (out.length < header.length) out.push("");
+    const rec = CallRecords.latestFor(s.fileName, i);
+    if (rec) {
+      const vals = [rec.outcomeCode || "", rec.answered == null ? "" : (rec.answered ? "yes" : "no"),
+        rec.connectedSeconds == null ? "" : rec.connectedSeconds, rec.sessionId || ""];
+      at.forEach((c, j) => { out[c] = vals[j]; });
+    }
+    return out;
+  });
+  return [header].concat(rows);
+}
 /*ENDSHEET*/
 
 function note(text) { $("sheet-msg").textContent = text || ""; }
@@ -396,7 +420,7 @@ function go(to, pick) {
       const when = new Date().toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
       writeResult(sheet, state, FLOW[to].end.label, when); persist();
     }
-    finishRecord(FLOW[to].end.label);
+    finishRecord(FLOW[to].end.label, to);
   } else startClock();
   render();
 }
@@ -441,7 +465,10 @@ async function readSheet(file) {
 async function downloadSheet() {
   if (typeof XLSX === "undefined") { note("The spreadsheet writer did not load. Check your internet connection and reload the page."); return; }
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(exportAoa(sheet)), "Leads");
+  // Leads must stay the first tab: uploading this file again reads the first tab as the lead list.
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(leadsAoa(sheet)), "Leads");
+  const calls = CallRecords.all();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(CallRecords.toAoa(calls, QUESTIONS, OBJECTIONS.map((o) => o.chip))), "Calls");
   const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
   const filename = sheet.fileName.replace(/\.[^.]+$/, "") + "-called.xlsx";
   note("Preparing " + filename + "…");
@@ -454,7 +481,7 @@ async function downloadSheet() {
       const a = document.createElement("a"); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 4000);
     }
-    note("Saved " + filename + " with " + calledCount(sheet) + " of " + sheet.rows.length + " leads called.");
+    note("Saved " + filename + ": " + calledCount(sheet) + " of " + sheet.rows.length + " leads called, " + calls.length + " call record(s) in the Calls tab.");
   } catch (e) { note(e && e.code === "declined" ? "Download cancelled. Your results are still here." : "Could not save the file from this view. Your results are still here."); }
 }
 
@@ -482,8 +509,7 @@ function renderSheet() {
   const tools = el("div", "tools");
   const prev = tool("lead-prev", "Previous lead", () => loadLead(sheet.idx - 1)); prev.disabled = sheet.idx === 0; tools.appendChild(prev);
   const next = tool("lead-next", "Skip to next lead", () => loadLead(sheet.idx + 1)); next.disabled = sheet.idx >= n - 1; tools.appendChild(next);
-  tools.appendChild(tool("sheet-save", "Download updated sheet", downloadSheet));
-  tools.appendChild(tool("calls-csv", "Export calls (CSV)", exportCalls));
+  tools.appendChild(tool("sheet-save", "Download results (.xlsx)", downloadSheet));
   const rm = tool("sheet-remove", "Remove sheet", () => {
     if (rm.dataset.sure) { sheet = null; persist(); note("Sheet removed from this browser."); $("lead-name").value = ""; resetCall(); render(); }
     else { rm.dataset.sure = "1"; rm.textContent = "Tap again to remove"; }
@@ -542,7 +568,7 @@ async function callFromLaptop() {
   catch (e) { note("Could not dial: " + e.message); return; }
   if (!res.ok) { note("Could not dial: " + res.error); return; }
   CallRecords.add({
-    sessionId: res.session, leadName: leadName(), phone: raw, phoneE164: number, rowIndex: sheet.idx,
+    sessionId: res.session, source: "laptop", sheetName: sheet.fileName, leadName: leadName(), phone: raw, phoneE164: number, rowIndex: sheet.idx,
     dialWallMs: res.dialWallMs, offhookWallMs: 0, endWallMs: 0, connectedSeconds: null, answered: null,
     detection: "", callStatus: "dialling", outcome: "", objections: "",
     notes: String(r[sheet.cols.notes] || ""), saveStatus: "awaiting-outcome", updatedAt: Date.now(),
@@ -610,22 +636,30 @@ async function hangupCall() {
   } catch (e) { note("Could not hang up: " + e.message); }
 }
 
-/* Called when an outcome button reaches an end card: the call record gets the same outcome. */
-function finishRecord(label) {
-  const id = state.callId;
-  if (!id || !sheet) return;
-  CallRecords.update(id, {
-    outcome: label, objections: state.objs.join("; "),
-    notes: String(sheet.rows[sheet.idx][sheet.cols.notes] || ""), saveStatus: "saved",
-  });
-}
-
-function exportCalls() {
-  const list = CallRecords.all();
-  if (!list.length) { note("No laptop calls recorded in this browser yet."); return; }
-  const base = sheet ? sheet.fileName.replace(/\.[^.]+$/, "") : "vector";
-  CallRecords.download(base + "-calls.csv", list);
-  note("Exported " + list.length + " call record(s) to CSV.");
+/* Called when an outcome button reaches an end card. Laptop calls already have a record; a call made
+   any other way gets one now ("manual"), so the Calls tab holds every call. Going back and picking a
+   different outcome updates the same record. */
+function finishRecord(label, code) {
+  const answers = {};
+  state.trail.forEach((t) => { answers[t.node] = WORD[t.k]; });   // a question asked twice keeps the last answer
+  const top = state.trail.reduce((m, t) => Math.max(m, FLOW[t.node].stage), -1);
+  const patch = {
+    outcome: label, outcomeCode: code, outcomeAtMs: Date.now(),
+    answers: answers, path: state.trail.map((t) => t.node + "=" + t.k).join(" > "),
+    stageReached: top < 0 ? "" : STAGES[top], scriptSeconds: state.elapsed,
+    objections: state.objs.join("; "), objectionList: state.objs.slice(),
+    notes: sheet ? String(sheet.rows[sheet.idx][sheet.cols.notes] || "") : "", saveStatus: "saved",
+  };
+  if (state.callId && CallRecords.get(state.callId)) { CallRecords.update(state.callId, patch); return; }
+  const id = (crypto.randomUUID && crypto.randomUUID()) || ("m-" + Date.now() + "-" + Math.random().toString(16).slice(2));
+  const phone = sheet ? String(sheet.rows[sheet.idx][sheet.cols.phone]).trim() : "";
+  CallRecords.add(Object.assign({
+    sessionId: id, source: "manual", sheetName: sheet ? sheet.fileName : null, rowIndex: sheet ? sheet.idx : null,
+    leadName: $("lead-name").value.trim(), phone: phone, phoneE164: phone ? (PhoneLink.toE164(phone) || "") : "",
+    dialWallMs: 0, offhookWallMs: 0, endWallMs: 0, connectedSeconds: null, answered: null,
+    detection: "", callStatus: "", updatedAt: Date.now(),
+  }, patch));
+  state.callId = id;
 }
 
 function refreshLinkPanel() {
@@ -633,7 +667,7 @@ function refreshLinkPanel() {
   if (paired && !$("link-host").value) $("link-host").value = PhoneLink.host();
   $("link-summary").textContent = paired ? "Phone: paired with " + PhoneLink.host() : "Phone: not paired";
   $("link-status").textContent = paired
-    ? "Calls from this page go through the phone. Each call is recorded below and in the call export."
+    ? "Calls from this page go through the phone. Each call is recorded below and in the Calls tab of the results download."
     : "Not paired. On the phone, open Vector Companion and tap Start link + code, then enter the address and code here.";
   $("link-forget").hidden = !paired;
 }

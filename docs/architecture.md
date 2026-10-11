@@ -106,11 +106,12 @@ The existing six sheet columns keep working as the per-lead summary. A **new cal
 
 All durations are computed from ISO timestamps, which include the +05:30 offset.
 
-## 6. CSV export
-- Adds an **Export calls (CSV)** button next to the existing XLSX download.
-- **Encoding and quoting:** UTF-8 **with BOM** so Excel shows ₹ and names correctly. CRLF line endings, and RFC 4180 quoting for commas, quotes and newlines.
-- **Formula-injection guard:** cells starting with `= + - @` get a leading `'`, except phone numbers.
-- **Phone numbers** are written as `="+919876543210"` so Excel keeps them as text instead of scientific notation (see question 4).
+## 6. Results download (one workbook)
+**Download results (.xlsx)** writes one file, `<name>-called.xlsx`, with two tabs. The separate CSV export was removed.
+- **Leads** (first tab, so uploading the file again still reads it as the lead list): the uploaded sheet with the six result columns, plus `Outcome code`, `Answered`, `Connected time (s)` and `Session ID` from the lead's latest call. These four are filled at download time, because the phone's call log answers after the outcome is tapped. A row with no call record keeps what the file already had.
+- **Calls**: one row per call attempt, for dashboards. Fixed columns (session, source `laptop`/`manual`, lead row, phone times, connected seconds, outcome label and `Outcome code`, `Stage reached`, `Script time (s)`, `Answer path` as `node=answer > …`), then **one column per script question** (`Q: <label>`, holding Yes/No/Maybe, blank if not asked, last answer if asked twice) and **one column per objection** (`Objection: <chip>`, `Yes` if raised). The question and objection columns are generated from `FLOW`/`LABEL` and `OBJECTIONS`, so new ones get a column automatically.
+- Every call finished in the script gets a record, not only laptop calls: calls made another way are saved with source `manual` and no phone times.
+- Phone numbers are written as text cells, so Excel keeps the `+` and leading zeros.
 
 ## 7. Proposed file structure
 
@@ -118,7 +119,7 @@ All durations are computed from ISO timestamps, which include the +05:30 offset.
 vector-call-guide/            (existing repo)
   index.html                  existing; small hooks added
   js/phone-link.js            pairing, signing/encryption, fetch long-poll, reconnect
-  js/call-session.js          state machine, event dedup, record store, CSV export
+  js/call-session.js          state machine, event dedup, record store, Calls tab
   docs/                       architecture, permissions, test checklist
   .github/workflows/android.yml   builds the debug APK (see note)
 android/                      Android Studio project (Kotlin, minSdk 34, targetSdk 35)
