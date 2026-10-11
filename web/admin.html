@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Content-Security-Policy: no inline scripts or styles. Scripts come from this site and jsDelivr (SRI on each). -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://*.supabase.co; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="robots" content="noindex">
+<title>Vector admin</title>
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+<header class="top">
+  <h1>Vector admin</h1>
+  <div class="who">
+    <span id="who"></span>
+    <button id="signout" type="button">Sign out</button>
+  </div>
+</header>
+
+<main>
+  <section id="off" hidden>
+    <h2>Cloud is not set up</h2>
+    <p>Cloud is not set up for this site, so there is nothing to show here. Results stay in each rep's browser.</p>
+  </section>
+
+  <section id="gate" hidden>
+    <h2>Sign in</h2>
+    <p>Use the work email your institute admin invited. We send a sign-in link; there is no password.</p>
+    <form id="gate-form" class="row">
+      <label>Work email <input id="gate-email" type="email" autocomplete="username" required></label>
+      <button type="submit">Send sign-in link</button>
+    </form>
+    <p id="gate-msg" class="msg" role="status"></p>
+  </section>
+
+  <section id="notadmin" hidden>
+    <h2>No admin access</h2>
+    <p>This login is not an active admin of an institute. Ask an admin of your institute to check your seat.</p>
+  </section>
+
+  <section id="app" hidden>
+    <div class="panel">
+      <form id="range-form" class="row">
+        <label>From <input id="from" type="date" required></label>
+        <label>To <input id="to" type="date" required></label>
+        <button type="submit">Show</button>
+        <button type="button" id="range-last7">Last 7 days</button>
+      </form>
+      <p id="range-msg" class="msg" role="status"></p>
+    </div>
+
+    <div class="panel">
+      <div class="row between">
+        <h2>Team activity</h2>
+        <button type="button" id="csv">Download CSV</button>
+      </div>
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr><th>Rep</th><th>Day</th><th class="num">Calls</th><th class="num">Connected</th><th class="num">Connect rate</th><th class="num">Talk (s)</th><th>Last call</th></tr>
+          </thead>
+          <tbody id="team-body"></tbody>
+        </table>
+      </div>
+      <p id="team-empty" class="muted" hidden>No calls in this range.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Results by outcome</h2>
+      <div class="scroll">
+        <table>
+          <thead><tr id="outcome-head"></tr></thead>
+          <tbody id="outcome-body"></tbody>
+        </table>
+      </div>
+      <p id="outcome-empty" class="muted" hidden>No outcomes in this range.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Seats</h2>
+      <form id="invite-form" class="row wrap">
+        <label>Work email <input id="invite-email" type="email" autocomplete="off" required></label>
+        <label>Seat label <input id="invite-label" type="text" maxlength="60" placeholder="Rep 4" required></label>
+        <label>Role
+          <select id="invite-role">
+            <option value="rep">Rep</option>
+            <option value="admin">Admin</option>
+          </select>
+        </label>
+        <button type="submit">Add seat</button>
+      </form>
+      <p id="invite-msg" class="msg" role="status"></p>
+
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr><th>Seat</th><th>Role</th><th>Status</th><th>Devices</th><th>Pairing</th><th>Last call</th><th>Actions</th></tr>
+          </thead>
+          <tbody id="seat-body"></tbody>
+        </table>
+      </div>
+      <p id="seat-empty" class="muted" hidden>No seats yet.</p>
+
+      <div id="confirm" class="confirm" role="alertdialog" aria-labelledby="confirm-title" aria-describedby="confirm-text" hidden>
+        <h3 id="confirm-title"></h3>
+        <p id="confirm-text"></p>
+        <label id="confirm-email-field" hidden><span id="confirm-email-label"></span>
+          <input id="confirm-email" type="email" autocomplete="off"></label>
+        <div class="row">
+          <button type="button" id="confirm-go"></button>
+          <button type="button" id="confirm-cancel">Cancel</button>
+        </div>
+        <p id="confirm-msg" class="msg" role="status"></p>
+      </div>
+    </div>
+
+    <p id="status" class="msg" role="status"></p>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
+<script src="js/config.js"></script>
+<script src="js/admin.js"></script>
+</body>
+</html>

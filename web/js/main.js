@@ -158,13 +158,26 @@ const KEY = { yes: "1", no: "2", maybe: "3", next: "Enter" };
 const LABEL = { open: "Right person", wrong_person: "Lead available", intro: "Has time", intro_maybe: "Okay with questions", frame: "Agreed to talk", ni_soft: "Gen-AI on radar", send_details: "Okay to check back", callback: "Gave callback time", q_work: "Working engineer", fresher: "Python good", q_python: "Comfortable with Python", python_no: "Will do pre-work", q_genai: "Tried Gen-AI", burned: "Past course was recorded", trust: "Open to hear more", q_scale: "Can answer scaling question", experienced: "Done it all in production", q_goal: "Wants Gen-AI role", goal_no: "Projects would help", goal_no2: "Okay to send details", pitch1: "Following the pitch", trust_brand: "Okay to continue", pitch2: "Projects interesting", pitch3: "Is what they want", diff: "Wants timings", pitch_no: "Worry answered", time: "Timings doable", time_no: "Recordings help", time_no2: "Can adjust", fee: "Fine with fee", fee_maybe: "Okay after refund", fee_no: "Would join if fee was no issue", fee_only: "Okay to wait on payment options", close: "Send link now", think: "Ready after worry", followup: "Follow-up agreed" };
 // Every script question that has a real choice, in script order. Each gets its own column in the Calls tab.
 const QUESTIONS = Object.keys(FLOW).filter((k) => LABEL[k]).map((k) => ({ key: k, label: LABEL[k] }));
-const RESULT_COLS = ["Call outcome", "Called at", "Call duration", "Answers", "Objections raised", "Notes"];
-const RESULT_KEYS = ["outcome", "at", "duration", "answers", "objections", "notes"];
+const RESULT_COLS = ["Call outcome", "Called at", "Call duration", "Answers", "Objections raised", "Notes", "Callback date"];
+const RESULT_KEYS = ["outcome", "at", "duration", "answers", "objections", "notes", "callback"];
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
 const state = { node: "open", history: [], trail: [], objs: [], objection: null, started: null, elapsed: 0, timer: null, callId: null };
 let sheet = null;
+let phoneCheck = null;   // ImportCheck result for the sheet: flags per lead and counts. Worked out on load, never saved.
+let lastOutcome = null;  // the outcome just saved on the end card, for Undo. Cleared when the lead or call changes.
+const CALLBACK_OUTCOMES = { end_callback: 1, end_followup: 1, end_noanswer: 1 };   // these keep a callback date
+function refreshPhoneFlags() { phoneCheck = sheet ? ImportCheck.checkPhones(sheet.rows.map((r) => r[sheet.cols.phone])) : null; }
+/* Sheets saved before the callback column existed get it here, so the cell index is never undefined. */
+function ensureResultCols(s) {
+  RESULT_KEYS.forEach((key, i) => {
+    if (s.cols[key] != null) return;
+    s.header.push(RESULT_COLS[i]);
+    s.cols[key] = s.header.length - 1;
+  });
+  s.rows.forEach((r) => { while (r.length < s.header.length) r.push(""); });
+}
 
 /*SHEET*/
 function findCol(header, re, skip) { return header.findIndex((h, i) => i !== skip && re.test(h)); }
@@ -255,14 +268,59 @@ function go(to, pick) {
   state.node = to; state.objection = null;
   if (FLOW[to].end) {
     stopClock();
+    const undo = { rowIndex: sheet ? sheet.idx : -1, sheetName: sheet ? sheet.fileName : "", code: to, row: null, callId: null, prevCall: null, sentBefore: 0 };
     if (sheet) {
       const when = new Date().toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
-      writeResult(sheet, state, FLOW[to].end.label, when); persist();
+      undo.row = sheet.rows[sheet.idx].slice();
+      writeResult(sheet, state, FLOW[to].end.label, when);
+      if (!CALLBACK_OUTCOMES[to]) sheet.rows[sheet.idx][sheet.cols.callback] = "";
+      persist();
     }
+    const before = state.callId ? CallRecords.get(state.callId) : null;
+    if (before) { undo.prevCall = JSON.parse(JSON.stringify(before)); undo.sentBefore = ((before.cloud && before.cloud.sent) || []).length; }
     finishRecord(FLOW[to].end.label, to);
+    undo.callId = state.callId;
+    lastOutcome = sheet ? undo : null;
   } else startClock();
   render();
 }
+/* Undo of the outcome just saved: the row goes back to how it was (notes typed since are kept), the call
+   record goes back too, and the script returns to the question before. If the result already uploaded,
+   the record keeps its upload history, so the next outcome is sent as a correction. */
+function undoOutcome() {
+  const u = lastOutcome;
+  lastOutcome = null;
+  if (!u || !sheet || sheet.fileName !== u.sheetName || sheet.idx !== u.rowIndex || !u.row) { render(); return; }
+  const notesCol = sheet.cols.notes;
+  const notes = sheet.rows[u.rowIndex][notesCol];
+  sheet.rows[u.rowIndex] = u.row.slice();
+  sheet.rows[u.rowIndex][notesCol] = notes;
+  persist();
+  const cur = u.callId ? CallRecords.get(u.callId) : null;
+  if (cur) {
+    const added = (((cur.cloud && cur.cloud.sent) || []).slice(u.sentBefore));
+    const withdrawn = !added.length || Cloud.cancel(added.map((x) => x.id));
+    if (u.prevCall) {
+      const restored = JSON.parse(JSON.stringify(u.prevCall));
+      restored.cloud = withdrawn ? u.prevCall.cloud : cur.cloud;
+      if (restored.cloud === undefined) delete restored.cloud;
+      CallRecords.add(restored);
+    } else if (withdrawn) CallRecords.remove(u.callId);
+    else CallRecords.update(u.callId, { outcome: "", outcomeCode: "", saveStatus: "undone" });
+  }
+  logEntry("outcome-undone", { code: u.code, row: u.rowIndex + 2 });
+  back();
+  render();
+  note("Outcome undone. Pick the right answer for this lead.");
+}
+/* Undo log, kept in the vault (IndexedDB). Entries carry no lead names or numbers. */
+function logEntry(action, extra) {
+  const old = Vault.get("log");
+  const list = Array.isArray(old) ? old.slice(-499) : [];
+  list.push(Object.assign({ at: Date.now(), action: action }, extra));
+  Vault.set("log", list);
+}
+
 function back() {
   if (state.objection != null) { state.objection = null; render(); return; }
   if (!state.history.length) return;
@@ -271,8 +329,8 @@ function back() {
   render();
 }
 function resetCall() { stopClock(); state.callId = null; state.node = "open"; state.history = []; state.trail = []; state.objs = []; state.objection = null; state.elapsed = 0; tick(); }
-function restart() { resetCall(); if (!sheet) $("lead-name").value = ""; render(); }
-function loadLead(i) { sheet.idx = i; $("lead-name").value = leadName(); resetCall(); persist(); render(); window.scrollTo({ top: 0, behavior: "auto" }); }
+function restart() { lastOutcome = null; resetCall(); if (!sheet) $("lead-name").value = ""; render(); }
+function loadLead(i) { lastOutcome = null; sheet.idx = i; $("lead-name").value = leadName(); resetCall(); persist(); render(); window.scrollTo({ top: 0, behavior: "auto" }); }
 
 function copyText(text, btn, target, idle) {
   const done = () => { btn.textContent = "Copied"; setTimeout(() => { btn.textContent = idle; }, 1800); };
@@ -295,9 +353,11 @@ async function readSheet(file) {
     let numeric = 0;
     s.rows.forEach((r) => { const v = r[s.cols.phone]; if (typeof v === "number") { numeric++; r[s.cols.phone] = String(v); } });
     sheet = s;
+    ensureResultCols(s);
+    refreshPhoneFlags();
     const done = calledCount(s);
     note((s.guessed ? "No clear name or phone heading found, so this is a guess. " : "") + "Names from “" + s.header[s.cols.name] + "”, numbers from “" + s.header[s.cols.phone] + "”. " + s.rows.length + " leads loaded" + (done ? ", " + done + " already called." : ".") +
-      (numeric ? " " + numeric + " phone numbers were stored as numbers in the file, so a leading 0 may be missing. Check them before calling." : ""));
+      (numeric ? " " + numeric + " phone numbers were stored as numbers in the file, so a leading 0 may be missing. Check them before calling." : "") + " " + ImportCheck.problemText(phoneCheck.counts));
     loadLead(s.idx);
   } catch (e) { note("Could not read that file. Use an .xlsx or .csv file with a header row."); }
 }
@@ -354,6 +414,10 @@ function renderSheet() {
   sub.appendChild(el("span", "phone", phone || "no number"));
   const out = String(r[c.outcome]).trim();
   sub.appendChild(el("span", "whostate" + (out ? " done" : ""), out ? "Called: " + out : "Not called yet"));
+  const flag = phoneCheck && phoneCheck.flags[sheet.idx];
+  if (flag && flag.status !== "ok") sub.appendChild(el("span", "flag", "Number needs checking: " + flag.reason));
+  const due = LeadList.validDate(r[c.callback]);
+  if (due) sub.appendChild(el("span", "whostate", "Callback " + (due <= LeadList.todayIso() ? "due " : "on ") + due));
   who.appendChild(sub);
   bar.appendChild(who);
   const nx = arrow("lead-next", "›", "Next lead (→ key)", sheet.idx + 1, sheet.idx >= n - 1);
@@ -369,7 +433,7 @@ function renderSheet() {
     const first = name.split(/\s+/)[0];
     const cb = tool("call-laptop", TOUCH ? "Call via phone link" : (first ? "Call " + first : "Call"), callFromLaptop, "primary");
     cb.disabled = !(linkHealth === "ok" || linkHealth === "checking");
-    cb.title = cb.disabled ? "The phone is not reachable. See the message below." : "Dial this lead on your paired phone (C)";
+    cb.title = cb.disabled ? "The phone is not reachable. See the banner at the top of the page." : "Dial this lead on your paired phone (C)";
     if (!TOUCH) cb.appendChild(el("kbd", "btnkey", "C"));
     calls.appendChild(cb);
   }
@@ -387,7 +451,7 @@ function renderSheet() {
   const actions = el("div", "actions");
   actions.appendChild(tool("sheet-save", "Download results (.xlsx)", downloadSheet, "primary"));
   const rm = tool("sheet-remove", "Remove sheet", () => {
-    if (rm.dataset.sure) { sheet = null; persist(); note("Sheet removed from this browser."); $("lead-name").value = ""; resetCall(); render(); }
+    if (rm.dataset.sure) { sheet = null; phoneCheck = null; lastOutcome = null; persist(); note("Sheet removed from this browser."); $("lead-name").value = ""; resetCall(); render(); }
     else { rm.dataset.sure = "1"; rm.textContent = "Tap again to remove"; }
   });
   actions.appendChild(rm);
@@ -471,8 +535,11 @@ function watchCall(sessionId) {
       if (st.phase === "ENDED" || st.phase === "FAILED") { readResult(sessionId, token, st.phase === "FAILED"); return; }
     } catch (e) {
       fails++;
-      if (fails >= 30) { finishCall(sessionId, { callStatus: "ended_unknown", detection: "approximate" }, "Lost contact with the phone. Connected time unknown."); return; }
-      note("Lost contact with the phone, retrying: " + e.message);
+      if (fails >= 720) { finishCall(sessionId, { callStatus: "ended_unknown", detection: "approximate" }, "Lost contact with the phone for an hour. Connected time unknown."); return; }
+      if (fails === 30) note("Still waiting for the phone to reconnect. The call will settle when it does.");
+      else if (fails < 30) note("Lost contact with the phone, retrying: " + e.message);
+      setTimeout(step, fails >= 30 ? 5000 : 1000);
+      return;
     }
     setTimeout(step, 1000);
   };
@@ -589,16 +656,40 @@ function cloudSweep() {
   CallRecords.all().forEach((r) => { if (r.saveStatus === "saved") cloudSync(r.sessionId); });
 }
 
+const CLOUD_LABEL = {
+  off: "Results stay in this browser only",
+  starting: "Starting sync…",
+  signed_out: "Signed out, not syncing",
+  link_sent: "Check your email to sign in",
+  no_seat: "No active seat, not syncing",
+  ready: "Synced",
+  offline: "Offline",
+  error: "Sync error",
+};
+/* Header status, always shown. Off means no cloud on this site: results stay in this browser. */
 function renderCloud(c) {
   const pill = $("cloud-panel");
-  pill.hidden = !c.enabled || !c.email;
-  if (pill.hidden) return;
+  pill.hidden = false;
   const waiting = c.pending > 0;
-  pill.dataset.sync = c.status === "offline" || c.status === "error" ? "off" : waiting ? "wait" : "ok";
-  $("cloud-summary").textContent = c.status === "offline" ? "Cloud offline" : waiting ? c.pending + " to sync" : "Synced";
-  $("cloud-status").textContent = "Signed in as " + c.email + (c.seatLabel ? " (" + c.seatLabel + ")" : "") + ". " +
-    (waiting ? c.pending + " call result(s) waiting to upload; they upload automatically when the connection is back. " : "All call results are uploaded. ") +
-    (c.failed ? c.failed + " could not be uploaded. " : "") + "Lead names and numbers never leave this browser.";
+  const label = CLOUD_LABEL[c.status] || "Sync status unknown";
+  let summary = label;
+  if (c.status === "ready" && waiting) summary = c.pending + " to sync";
+  else if ((c.status === "offline" || c.status === "error") && waiting) summary = label + ", " + c.pending + " waiting";
+  pill.dataset.sync = c.status === "off" ? "local" : c.status === "ready" ? (waiting ? "wait" : "ok") : "off";
+  $("cloud-summary").textContent = summary;
+  $("cloud-signout").hidden = !(c.enabled && c.email);
+  const lines = [];
+  if (c.status === "off") lines.push("Results stay in this browser only. Cloud sync is not set up on this site.");
+  else {
+    if (c.email) lines.push("Signed in as " + c.email + (c.seatLabel ? " (" + c.seatLabel + ")" : "") + ".");
+    if (c.status === "offline") lines.push("No connection to the Vector cloud. Results stay in this browser until it is back.");
+    if (c.status === "error") lines.push("Could not reach the Vector cloud" + (c.lastError ? ": " + c.lastError : "") + ".");
+    if (c.status === "no_seat") lines.push("This account has no active seat, so results are not uploaded.");
+    lines.push(waiting ? c.pending + " call result(s) waiting to upload; they upload automatically when the connection is back." : "All call results are uploaded.");
+  }
+  if (c.failed) lines.push(c.failed + " could not be uploaded.");
+  lines.push("Lead names and numbers never leave this browser.");
+  $("cloud-status").textContent = lines.join(" ");
 }
 
 function renderSignin(c) {
@@ -686,7 +777,7 @@ function renderHealth() {
   if (linkHealth === "offline") {
     $("link-banner-title").textContent = "Can't reach your phone";
     $("link-banner-text").textContent = "Check that the phone is on the same Wi-Fi as this laptop and that Vector Companion is running (its notification is showing). " +
-      "If the phone's Wi-Fi address changed, pair again. If the phone was restarted, open the certificate page once and accept the warning.";
+      "If the phone's Wi-Fi address changed, open the certificate page once, accept the warning, then pair again. A phone restart on the same Wi-Fi does not need this.";
     tools.appendChild(retry);
     const cert = el("a", "plain", "Open certificate page"); cert.href = PhoneLink.certUrl(host); cert.target = "_blank"; cert.rel = "noopener";
     tools.appendChild(cert);
@@ -807,6 +898,86 @@ function parseCsv(text) {
   return rows;
 }
 
+/* Note templates: a dropdown that puts the chosen text at the cursor of the notes box. */
+function templatePicker(ta, saveNotes) {
+  const wrap = el("div", "tplrow");
+  const sel = el("select", "tpl"); sel.id = "note-template"; sel.setAttribute("aria-label", "Insert a note template");
+  sel.appendChild(new Option("Insert a note template…", ""));
+  NOTE_TEMPLATES.forEach((t) => sel.appendChild(new Option(t.label, t.id)));
+  sel.addEventListener("change", () => {
+    const t = NOTE_TEMPLATES.find((x) => x.id === sel.value);
+    sel.value = "";
+    if (!t) return;
+    const text = ta.value;
+    const start = ta.selectionStart == null ? text.length : ta.selectionStart;
+    const end = ta.selectionEnd == null ? text.length : ta.selectionEnd;
+    const gap = start > 0 && !/\s$/.test(text.slice(0, start)) ? " " : "";
+    const insert = gap + t.text;
+    ta.value = text.slice(0, start) + insert + text.slice(end);
+    ta.setSelectionRange(start + insert.length, start + insert.length);
+    ta.focus();
+    saveNotes(ta.value);
+  });
+  wrap.appendChild(sel);
+  return wrap;
+}
+
+/* Callback date for this lead. Due dates show first in the daily queue. */
+function callbackField() {
+  const wrap = el("label", "field cbfield");
+  wrap.appendChild(el("span", "label", "Call back on"));
+  const cb = el("input"); cb.type = "date"; cb.id = "lead-callback";
+  cb.value = LeadList.validDate(sheet.rows[sheet.idx][sheet.cols.callback]);
+  cb.addEventListener("change", () => {
+    sheet.rows[sheet.idx][sheet.cols.callback] = LeadList.validDate(cb.value);
+    persist(); renderSheet(); renderLeads();
+  });
+  wrap.appendChild(cb);
+  wrap.appendChild(el("span", "hint", "Shows at the top of the daily queue on this date."));
+  return wrap;
+}
+
+/* Leave-lead rule: no moving to another lead during a live call or part-way through the script. */
+function leaveBlocked() {
+  const live = callView && (callView.phase === "REQUESTED" || callView.phase === "OFFHOOK");
+  const midScript = state.history.length > 0 && !FLOW[state.node].end;
+  return !!(live || midScript);
+}
+function goToLead(i) {
+  if (leaveBlocked()) { note("Finish or restart this call before moving to another lead."); return; }
+  note("");
+  loadLead(i);
+}
+function leadRow(i) {
+  const row = sheet.rows[i];
+  const li = el("li");
+  const b = el("button", "leadrow" + (i === sheet.idx ? " current" : "")); b.type = "button";
+  if (i === sheet.idx) b.setAttribute("aria-current", "true");
+  b.appendChild(el("strong", "", String(row[sheet.cols.name]).trim() || "No name in this row"));
+  b.appendChild(el("span", "phone", String(row[sheet.cols.phone]).trim() || "no number"));
+  const st = LeadList.statusOf(row, sheet.cols, LeadList.todayIso());
+  b.appendChild(el("span", "leadstate " + st.kind, st.label));
+  b.addEventListener("click", () => goToLead(i));
+  li.appendChild(b);
+  return li;
+}
+/* Leads panel: search by name or number, and a filter. "Today's queue" is the default: due callbacks, then no-answer retries, then new leads. */
+function renderLeads() {
+  const panel = $("leads-panel");
+  panel.hidden = !sheet;
+  if (!sheet) return;
+  const list = $("leads-list");
+  list.textContent = "";
+  const status = $("lead-filter").value;
+  const idxs = LeadList.filterLeads(sheet.rows, sheet.cols, { query: $("lead-search").value, status: status }, LeadList.todayIso());
+  const shown = idxs.slice(0, 60);
+  $("leads-count").textContent = idxs.length + " of " + sheet.rows.length + " leads" +
+    (idxs.length > shown.length ? ". Showing the first " + shown.length + ", narrow the search to see more" : "") +
+    (status === "queue" ? ". Due callbacks first, then no-answer retries, then new leads." : "");
+  shown.forEach((i) => list.appendChild(leadRow(i)));
+  if (!shown.length) list.appendChild(el("li", "hint", "No leads match."));
+}
+
 function render() {
   const node = FLOW[state.node];
   renderSheet();
@@ -852,12 +1023,20 @@ function render() {
       const r = sheet.rows[sheet.idx], col = sheet.cols.notes;
       const lab = el("label", "notes"); lab.appendChild(el("span", "label", "Notes for this lead, saved to the sheet"));
       const ta = el("textarea"); ta.id = "lead-notes"; ta.rows = 2; ta.value = String(r[col]); ta.placeholder = "Follow-up day and time, the reason they gave, anything to remember";
-      ta.addEventListener("input", () => { r[col] = ta.value; persist(); if (state.callId) CallRecords.update(state.callId, { notes: ta.value }); });
+      const saveNotes = (text) => { r[col] = text; persist(); if (state.callId) CallRecords.update(state.callId, { notes: text }); };
+      ta.addEventListener("input", () => saveNotes(ta.value));
+      lab.appendChild(templatePicker(ta, saveNotes));
       lab.appendChild(ta); card.appendChild(lab);
+      card.appendChild(callbackField());
       card.appendChild(el("p", "hint", "Result written to row " + (sheet.idx + 2) + " of the sheet. Download the updated sheet when you finish calling."));
       const ni = nextOpen(sheet);
       const nx = tool("lead-next-open", ni < 0 ? "All leads called" : "Next lead", () => loadLead(ni), "primary"); nx.disabled = ni < 0;
       row.appendChild(nx);
+    }
+    if (lastOutcome && sheet && lastOutcome.code === state.node && lastOutcome.rowIndex === sheet.idx && lastOutcome.sheetName === sheet.fileName) {
+      const undoBtn = tool("outcome-undo", "Undo this outcome", undoOutcome, "plain");
+      undoBtn.title = "Puts this lead back as it was and returns to the last question";
+      row.appendChild(undoBtn);
     }
     if (row.childNodes.length) card.appendChild(row);
   } else {
@@ -876,6 +1055,7 @@ function render() {
   stage.appendChild(card);
   $("back").disabled = !state.history.length && state.objection == null;
   $("obj-section").hidden = !!node.end;
+  renderLeads();
 }
 
 OBJECTIONS.forEach((o, i) => {
@@ -888,10 +1068,12 @@ $("restart").addEventListener("click", restart);
 $("lead-name").addEventListener("input", () => { if (state.objection != null || !FLOW[state.node].end) render(); });
 $("me-name").addEventListener("input", () => { try { localStorage.setItem("vca2-me", $("me-name").value); } catch (e) {} if (state.objection != null || !FLOW[state.node].end) render(); });
 $("sheet-file").addEventListener("change", (ev) => { const f = ev.target.files && ev.target.files[0]; if (f) readSheet(f); ev.target.value = ""; });
+$("lead-search").addEventListener("input", renderLeads);
+$("lead-filter").addEventListener("change", renderLeads);
 try { const saved = localStorage.getItem("vca2-me"); if (saved) $("me-name").value = saved; } catch (e) {}
 function restoreSheet() {
   const s = Vault.get("sheet");
-  if (s && s.rows && s.cols && s.rows[s.idx]) { sheet = s; $("lead-name").value = leadName(); }
+  if (s && s.rows && s.cols && s.rows[s.idx]) { sheet = s; ensureResultCols(s); refreshPhoneFlags(); $("lead-name").value = leadName(); }
 }
 
 /* One-time copy from v1 (same github.io origin, so same localStorage). The v1 sheet is read, then removed once it is saved here. */
@@ -900,6 +1082,7 @@ function syncImportButton() { $("import-v1").hidden = !!sheet || !v1Sheet(); }
 $("import-v1").addEventListener("click", () => {
   const s = v1Sheet(); if (!s) { syncImportButton(); return; }
   sheet = s;
+  ensureResultCols(s); refreshPhoneFlags();
   // The old copy in localStorage (vcg-sheet) is removed only once the sheet is saved here.
   persist().then((ok) => { if (ok) { try { localStorage.removeItem("vcg-sheet"); } catch (e) {} } });
   try { const me = localStorage.getItem("vcg-me"); if (me && !localStorage.getItem("vca2-me")) { $("me-name").value = me; localStorage.setItem("vca2-me", me); } } catch (e) {}
@@ -914,9 +1097,7 @@ document.addEventListener("keydown", (ev) => {
   const k = ev.key.toLowerCase();
   const map = { "1": "yes", "2": "no", "3": "maybe" };
   if ((ev.key === "ArrowLeft" || ev.key === "ArrowRight") && sheet) {
-    const live = callView && (callView.phase === "REQUESTED" || callView.phase === "OFFHOOK");
-    const midScript = state.history.length > 0 && !FLOW[state.node].end;
-    if (live || midScript) { note("Finish or restart this call before moving to another lead."); return; }
+    if (leaveBlocked()) { note("Finish or restart this call before moving to another lead."); return; }
     const to = sheet.idx + (ev.key === "ArrowLeft" ? -1 : 1);
     if (to >= 0 && to < sheet.rows.length) { ev.preventDefault(); note(""); loadLead(to); }
     return;
@@ -927,7 +1108,7 @@ document.addEventListener("keydown", (ev) => {
   else if (k === "c") {
     const b = $("call-laptop");
     if (b && !b.disabled) { ev.preventDefault(); b.click(); }
-    else if (b) note("The phone is not reachable, so the call cannot start. See the message above.");
+    else if (b) note("The phone is not reachable, so the call cannot start. See the banner at the top of the page.");
   }
 });
 

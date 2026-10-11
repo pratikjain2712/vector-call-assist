@@ -44,6 +44,7 @@ object Sessions {
         var manualAnswerMono = 0L    // tester's "they answered" tap, ground truth for Phase 2
         var incomingSeen = false
         var disconnectCause: String? = null
+        var endReason: String? = null     // set when the phone sees the call go IDLE ("person"); the laptop link never sets it
         val open get() = phase == Phase.REQUESTED || phase == Phase.OFFHOOK
 
         fun toJson(): String = JSONObject().put("id", id).put("phase", phase.name)
@@ -111,7 +112,7 @@ object Sessions {
         history.addFirst(s)
         while (history.size > 20) history.removeLast()
         Prefs.setActiveSession(app, s.toJson())
-        EventLog.add("DIAL_REQUESTED", s.id, "to=${Phone.mask(e164)} sim=$simLabel")
+        EventLog.add("DIAL_REQUESTED", s.id, "sim=$simLabel")
         main.postDelayed({
             if (current === s && s.phase == Phase.REQUESTED) {
                 s.phase = Phase.FAILED
@@ -161,11 +162,18 @@ object Sessions {
             s.phase = Phase.ENDED
             s.endMono = now
             s.endWallMs = System.currentTimeMillis()
-            EventLog.add("SESSION_ENDED", s.id, "all SIMs IDLE")
+            s.endReason = s.endReason ?: "person"
+            EventLog.add("SESSION_ENDED", s.id, "ended: ${s.endReason}; all SIMs IDLE")
             summarize(s)
             close(s)
             if (Prefs.callLogProbe(app)) CallLogProbe.schedule(app, s)
         }
+    }
+
+    /** From LinkServer when the Wi-Fi to the laptop drops. Only records the fact; the call's end reason still comes from the phone. */
+    fun onLinkLost() {
+        val s = current?.takeIf { it.open } ?: return
+        EventLog.add("LINK_LOST_DURING_CALL", s.id, "Wi-Fi to the laptop dropped while the call was open; the phone call is not affected by this")
     }
 
     /** From CompanionInCallService, if Telecom ever binds it. */
@@ -205,6 +213,7 @@ object Sessions {
             parts += String.format(Locale.US, "manual-connected=%.1fs", (s.endMono - s.manualAnswerMono) / 1000.0)
         }
         s.disconnectCause?.let { parts += "cause=$it" }
+        parts += "ended=${s.endReason ?: "unknown"}"
         if (s.incomingSeen) parts += "incoming-call-during-session"
         parts += "quality=$quality"
         EventLog.add("SUMMARY", s.id, parts.joinToString(" "))

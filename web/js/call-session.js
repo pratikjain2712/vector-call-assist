@@ -21,6 +21,9 @@
     return rec;
   }
 
+  /* Undo of an outcome that created its record: the record goes. */
+  function remove(sessionId) { write(all().filter((r) => r.sessionId !== sessionId)); }
+
   function update(sessionId, patch) {
     const list = all();
     const r = list.find((x) => x.sessionId === sessionId);
@@ -82,5 +85,5 @@
       .sort((a, b) => (b.outcomeAtMs || b.dialWallMs || 0) - (a.outcomeAtMs || a.dialWallMs || 0))[0] || null;
   }
 
-  window.CallRecords = { all, get, add, update, iso, toAoa, latestFor, COLUMNS };
+  window.CallRecords = { all, get, add, update, remove, iso, toAoa, latestFor, COLUMNS };
 })();

@@ -1,7 +1,9 @@
 package app.vectorcall.companion
 
+import android.Manifest
 import android.content.Context
 import android.os.Build
+import android.os.PowerManager
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -23,7 +25,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  *          change during a call cannot corrupt them. It restarts at 0 after a reboot, hence `boot`.
  *  - boot: Settings.Global.BOOT_COUNT, so mono values from different boots are never compared.
  *
- * Phone numbers are never written here, only masked forms (see Phone.mask).
+ * Lead names and phone numbers are never written here, not even masked. Session ids are random UUIDs.
  */
 object EventLog {
     data class Entry(
@@ -56,6 +58,10 @@ object EventLog {
     private const val TAG = "VectorCompanion"
     private const val FILE_NAME = "events.jsonl"
     private const val KEEP_IN_MEMORY = 2000
+    private val MASKED_NUMBER = Regex("(?<![A-Za-z])to=\\S+")
+
+    /** Replaces any "to=<number>" text, so no phone number stays in the log. */
+    fun scrub(detail: String): String = detail.replace(MASKED_NUMBER, "to=(hidden)")
 
     private val entries = ArrayList<Entry>()
     private val listeners = CopyOnWriteArrayList<(Entry) -> Unit>()
@@ -75,16 +81,26 @@ object EventLog {
             -1
         }
         if (f.exists()) {
+            var scrubbed = false
             f.forEachLine { raw ->
                 if (raw.isNotBlank()) {
                     try {
-                        entries.add(Entry.fromJson(JSONObject(raw)))
+                        val e = Entry.fromJson(JSONObject(raw))
+                        val clean = scrub(e.detail)
+                        if (clean != e.detail) scrubbed = true
+                        entries.add(if (clean == e.detail) e else e.copy(detail = clean))
                     } catch (e: Exception) {
                         // A torn last line (power loss mid-write) is skipped, not fatal.
                     }
                 }
             }
             while (entries.size > KEEP_IN_MEMORY) entries.removeAt(0)
+            // Older builds wrote masked phone numbers here. Rewrite the stored file without them.
+            if (scrubbed) try {
+                f.writeText(entries.joinToString("") { it.toJson().toString() + "\n" })
+            } catch (ex: Exception) {
+                Log.w(TAG, "could not clean event log", ex)
+            }
             nextSeq = (entries.lastOrNull()?.seq ?: 0L) + 1
         }
     }
@@ -134,17 +150,26 @@ object EventLog {
 
     fun nowIso(): String = OffsetDateTime.now().format(ISO)
 
-    /** Plain-text export for sharing test results. Contains masked numbers only. */
-    fun exportText(): String {
+    fun isoAt(ms: Long): String =
+        OffsetDateTime.ofInstant(java.time.Instant.ofEpochMilli(ms), java.time.ZoneId.systemDefault()).format(ISO)
+
+    /**
+     * Text for the "Save diagnostic file" button: app version, the phone's status words and the last 200
+     * event log lines. Lead names and numbers are never in it, so it is safe to send to support.
+     */
+    fun diagnosticText(c: Context): String {
         val sb = StringBuilder()
-        sb.append("Vector Companion event log\n")
+        sb.append("Vector Companion diagnostics\n")
         sb.append("Exported: ").append(nowIso()).append('\n')
+        sb.append("App version: ").append(PhoneStatus.appVersion(c)).append('\n')
         sb.append("Device: ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL)
             .append(", Android ").append(Build.VERSION.RELEASE)
             .append(" (API ").append(Build.VERSION.SDK_INT).append(")\n")
-        sb.append("App: ").append(BuildConfigInfo.VERSION).append('\n')
+        sb.append("\nStatus\n")
+        for ((name, word) in PhoneStatus.lines(c)) sb.append(name).append(": ").append(word).append('\n')
+        sb.append("\nLast 200 event log lines\n")
         sb.append("Columns: seq | at | mono_ms | boot | type | session | detail\n\n")
-        for (e in snapshot().takeLast(1500)) {
+        for (e in snapshot().takeLast(200)) {
             sb.append(e.seq).append(" | ").append(e.at).append(" | ").append(e.mono)
                 .append(" | ").append(e.boot).append(" | ").append(e.type)
                 .append(" | ").append(e.session ?: "-").append(" | ").append(e.detail).append('\n')
@@ -156,4 +181,41 @@ object EventLog {
 /** Avoids depending on the generated BuildConfig class (disabled by default in AGP 8). */
 object BuildConfigInfo {
     const val VERSION = "0.2.0-poc"
+}
+
+/**
+ * The status words shown on the phone and written to the diagnostic file. Each pair is name and plain word.
+ */
+object PhoneStatus {
+    private val CALL_PERMS = arrayOf(
+        Manifest.permission.CALL_PHONE,
+        Manifest.permission.READ_PHONE_STATE,
+        Manifest.permission.ANSWER_PHONE_CALLS,
+    )
+
+    fun appVersion(c: Context): String = try {
+        c.packageManager.getPackageInfo(c.packageName, 0).versionName ?: BuildConfigInfo.VERSION
+    } catch (e: Exception) {
+        BuildConfigInfo.VERSION
+    }
+
+    fun lines(c: Context): List<Pair<String, String>> {
+        val paired = LinkServer.isPaired(c)
+        val running = LinkServer.isRunning()
+        val lastHeard = LinkServer.lastHeardAt
+        val wifi = LinkServer.lanAddresses().firstOrNull()
+        val calls = CALL_PERMS.all { Dialer.has(c, it) }
+        val battery = c.getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(c.packageName) == true
+        return listOf(
+            "Pairing" to if (paired) "Paired" else "Not paired",
+            "Link" to if (running) "On" else "Off",
+            "Last heard from laptop" to if (lastHeard == 0L) "never" else EventLog.isoAt(lastHeard),
+            "Calls" to if (calls) "Allowed" else "Not allowed",
+            "Call log" to if (Dialer.has(c, Manifest.permission.READ_CALL_LOG)) "Allowed" else "Not allowed",
+            "Notifications" to if (Dialer.has(c, Manifest.permission.POST_NOTIFICATIONS)) "Allowed" else "Not allowed",
+            "Battery" to if (battery) "Unrestricted" else "Restricted",
+            "Wi-Fi" to if (wifi != null) "Connected, $wifi" else "Not connected",
+            "Call monitoring" to if (CallMonitorService.watching) "Watching" else "Not watching",
+        )
+    }
 }

@@ -1,5 +1,6 @@
 /* Cloud sync with Supabase (supabase/migrations/0001_init.sql):
    - sign-in by an emailed link; accounts are invited by the institute, so sign-in never creates one
+   - an invited seat is linked to the login once per sign-in, with claim_my_invite()
    - the rep's active seat, from my_active_seat()
    - an upload queue for call_outcomes rows, kept in this browser until the upload succeeds
    Only outcomes and timings leave the browser: never lead names or phone numbers. */
@@ -10,11 +11,15 @@
   const FAILED = 'vca2-cloud-failed';
   const SEAT_CACHE = 'vca2-cloud-seat';
   const SINCE = 'vca2-cloud-since';   // per account: calls before this time stay local
+  const UPLOADED = 'vca2-cloud-uploaded';   // keys of rows already uploaded (newest last): never sent twice
+  const UPLOADED_KEEP = 300;
 
   let client = null;
   let session = null;
   let seat = null;
   let flushing = false;
+  let inFlight = null;   // id of the row being uploaded right now
+  let claimedFor = null; // user id whose invitation was tried this sign-in (cleared on sign-out)
   const listeners = [];
   // status: off | starting | signed_out | link_sent | no_seat | ready | offline | error
   const state = { status: enabled ? 'starting' : 'off', pending: 0, failed: 0, lastError: '', lastSyncedAt: 0 };
@@ -47,8 +52,9 @@
 
   async function onSession(s) {
     session = s;
-    if (!s) { seat = null; set({ status: state.status === 'link_sent' ? 'link_sent' : 'signed_out' }); return; }
+    if (!s) { seat = null; claimedFor = null; set({ status: state.status === 'link_sent' ? 'link_sent' : 'signed_out' }); return; }
     const userId = s.user.id;
+    await claimInvite(userId);
     const { data, error } = await client.rpc('my_active_seat');
     if (error) {
       // Offline or the project is unreachable: keep working with the seat seen last time.
@@ -66,6 +72,17 @@
     }
     set({ status: seat ? 'ready' : 'no_seat', lastError: '' });
     if (seat) flush();
+  }
+
+  /* An invited person's login is linked to their invited seat here, once per sign-in. "No invitation" (or a
+     seat already held) is the usual answer and is ignored. A network failure is tried again on the next session change. */
+  async function claimInvite(userId) {
+    if (!client || claimedFor === userId) return;
+    try {
+      const { error } = await client.rpc('claim_my_invite');
+      if (error && !error.code) return;
+    } catch (e) { return; }
+    claimedFor = userId;
   }
 
   async function sendLink(email) {
@@ -89,43 +106,91 @@
     set({ status: enabled ? 'signed_out' : 'off' });
   }
 
+  /* A call is one upload: the same seat and client_record_id always mean the same call. */
+  function keyOf(row) { return row.seat_id + '|' + row.client_record_id; }
+  function uploaded(key) { return read(UPLOADED, []).includes(key); }
+  function markUploaded(key) {
+    const list = read(UPLOADED, []).filter((k) => k !== key);
+    list.push(key);
+    write(UPLOADED, list.slice(-UPLOADED_KEEP));
+  }
+  function removeQueued(id) { write(QUEUE, read(QUEUE, []).filter((r) => r.id !== id)); }
+
   /* Queue one call_outcomes row. institute_id and seat_id are filled from the seat signed in now,
-     so a row is only ever uploaded under the seat that made it. Returns false when there is no seat. */
+     so a row is only ever uploaded under the seat that made it. Returns false when there is no seat.
+     A row already queued or already uploaded is not added again (returns true: it is handled). */
   function enqueue(row) {
     if (!seat) return false;
+    const full = Object.assign({}, row, { institute_id: seat.institute_id, seat_id: seat.id });
+    const key = keyOf(full);
     const q = read(QUEUE, []);
-    q.push(Object.assign({}, row, { institute_id: seat.institute_id, seat_id: seat.id }));
+    if (uploaded(key) || q.some((r) => r.id === full.id || keyOf(r) === key)) return true;
+    q.push(full);
     write(QUEUE, q);
     counts(); emit();
     flush();
     return true;
   }
 
+  /* Undo: take queued rows back out before they upload. Returns false, and removes nothing, when any of
+     them has already uploaded or is uploading now. */
+  function cancel(ids) {
+    const list = Array.isArray(ids) ? ids : [ids];
+    const q = read(QUEUE, []);
+    if (list.some((id) => id === inFlight || !q.some((r) => r.id === id))) return false;
+    write(QUEUE, q.filter((r) => !list.includes(r.id)));
+    counts(); emit();
+    return true;
+  }
+
+  /* Uploads queued rows one at a time. The queue is read again before each upload, so a row added while an
+     upload is in flight is not lost. A network error stops the pass and keeps every row queued for the next try. */
   async function flush() {
     if (!client || !seat || flushing || state.status === 'no_seat') return;
     flushing = true;
+    const waiting = new Set();   // rows that belong to another seat: they wait for that account
     try {
-      let q = read(QUEUE, []);
-      for (let i = 0; i < q.length;) {
-        const row = q[i];
-        if (row.seat_id !== seat.id) { i++; continue; }   // another account's rows wait for that account
-        // ignoreDuplicates: a retried upload of the same (seat_id, client_record_id) is skipped, not an error.
-        const { error } = await client.from('call_outcomes').upsert(row, { onConflict: 'seat_id,client_record_id', ignoreDuplicates: true });
-        if (error) {
-          const code = String(error.code || '');
-          if (code === '42501' || code === 'PGRST301' || !code) {
-            // No permission (seat revoked), expired login, or no network: stop and retry later.
-            set({ lastError: error.message, status: code === '42501' ? 'no_seat' : state.status });
-            break;
-          }
-          // The row itself is invalid: park it so it does not block the rest.
-          const failed = read(FAILED, []); failed.push({ row, error: error.message }); write(FAILED, failed);
+      for (;;) {
+        const row = read(QUEUE, []).find((r) => !waiting.has(r.id));
+        if (!row) break;
+        if (row.seat_id !== seat.id) { waiting.add(row.id); continue; }
+        if (uploaded(keyOf(row))) { removeQueued(row.id); continue; }   // never send the same call twice
+        let error = null;
+        inFlight = row.id;
+        try {
+          // ignoreDuplicates: a retried upload of the same (seat_id, client_record_id) is skipped, not an error.
+          const res = await client.from('call_outcomes').upsert(row, { onConflict: 'seat_id,client_record_id', ignoreDuplicates: true });
+          error = (res && res.error) || null;
+        } catch (e) {
+          error = { message: (e && e.message) || 'Network error' };
+        } finally { inFlight = null; }
+        if (!error) {
+          markUploaded(keyOf(row));
+          removeQueued(row.id);
+          state.lastSyncedAt = Date.now();
+          if (state.status === 'offline' || state.status === 'error') { state.status = 'ready'; state.lastError = ''; }
+          continue;
         }
-        q.splice(i, 1);
-        write(QUEUE, q);
-        state.lastSyncedAt = Date.now();
+        const code = String(error.code || '');
+        if (!code) {
+          // No network, or the project cannot be reached: stop and keep every row for the next try.
+          state.status = 'offline'; state.lastError = error.message || 'Network error';
+          break;
+        }
+        if (code === '42501') {
+          // No permission (seat revoked): stop and keep the rows.
+          state.status = 'no_seat'; state.lastError = error.message || '';
+          break;
+        }
+        if (code === 'PGRST301') {
+          // Login expired: stop and keep the rows until the rep signs in again.
+          state.status = 'error'; state.lastError = 'Sign in again. ' + (error.message || '');
+          break;
+        }
+        // The row itself is invalid: park it so it does not block the rest.
+        const failed = read(FAILED, []); failed.push({ row: row, error: error.message || code }); write(FAILED, failed);
+        removeQueued(row.id);
       }
-      if (state.status === 'offline' && state.lastSyncedAt) state.status = 'ready';
     } finally {
       flushing = false;
       counts(); emit();
@@ -139,6 +204,7 @@
     sendLink,
     signOut,
     enqueue,
+    cancel,
     flush,
     retry: () => { if (session) onSession(session); },
     onChange: (fn) => { listeners.push(fn); },

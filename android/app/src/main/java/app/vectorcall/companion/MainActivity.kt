@@ -57,7 +57,7 @@ class MainActivity : Activity() {
 
     private enum class Kind { PRIMARY, SECONDARY, QUIET, DANGER }
 
-    private class Item(val title: String, val detail: String, val ok: Boolean, val fix: () -> Unit)
+    private class Item(val title: String, val detail: String, val ok: Boolean, val okWord: String, val noWord: String, val fix: () -> Unit)
 
     private lateinit var pal: Palette
     private var dp = 1f
@@ -70,6 +70,7 @@ class MainActivity : Activity() {
     private var qrBox: View? = null
     private var seenPairedAt = 0L
     private var ticks = 0
+    private var healthLine: TextView? = null   // "last heard from the laptop", refreshed every second
 
     private val ticker = Handler(Looper.getMainLooper())
     private val tick = object : Runnable {
@@ -131,6 +132,7 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(px(8), px(4), px(8), 0)
         }
+        root.addView(button("Save diagnostic file", Kind.SECONDARY) { exportDiagnostics() }, full(0))
         root.addView(footer, full(0))
         return scroll
     }
@@ -169,6 +171,7 @@ class MainActivity : Activity() {
         mainCard.removeAllViews()
         countdown = null
         qrBox = null
+        healthLine = null
         when {
             !has(*CORE) -> mainNeedsAccess()
             LinkServer.isPaired(this) && !pairingAnother -> mainReady()
@@ -198,6 +201,7 @@ class MainActivity : Activity() {
         col.addView(label(if (running) "Paired with your laptop" else "Paired, but the laptop can't reach this phone", 14f, pal.muted))
         head.addView(col, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = px(14) })
         mainCard.addView(head)
+        mainCard.addView(statusBox(running), full(14))
 
         if (running) {
             mainCard.addView(infoBox(listOf("Phone address" to (LinkServer.address() ?: ""))), full(16))
@@ -215,6 +219,7 @@ class MainActivity : Activity() {
         }
 
         mainCard.addView(button("Pair a different laptop", Kind.SECONDARY) {
+            LinkServer.clearLastHeard()
             pairingAnother = true
             refresh()
         }, full(if (running) 16 else 8))
@@ -230,6 +235,45 @@ class MainActivity : Activity() {
         quiet.addView(button("Forget laptop", Kind.DANGER) { confirmForget() },
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         mainCard.addView(quiet, full(4))
+    }
+
+    /** Plain status words for pairing and link, then when the laptop last reached this phone. */
+    private fun statusBox(running: Boolean): View {
+        val paired = LinkServer.isPaired(this)
+        val box = column().apply {
+            background = rounded(pal.bg, 12f, pal.line)
+            setPadding(px(14), px(4), px(14), px(10))
+        }
+        box.addView(statusRow("Pairing", if (paired) "Paired" else "Not paired", paired))
+        box.addView(statusRow("Link", if (running) "On" else "Off", running))
+        val hl = label("", 13f, pal.muted).apply { setPadding(0, px(8), 0, 0) }
+        healthLine = hl
+        box.addView(hl)
+        updateHealth()
+        return box
+    }
+
+    private fun statusRow(name: String, word: String, ok: Boolean) = row().apply {
+        setPadding(0, px(6), 0, 0)
+        addView(label(name, 14f, pal.muted), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        addView(label(word, 14f, if (ok) pal.ok else pal.warn, bold = true))
+    }
+
+    private fun updateHealth() {
+        val tv = healthLine ?: return
+        val at = LinkServer.lastHeardAt
+        tv.text = if (at == 0L) {
+            "The laptop has not reached this phone yet."
+        } else {
+            "Last heard from the laptop ${ago(System.currentTimeMillis() - at)} (${EventLog.isoAt(at).substring(11, 19)})."
+        }
+    }
+
+    private fun ago(ms: Long): String = when {
+        ms < 10_000 -> "just now"
+        ms < 60_000 -> "${ms / 1000} s ago"
+        ms < 3_600_000 -> "${ms / 60_000} min ago"
+        else -> "${ms / 3_600_000} h ago"
     }
 
     private fun mainPairing() {
@@ -301,6 +345,7 @@ class MainActivity : Activity() {
             .setMessage("The laptop will need to scan a new pairing code before it can place calls again.")
             .setPositiveButton("Forget") { _, _ ->
                 LinkKeyStore.clear(this)
+                LinkServer.clearLastHeard()
                 pairingAnother = false
                 toast("Laptop forgotten")
                 refresh()
@@ -315,18 +360,18 @@ class MainActivity : Activity() {
         setupCard.removeAllViews()
         val wifi = LinkServer.lanAddresses().firstOrNull()
         val items = listOf(
-            Item("Calls", "Place calls and see when they connect", has(*CALL_PERMS)) { askFor(CALL_PERMS) },
-            Item("Call log", "Shows whether the lead answered, and for how long", has(Manifest.permission.READ_CALL_LOG)) {
+            Item("Calls", "Place calls and see when they connect", has(*CALL_PERMS), "Allowed", "Not allowed") { askFor(CALL_PERMS) },
+            Item("Call log", "Shows whether the lead answered, and for how long", has(Manifest.permission.READ_CALL_LOG), "Allowed", "Not allowed") {
                 askFor(arrayOf(Manifest.permission.READ_CALL_LOG))
             },
-            Item("Notifications", "Keeps the link running in the background", has(Manifest.permission.POST_NOTIFICATIONS)) {
+            Item("Notifications", "Keeps the link running in the background", has(Manifest.permission.POST_NOTIFICATIONS), "Allowed", "Not allowed") {
                 askFor(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
             },
-            Item("Battery unrestricted", "So calls keep working with the screen off", batteryOk()) { openBatterySettings() },
-            Item("Wi-Fi", if (wifi != null) "Connected, address $wifi" else "Join the same Wi-Fi as the laptop", wifi != null) {
+            Item("Battery unrestricted", "So calls keep working with the screen off", batteryOk(), "Unrestricted", "Restricted") { openBatterySettings() },
+            Item("Wi-Fi", if (wifi != null) "Connected, address $wifi" else "Join the same Wi-Fi as the laptop", wifi != null, "Connected", "Not connected") {
                 startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
             },
-            Item("Call monitoring", "Watches call state for the calls Vector places", CallMonitorService.watching) {
+            Item("Call monitoring", "Watches call state for the calls Vector places", CallMonitorService.watching, "Watching", "Not watching") {
                 if (!has(Manifest.permission.READ_PHONE_STATE)) {
                     askFor(CALL_PERMS)
                 } else {
@@ -356,6 +401,8 @@ class MainActivity : Activity() {
                 leftMargin = px(12)
                 rightMargin = px(8)
             })
+            r.addView(label(if (item.ok) item.okWord else item.noWord, 13f, if (item.ok) pal.ok else pal.warn, bold = true)
+                .apply { setPadding(px(8), 0, px(4), 0) })
             if (!item.ok) {
                 r.addView(button("Fix", Kind.PRIMARY) { item.fix() }.apply {
                     minHeight = px(38)
@@ -382,6 +429,7 @@ class MainActivity : Activity() {
             }
         }
         updateCountdown()
+        updateHealth()
         ticks++
         if (ticks % 5 == 0) renderSetup()   // Wi-Fi or battery may have changed
     }
@@ -430,6 +478,37 @@ class MainActivity : Activity() {
             CallMonitorService.start(this, restartWatcher = CallMonitorService.running)
         }
         refresh()
+    }
+
+    // ---------------------------------------------------------------- diagnostic file
+
+    /** Asks where to save the text file, then the person shares it from the Files app. Nothing goes over the network. */
+    @Suppress("DEPRECATION")
+    private fun exportDiagnostics() {
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType("text/plain")
+            .putExtra(Intent.EXTRA_TITLE, "vector-companion-diagnostics.txt")
+        try {
+            startActivityForResult(intent, REQ_EXPORT)
+        } catch (e: Exception) {
+            toast("No app on this phone can save the file.")
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQ_EXPORT || resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        try {
+            val text = EventLog.diagnosticText(this)
+            contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray(Charsets.UTF_8)) }
+                ?: throw IllegalStateException("no output stream")
+            toast("Diagnostic file saved")
+        } catch (e: Exception) {
+            toast("Could not save the diagnostic file.")
+        }
     }
 
     private fun batteryOk() = getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(packageName) == true
@@ -544,6 +623,7 @@ class MainActivity : Activity() {
 
     companion object {
         private const val REQ_PERMS = 1
+        private const val REQ_EXPORT = 2
         private const val UI_PREFS = "vector_ui"
         private const val KEY_ASKED = "asked_permissions"
 

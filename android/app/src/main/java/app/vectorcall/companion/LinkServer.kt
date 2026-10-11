@@ -173,6 +173,16 @@ object LinkServer {
     @Volatile var lastPairedAt = 0L
         private set
 
+    /** Time of the last request from the laptop that passed its checks (0 until one does). Shown on the phone screen. */
+    @Volatile var lastHeardAt = 0L
+        private set
+
+    /** Forgets the last-heard time. Called when the laptop is forgotten or a different laptop is about to be paired. */
+    @Synchronized
+    fun clearLastHeard() {
+        lastHeardAt = 0L
+    }
+
     @Synchronized
     fun newPairingCode(): String {
         val display = LinkCrypto.newSecret()
@@ -240,6 +250,8 @@ object LinkServer {
             // The address can lag the "available" event slightly, so look again a moment later.
             override fun onAvailable(network: Network) { main.postDelayed({ refreshAddress(ctx) }, 1_500) }
             override fun onLinkPropertiesChanged(network: Network, lp: LinkProperties) { main.post { refreshAddress(ctx) } }
+            // The Wi-Fi went away: log the fact only; the call's end reason still comes from the phone (see Sessions.onLinkLost).
+            override fun onLost(network: Network) { main.post { Sessions.onLinkLost() } }
         }
         try {
             cm.registerNetworkCallback(NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build(), cb)
@@ -402,6 +414,7 @@ object LinkServer {
                         pendingSecret = null
                         pendingDisplay = null
                         lastPairedAt = System.currentTimeMillis()
+                        lastHeardAt = lastPairedAt
                         EventLog.add(if (existed) "LINK_REPAIRED" else "LINK_PAIRED", null, "laptop paired")
                         "ok"
                     }
@@ -435,6 +448,7 @@ object LinkServer {
         val now = System.currentTimeMillis()
         seenNonces.values.removeIf { now - it > 2 * SKEW_MS }
         if (seenNonces.putIfAbsent(nonce, ts) != null) return reply.send(401, JSON, errJson("replayed request"))
+        lastHeardAt = now
 
         val req = (try { JSONObject(String(plain, Charsets.UTF_8)) } catch (e: Exception) { null })
             ?: return reply.send(400, JSON, errJson("bad request"))
@@ -494,12 +508,12 @@ object LinkServer {
         val s = Sessions.find(id) ?: return JSONObject().put("ok", true).put("found", false)
         return JSONObject().put("ok", true).put("found", true).put("phase", s.phase.name)
             .put("dialWallMs", s.dialWallMs).put("offhookWallMs", s.offhookWallMs)
-            .put("endWallMs", s.endWallMs).put("nowWallMs", System.currentTimeMillis())
+            .put("endWallMs", s.endWallMs).put("nowWallMs", System.currentTimeMillis()).put("endReason", s.endReason ?: JSONObject.NULL)
     }
 
     private fun result(id: String, ctx: Context): JSONObject {
         val s = Sessions.find(id) ?: return JSONObject().put("ok", false).put("error", "unknown session")
-        val base = JSONObject().put("ok", true).put("phase", s.phase.name)
+        val base = JSONObject().put("ok", true).put("phase", s.phase.name).put("endReason", s.endReason ?: JSONObject.NULL)
             .put("dialWallMs", s.dialWallMs).put("offhookWallMs", s.offhookWallMs).put("endWallMs", s.endWallMs)
         if (s.phase == Sessions.Phase.FAILED) return base.put("failed", true).put("pending", false)
         if (s.phase != Sessions.Phase.ENDED) return base.put("pending", true).put("reason", "call still in progress")

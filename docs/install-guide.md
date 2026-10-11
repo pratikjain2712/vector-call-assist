@@ -33,6 +33,7 @@ Words used in this guide:
 Open Vector Companion. It asks for access one item at a time. Tap Allow each time.
 
 1. **Calls (needed).** Lets the app place the calls you start and see when they connect and end.
+   - **Answer phone calls (needed, part of Calls).** Lets the app end a call when you tap Hang up on the laptop. It never answers a call for you.
 2. **Phone state (needed).** Lets the app see each call's status and list your SIM cards. It does not read contacts or messages.
 3. **Notifications (needed).** Shows a note while the link runs, so Android does not stop it.
 4. **Call log (optional).** Lets the app measure exact talk time. You can skip it.
@@ -102,6 +103,8 @@ The Call button is greyed out when the laptop cannot reach the phone. The banner
 5. Close and reopen Vector Companion, then reload the laptop page.
 6. If it is still offline, ask the person who runs your Wi-Fi to let devices see each other.
 
+A Wi-Fi drop during a call does not end the call on the phone. The rep can keep talking and hang up normally, and the call record on the laptop then shows the call as it ended on the phone.
+
 ## 10. Export outcomes
 
 1. On the laptop page, click **Download results (.xlsx)**.
@@ -112,8 +115,8 @@ CSV export is coming later.
 
 ## 11. What to send to support
 
-Each phone keeps a call-event log for support. A button to send that log is coming later. Until then, send:
+On the phone, tap **Save diagnostic file** at the bottom of the app screen. Choose where to save it, such as Downloads. The file holds the app version, the phone's status words and the last 200 log lines. It has no lead names or phone numbers. Share it from your Files app. Then send:
 
 1. The rep's name, the phone model, and the date and time of the problem. Do not send full customer phone numbers.
-2. A photo of the phone screen and of the laptop page showing the message.
+2. The diagnostic file, and a photo of the phone screen and of the laptop page showing the message.
 3. A short note of what you tapped just before the problem.

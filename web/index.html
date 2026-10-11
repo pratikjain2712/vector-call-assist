@@ -208,6 +208,26 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
 .banner p { margin: 0; }
 .banner a.plain, .banner .plain { background: var(--surface); }
 .btnkey { font-family: var(--util); font-size: 0.72rem; font-weight: 500; opacity: 0.8; margin-left: 10px; border: 1px solid currentColor; border-radius: 4px; padding: 0 5px; }
+/* ---- Leads list, callback dates, note templates, undo, phone check, header sync status ---- */
+.pill summary { white-space: normal; text-align: left; }
+.pill[data-sync="local"] summary::before { background: var(--muted); }
+.flag { color: var(--maybe); font-weight: 700; font-size: 0.92rem; }
+.leadspanel { gap: 10px; }
+.leadstools { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; }
+.leadstools .field { flex: 1 1 200px; min-width: 0; }
+.leadstools .field:last-child { flex: 0 1 220px; }
+.leadstools input, .leadstools select, .tpl, .cbfield input { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; }
+.leadlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 360px; overflow: auto; }
+.leadrow { width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; }
+.leadrow strong { overflow-wrap: anywhere; }
+.leadrow .phone { grid-column: 1; font-size: 0.9rem; }
+.leadrow .leadstate { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-family: var(--util); font-size: 0.72rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); text-align: right; }
+.leadrow .leadstate.due { color: var(--maybe); font-weight: 700; }
+.leadrow.current { border-color: var(--accent); }
+.leadlist .hint { padding: 4px 2px; }
+.tplrow { display: flex; }
+.tpl { width: auto; max-width: 100%; }
+.cbfield { display: flex; flex-direction: column; gap: 4px; max-width: 280px; }
 </style>
 
 </head>
@@ -263,7 +283,7 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
     <div class="topbar-in">
       <h1 class="brand">Vector <span>call guide</span></h1>
       <label class="me"><span class="label">You</span><input id="me-name" type="text" autocomplete="off" value="Pratik" title="Your name, used in the script"></label>
-      <details class="pill" id="cloud-panel" hidden>
+      <details class="pill" id="cloud-panel">
         <summary><span id="cloud-summary">Synced</span></summary>
         <div class="pill-menu">
           <p class="hint" id="cloud-status"></p>
@@ -329,6 +349,23 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
       </div>
       <div id="sheet-tools" class="sheettools" hidden></div>
     </section>
+
+    <section class="panel leadspanel" id="leads-panel" hidden>
+      <div class="leadstools">
+        <label class="field grow"><span class="label">Search name or number</span><input id="lead-search" type="search" autocomplete="off" placeholder="Name or number"></label>
+        <label class="field"><span class="label">Show</span>
+          <select id="lead-filter">
+            <option value="queue">Today's queue</option>
+            <option value="all">All leads</option>
+            <option value="not_called">Not called</option>
+            <option value="called">Called</option>
+            <option value="due">Callback due</option>
+          </select>
+        </label>
+      </div>
+      <p class="hint" id="leads-count" role="status"></p>
+      <ol class="leadlist" id="leads-list"></ol>
+    </section>
     </div>
 
   </div>
@@ -341,6 +378,9 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
 <script src="js/cloud.js"></script>
 <script src="js/phone-link.js"></script>
 <script src="js/call-session.js"></script>
+<script src="js/import-check.js"></script>
+<script src="js/lead-list.js"></script>
+<script src="js/note-templates.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 /* Browser storage for lead data and the phone link key. IndexedDB (database "vector-call-assist", store "kv")
-   holds the lead sheet ("sheet"), the call records ("calls") and the link key ("link-key"). None of them is
+   holds the lead sheet ("sheet"), the call records ("calls"), the link key ("link-key") and the outcome undo log ("log", no lead names). None of them is
    written to localStorage. Each value is also kept in memory for this page, so reads stay synchronous.
    If IndexedDB cannot be opened (private window, blocked site data), values live in memory until the page
    is reloaded. Read Vault.ready once before the first read after a page load. */
@@ -9,7 +9,7 @@
   const OPEN_TIMEOUT_MS = 4000;
   // Older versions kept these in localStorage. They are moved into IndexedDB once, then removed.
   const LEGACY = { sheet: 'vca2-sheet', calls: 'vca2-calls' };
-  const KEYS = ['sheet', 'calls', 'link-key'];
+  const KEYS = ['sheet', 'calls', 'link-key', 'log'];
 
   const mirror = {};
   let db = null;
