@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<style>html{color-scheme:light}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
+<title>Vector Call Assist</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@500;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+/* Layout: one narrow column, like a teleprompter. One line to read, then the answer buttons, then objections. */
+:root {
+  --bg: #F2F4F8; --surface: #FFFFFF; --fg: #111A2E; --muted: #5A657C; --line: #D5DAE5; --accent: #2447C8;
+  --yes: #0F7A3D; --yes-bg: #E2F4E8; --no: #B4232A; --no-bg: #FBE6E6; --maybe: #8A5A00; --maybe-bg: #FBF0D3;
+  --read: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --util: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E1320; --surface: #171E2E; --fg: #E8ECF4; --muted: #98A2B8; --line: #2A3347; --accent: #8FB4FF;
+    --yes: #5BD68C; --yes-bg: #12301F; --no: #FF8A8A; --no-bg: #3A1719; --maybe: #F5C451; --maybe-bg: #33270C;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E1320; --surface: #171E2E; --fg: #E8ECF4; --muted: #98A2B8; --line: #2A3347; --accent: #8FB4FF;
+  --yes: #5BD68C; --yes-bg: #12301F; --no: #FF8A8A; --no-bg: #3A1719; --maybe: #F5C451; --maybe-bg: #33270C;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--read); font-size: 16px; line-height: 1.5; }
+.wrap { max-width: 720px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 48px; display: flex; flex-direction: column; gap: 20px; }
+.label { font-family: var(--util); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+
+.top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+.top h1 { margin: 0; font-size: 1.15rem; font-weight: 700; }
+.clock { font-family: var(--util); font-variant-numeric: tabular-nums; font-size: 1rem; }
+.clock small { color: var(--muted); font-size: 0.72rem; margin-left: 8px; }
+
+.setup { display: flex; flex-wrap: wrap; gap: 12px; }
+.setup label { display: flex; flex-direction: column; gap: 4px; flex: 1 1 160px; min-width: 0; }
+.setup input { font: inherit; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; }
+
+.rail { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0; padding: 0; list-style: none; }
+.rail li { font-family: var(--util); font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding-bottom: 4px; border-bottom: 2px solid transparent; }
+.rail li.done { color: var(--fg); }
+.rail li.now { color: var(--accent); border-bottom-color: var(--accent); font-weight: 700; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 22px 20px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.say { display: flex; flex-direction: column; gap: 14px; }
+.say p { margin: 0; font-size: clamp(1.3rem, 1rem + 1.6vw, 1.75rem); line-height: 1.42; overflow-wrap: anywhere; }
+.fill { color: var(--accent); font-weight: 700; }
+.fill.blank { font-weight: 400; font-style: italic; border-bottom: 2px dashed var(--accent); }
+.tip { margin: 0; color: var(--muted); font-style: italic; border-top: 1px solid var(--line); padding-top: 12px; }
+.heard { margin: 0; font-size: 1.05rem; color: var(--muted); }
+
+.ask { margin: 0; }
+.answers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.answers.one { grid-template-columns: minmax(0, 1fr); }
+.answers.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 540px) { .answers { grid-template-columns: minmax(0, 1fr); } }
+button { font: inherit; color: var(--fg); cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.ans { text-align: left; border: 2px solid var(--line); background: var(--surface); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ans b { font-size: 1.3rem; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ans kbd { font-family: var(--util); font-size: 0.72rem; font-weight: 500; opacity: 0.8; }
+.ans span { font-size: 0.92rem; overflow-wrap: anywhere; }
+.ans.yes { border-color: var(--yes); background: var(--yes-bg); } .ans.yes b { color: var(--yes); }
+.ans.no { border-color: var(--no); background: var(--no-bg); } .ans.no b { color: var(--no); }
+.ans.maybe { border-color: var(--maybe); background: var(--maybe-bg); } .ans.maybe b { color: var(--maybe); }
+.ans.next { border-color: var(--accent); } .ans.next b { color: var(--accent); }
+
+.tools { display: flex; flex-wrap: wrap; gap: 10px; }
+.plain { background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; font-size: 0.92rem; }
+.plain:disabled { opacity: 0.45; cursor: default; }
+
+.sheet { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.sheet .hint { flex: 1 1 260px; min-width: 0; }
+.hint { margin: 0; color: var(--muted); font-size: 0.92rem; }
+.hint:empty { display: none; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.filebtn { cursor: pointer; display: inline-block; }
+.filebtn:has(+ input:focus-visible) { outline: 3px solid var(--accent); outline-offset: 2px; }
+.leadcard { padding: 16px 20px; gap: 10px; }
+.leadrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.leadrow strong { font-size: 1.2rem; overflow-wrap: anywhere; min-width: 0; }
+.phone { font-family: var(--util); font-variant-numeric: tabular-nums; font-size: 1.05rem; overflow-wrap: anywhere; }
+a.plain { color: var(--fg); text-decoration: none; }
+.primary { background: var(--accent); color: var(--bg); border: 1px solid var(--accent); border-radius: 6px; padding: 8px 14px; font-weight: 700; }
+.primary:disabled { opacity: 0.5; cursor: default; }
+.notes { display: flex; flex-direction: column; gap: 4px; }
+.notes textarea { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; resize: vertical; }
+textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.obj { display: flex; flex-direction: column; gap: 10px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 7px 13px; font-size: 0.92rem; }
+.chip:hover, .plain:hover:not(:disabled) { border-color: var(--accent); }
+
+.msg { font-family: var(--read); font-size: 0.98rem; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 12px; margin: 0; }
+.outcome { font-family: var(--util); font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; }
+.outcome.good { color: var(--yes); } .outcome.mid { color: var(--maybe); } .outcome.bad { color: var(--no); }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Vector 2.0 call guide</h1>
+    <div class="clock" aria-label="Call time"><span id="clock">00:00</span><small>aim for 10 to 12 min</small></div>
+  </header>
+
+  <div class="setup">
+    <label><span class="label">Your name</span><input id="me-name" type="text" autocomplete="off" value="Pratik"></label>
+    <label><span class="label">Lead's name</span><input id="lead-name" type="text" autocomplete="off" placeholder="Type before you dial"></label>
+  </div>
+
+  <section class="sheet" id="sheet-empty">
+    <label class="plain filebtn" for="sheet-file">Load a lead sheet</label>
+    <input id="sheet-file" class="vh" type="file" accept=".xlsx,.xls,.csv">
+    <p class="hint">Excel or CSV with a name column and a phone column. Leads load one at a time, and each call's result is written to that lead's row. The file stays in this browser.</p>
+    <button class="plain" id="import-v1" type="button" hidden>Import my lead sheet from the old call guide</button>
+  </section>
+  <section class="card leadcard" id="sheet-bar" hidden></section>
+  <p class="hint" id="sheet-msg" role="status"></p>
+
+  <ol class="rail" id="rail" aria-label="Call stages"></ol>
+
+  <main id="stage" aria-live="polite"></main>
+
+  <div class="tools">
+    <button class="plain" id="back" type="button">Back one step</button>
+    <button class="plain" id="restart" type="button">Start a new call</button>
+  </div>
+
+  <section class="obj" id="obj-section">
+    <span class="label">Pushback: tap what they said</span>
+    <div class="chips" id="chips-push"></div>
+    <span class="label">Worries and questions</span>
+    <div class="chips" id="chips-worry"></div>
+  </section>
+</div>
+
+<script>
+/*DATA*/
+const STAGES = ["Opening", "Discovery", "Pitch", "Timings", "Fee", "Close"];
+const SITE = "https://vector.techsimplus.com/";
+
+const FLOW = {
+  open: { stage: 0, say: ["Hi, is this {name}?"], tip: "Smile before you speak. Slow down.",
+    opts: [{ k: "yes", hint: "It is them", to: "intro" }, { k: "no", hint: "Wrong person picked up", to: "wrong_person" }, { k: "maybe", hint: "“Who is this?”", to: "intro" }] },
+  wrong_person: { stage: 0, say: ["Oh, sorry! Is {name} around, by any chance?"],
+    opts: [{ k: "yes", hint: "Hands the phone over", to: "intro" }, { k: "no", hint: "Wrong number", to: "exit_wrong" }, { k: "maybe", hint: "Not available right now", to: "callback" }] },
+  intro: { stage: 0, say: ["Hi {name}, {me} here, from TechSimPlus.", "You’d downloaded our Gen-AI interview PDF. Got two minutes?"],
+    opts: [{ k: "yes", hint: "Can talk", to: "frame" }, { k: "no", hint: "Busy", to: "callback" }, { k: "maybe", hint: "“What is this about?”", to: "intro_maybe" }] },
+  intro_maybe: { stage: 0, say: ["Sure. We run a live Gen-AI course, Vector 2.0.", "I just want to see if it’s useful for you. Okay if I ask two quick questions?"],
+    opts: [{ k: "yes", hint: "Go ahead", to: "q_work" }, { k: "no", hint: "Not interested", to: "ni_soft" }, { k: "maybe", hint: "Not now", to: "callback" }] },
+  frame: { stage: 0, say: ["Thanks! Don’t worry, I won’t read you a brochure.", "I just want to see if this fits you. If it doesn’t, I’ll say so. Fair?"],
+    opts: [{ k: "yes", hint: "Fair", to: "q_work" }, { k: "no", hint: "Not interested", to: "ni_soft" }, { k: "maybe", hint: "Hesitant, still listening", to: "q_work" }] },
+  ni_soft: { stage: 0, say: ["Totally fair. Just one thing before I go.", "Is Gen-AI on your radar at all, career-wise?"], tip: "One try only. If it is still no, let them go.",
+    opts: [{ k: "yes", hint: "It is", to: "q_work" }, { k: "no", hint: "No", to: "exit_polite" }, { k: "maybe", hint: "“Just send me details”", to: "send_details" }] },
+  send_details: { stage: 0, say: ["Sure, I’ll WhatsApp it to you.", "Okay if I check back in a couple of days?"],
+    opts: [{ k: "yes", hint: "Okay", to: "end_details" }, { k: "no", hint: "Do not call", to: "followup_n" }, { k: "maybe", hint: "“I’ll see”", to: "end_details" }] },
+  callback: { stage: 0, say: ["No problem. When’s a good time? This evening, or tomorrow?"], tip: "Write the time down before you hang up.",
+    opts: [{ k: "yes", hint: "Gave a time", to: "callback_ok" }, { k: "no", hint: "“Don’t call back”", to: "exit_dnc" }, { k: "maybe", hint: "“Just message me”", to: "followup_n" }] },
+  callback_ok: { stage: 0, say: ["Perfect, I’ll call you then. Thanks, {name}!"],
+    opts: [{ k: "next", hint: "Call finished", to: "end_callback" }] },
+
+  q_work: { stage: 1, say: ["So, what do you do right now?", "And how long have you been at it?"], tip: "Let them talk. Note the role and years. You will use it in the pitch.",
+    opts: [{ k: "yes", hint: "Working developer or engineer", to: "q_python" }, { k: "no", hint: "Student or fresher", to: "fresher" }, { k: "maybe", hint: "Non-coding role", to: "q_python" }] },
+  fresher: { stage: 1, say: ["Got it. I’ll be honest, this is made for working engineers.", "But if your Python is solid, you can still do it. How’s your Python?"],
+    opts: [{ k: "yes", hint: "Good", to: "q_genai" }, { k: "no", hint: "Weak or none", to: "exit_notfit" }, { k: "maybe", hint: "Basic", to: "python_maybe" }] },
+  q_python: { stage: 1, say: ["Nice. And Python, you’re comfortable with it?"],
+    opts: [{ k: "yes", hint: "Writes Python", to: "q_genai" }, { k: "no", hint: "Does not code in Python", to: "python_no" }, { k: "maybe", hint: "A little", to: "python_maybe" }] },
+  python_no: { stage: 1, say: ["Okay, straight answer. This needs Python.", "There’s pre-work for it, but you’d have to pick it up before 21 November. Up for that?"],
+    opts: [{ k: "yes", hint: "Will do it", to: "q_genai" }, { k: "no", hint: "Not ready", to: "exit_notfit" }, { k: "maybe", hint: "Unsure", to: "q_genai" }] },
+  python_maybe: { stage: 1, say: ["That’s okay. There’s pre-work on Python, Docker and Git before we start. You’ll be fine."],
+    opts: [{ k: "next", hint: "Next question", to: "q_genai" }] },
+  q_genai: { stage: 1, say: ["Have you tried learning Gen-AI at all?", "YouTube, a course, anything?"],
+    opts: [{ k: "yes", hint: "Tried something", to: "q_scale" }, { k: "no", hint: "Nothing yet", to: "genai_no" }, { k: "maybe", hint: "Did a course, it was a waste", to: "burned" }] },
+  genai_no: { stage: 1, say: ["Perfect, that’s who it’s for.", "We start with FastAPI first. Then AI, step by step."],
+    opts: [{ k: "next", hint: "Next question", to: "q_goal" }] },
+  burned: { stage: 1, say: ["Ah, I hear that a lot. What went wrong?", "Was it all recorded videos?"], tip: "Let them vent. Do not defend courses.",
+    opts: [{ k: "yes", hint: "Recorded, no support", to: "burned_yes" }, { k: "no", hint: "Does not trust any course now", to: "trust" }, { k: "maybe", hint: "Mixed reasons", to: "burned_yes" }] },
+  burned_yes: { stage: 1, say: ["Yeah, that’s the usual story.", "This one’s live. There are deadlines. And someone actually reviews your work."],
+    opts: [{ k: "next", hint: "Next question", to: "q_goal" }] },
+  trust: { stage: 1, say: ["Fair. You don’t have to take my word for it.", "There’s a 3-day refund, no questions asked. So you’re not stuck. Shall I tell you a bit more?"],
+    opts: [{ k: "yes", hint: "Okay", to: "q_goal" }, { k: "no", hint: "No", to: "exit_polite" }, { k: "maybe", hint: "Go on", to: "q_goal" }] },
+  q_scale: { stage: 1, say: ["Okay. Say an interviewer asks, “How do you scale this to a million users?”", "Could you answer that today?"], tip: "A “no” here is the gap you sell against. Remember it.",
+    opts: [{ k: "yes", hint: "Does this in production", to: "experienced" }, { k: "no", hint: "Would struggle", to: "q_goal" }, { k: "maybe", hint: "Partly", to: "q_goal" }] },
+  experienced: { stage: 1, say: ["Oh nice. Then the first few weeks will be revision for you.", "Later it’s fine-tuning, Bedrock, Azure AI, MCP, and scaling on Kubernetes. Done all of that in production?"],
+    opts: [{ k: "yes", hint: "All of it", to: "exit_notfit" }, { k: "no", hint: "Some gaps", to: "q_goal" }, { k: "maybe", hint: "Not all", to: "q_goal" }] },
+  q_goal: { stage: 1, say: ["And what’s the plan? Looking to move into a Gen-AI role?"],
+    opts: [{ k: "yes", hint: "Wants the switch", to: "pitch1" }, { k: "no", hint: "Just exploring", to: "goal_no" }, { k: "maybe", hint: "Open to it", to: "pitch1" }] },
+  goal_no: { stage: 1, say: ["Fair enough. Gen-AI keeps showing up in job posts, though.", "Would real projects on your GitHub help when you do move?"],
+    opts: [{ k: "yes", hint: "It would", to: "pitch1" }, { k: "no", hint: "Happy where they are", to: "goal_no2" }, { k: "maybe", hint: "Possibly", to: "pitch1" }] },
+  goal_no2: { stage: 1, say: ["Got it. Then I won’t push.", "Can I just WhatsApp you the details, in case things change?"],
+    opts: [{ k: "yes", hint: "Sure", to: "end_details" }, { k: "no", hint: "No need", to: "exit_polite" }, { k: "maybe", hint: "Fine", to: "end_details" }] },
+
+  pitch1: { stage: 2, say: ["Okay, so here’s the thing.", "It’s a 3-month live course. Prateek Mishra teaches it. He’s a senior Gen-AI developer at an MNC, 8 years in.", "He teaches what he actually builds at work. With me so far?"], tip: "Open with their own words: their role, their goal, the thing they said they struggle with.",
+    opts: [{ k: "yes", hint: "Following", to: "pitch2" }, { k: "no", hint: "“Never heard of him”", to: "trust_brand" }, { k: "maybe", hint: "Quiet, listening", to: "pitch2" }] },
+  trust_brand: { stage: 2, say: ["Fair, we’re not a big brand.", "He’s taught over 12,000 engineers, and his LinkedIn is public. I’ll send it to you. Shall I go on?"],
+    opts: [{ k: "yes", hint: "Go on", to: "pitch2" }, { k: "no", hint: "Not convinced", to: "exit_polite" }, { k: "maybe", hint: "Okay", to: "pitch2" }] },
+  pitch2: { stage: 2, say: ["You build five real projects. Not toy demos.", "One answers compliance questions from RBI circulars. One is a team of AI agents that plans and books a trip.", "The big one is built for 10 million requests a day. Sounds interesting?"], tip: "Pause after each project. Do not rush the list.",
+    opts: [{ k: "yes", hint: "Interested", to: "pitch3" }, { k: "no", hint: "Not relevant to them", to: "pitch_no" }, { k: "maybe", hint: "Neutral", to: "pitch3" }] },
+  pitch3: { stage: 2, say: ["And the best part. Five mock interviews, one-on-one. Written feedback in 24 hours.", "Then a Demo Day with hiring partners.", "So your real interview is your sixth one, not your first. Is this what you were looking for?"],
+    opts: [{ k: "yes", hint: "Yes", to: "time" }, { k: "no", hint: "Not convinced", to: "pitch_no" }, { k: "maybe", hint: "“What’s different?”", to: "diff" }] },
+  diff: { stage: 2, say: ["Good question. Three things.", "It’s live, not recorded. Every project is deployed, on your GitHub. And five mock interviews, one-on-one.", "Shall I tell you the timings?"],
+    opts: [{ k: "yes", hint: "Wants timings", to: "time" }, { k: "no", hint: "Still not convinced", to: "pitch_no" }, { k: "maybe", hint: "Okay", to: "time" }] },
+  pitch_no: { stage: 2, say: ["No worries. What’s not working for you?", "Tell me honestly."], tip: "Listen fully. Then tap the matching worry below.",
+    opts: [{ k: "yes", hint: "Worry answered, back in", to: "time" }, { k: "no", hint: "Still a no", to: "exit_polite" }, { k: "maybe", hint: "Wants to think", to: "followup" }] },
+
+  time: { stage: 3, say: ["It’s made for people with jobs.", "Weekdays, only Tuesday and Thursday. Morning 6:30 to 8:30, or night 8 to 10.", "Weekends, 10 to 4, you build your projects. Doable?"],
+    opts: [{ k: "yes", hint: "Can manage", to: "fee" }, { k: "no", hint: "Too much", to: "time_no" }, { k: "maybe", hint: "Worried about busy weeks", to: "time_no" }] },
+  time_no: { stage: 3, say: ["I get it, it’s a lot.", "But everything’s recorded. It’s up within 24 hours, and yours for life. Miss a class, watch it later. Does that help?"],
+    opts: [{ k: "yes", hint: "That helps", to: "fee" }, { k: "no", hint: "Still cannot", to: "time_no2" }, { k: "maybe", hint: "Probably", to: "fee" }] },
+  time_no2: { stage: 3, say: ["Okay. Which part is the problem? Weekdays, or weekends?"], tip: "Weekdays: recordings cover it. Weekends: that is build time, they do need some of it.",
+    opts: [{ k: "yes", hint: "Can adjust", to: "fee" }, { k: "no", hint: "Cannot give the time", to: "exit_later" }, { k: "maybe", hint: "Needs to check", to: "followup" }] },
+  exit_later: { stage: 3, say: ["Understood. No point joining if you can’t give it time.", "I’ll WhatsApp you the details, in case your schedule opens up. Thanks, {name}."],
+    opts: [{ k: "next", hint: "Call finished", to: "end_details" }] },
+
+  fee: { stage: 4, say: ["So, the fee. It’s ₹25,000.", "But till 30 October, it’s ₹20,000. Everything’s included."], tip: "Now stop talking. Let them speak first.",
+    opts: [{ k: "yes", hint: "Fine with it", to: "close" }, { k: "no", hint: "Too expensive", to: "fee_no" }, { k: "maybe", hint: "Silent, or “hmm”", to: "fee_maybe" }] },
+  fee_maybe: { stage: 4, say: ["And there’s a 3-day refund, no questions asked.", "So you’re not stuck if you don’t like it. Sound okay?"],
+    opts: [{ k: "yes", hint: "Okay", to: "close" }, { k: "no", hint: "Still too much", to: "fee_no" }, { k: "maybe", hint: "Wants to think", to: "think" }] },
+  fee_no: { stage: 4, say: ["I hear you. ₹20,000 isn’t small.", "Can I ask, if money wasn’t the issue, would you join?"],
+    opts: [{ k: "yes", hint: "Yes, only the fee", to: "fee_only" }, { k: "no", hint: "Not sure about the course", to: "pitch_no" }, { k: "maybe", hint: "Needs to think", to: "think" }] },
+  fee_only: { stage: 4, say: ["Okay, so it’s only the fee.", "I can’t promise anything. But let me ask my team about payment options, and I’ll message you today. Fine?"], tip: "Do not promise a discount or EMI. Ask the team first.",
+    opts: [{ k: "yes", hint: "Fine", to: "end_followup" }, { k: "no", hint: "Leave it", to: "exit_polite" }, { k: "maybe", hint: "Okay", to: "end_followup" }] },
+
+  close: { stage: 5, say: ["Honestly, I think you’re a good fit.", "Shall I WhatsApp you the link now? You lock the ₹20,000."],
+    opts: [{ k: "yes", hint: "Send it", to: "won" }, { k: "no", hint: "Not now", to: "think" }, { k: "maybe", hint: "“Let me think”", to: "think" }] },
+  won: { stage: 5, say: ["Done, sending it now. This is your WhatsApp number, right?", "I’ll check in tomorrow. Welcome aboard, {name}!"],
+    opts: [{ k: "next", hint: "Call finished", to: "end_won" }] },
+  think: { stage: 5, say: ["Sure, take your time.", "Just tell me, what’s holding you back? Time, fee, or the content?"], tip: "Answer it from the worries below, then come back.",
+    opts: [{ k: "yes", hint: "Sorted, ready to enrol", to: "won" }, { k: "no", hint: "Firm no", to: "exit_polite" }, { k: "maybe", hint: "Still wants time", to: "followup" }] },
+  followup: { stage: 5, say: ["No problem. I’ll WhatsApp you the syllabus.", "Can I call you Saturday at 11? Only because the ₹20,000 ends on 30 October."], tip: "Change the day and time to suit them.",
+    opts: [{ k: "yes", hint: "Agreed", to: "end_followup" }, { k: "no", hint: "“I’ll call you”", to: "followup_n" }, { k: "maybe", hint: "Different time", to: "followup_time" }] },
+  followup_time: { stage: 5, say: ["Sure. What day works for you?", "Done, talk then. Thanks, {name}!"],
+    opts: [{ k: "next", hint: "Time agreed", to: "end_followup" }] },
+  followup_n: { stage: 5, say: ["Sure, no pressure. I’ll just send the details.", "Message me whenever you’re ready. Thanks, {name}!"],
+    opts: [{ k: "next", hint: "Call finished", to: "end_details" }] },
+
+  exit_polite: { stage: 5, say: ["No problem at all, {name}. Thanks for your time.", "Have a good day!"],
+    opts: [{ k: "next", hint: "Call finished", to: "end_lost" }] },
+  exit_notfit: { stage: 5, say: ["Then honestly, {name}, this isn’t right for you right now.", "I’d rather tell you than take your money. Thanks for your time!"],
+    opts: [{ k: "next", hint: "Call finished", to: "end_lost" }] },
+  exit_wrong: { stage: 0, say: ["Oh, sorry to disturb you. Have a good day!"],
+    opts: [{ k: "next", hint: "Call finished", to: "end_wrong" }] },
+  exit_dnc: { stage: 0, say: ["Understood. I won’t call again.", "Sorry for the trouble. Take care."],
+    opts: [{ k: "next", hint: "Call finished", to: "end_dnc" }] },
+
+  end_won: { stage: 5, end: { tone: "good", label: "Enrolling", note: "Send the link within five minutes. Check in tomorrow.",
+    msg: "Hi {name}, {me} from TechSimPlus here. Good speaking with you.\n\nHere is the Vector 2.0 enrolment page: " + SITE + "\n\nEarly-bird fee is ₹20,000 till 30 Oct. 3-day no-questions-asked refund. The batch starts 21 Nov.\n\nMessage me here if you get stuck anywhere." } },
+  end_followup: { stage: 5, end: { tone: "mid", label: "Follow-up booked", note: "Send this now. Put the follow-up in your calendar.",
+    msg: "Hi {name}, {me} from TechSimPlus here. Good speaking with you. As discussed, here is Vector 2.0: " + SITE + "\n\nQuick recap: 3-month live Gen-AI cohort, 5 production projects, 5 one-on-one mock interviews, Demo Day with hiring partners. Classes are Tue and Thu, morning or evening batch, plus weekends.\n\nEarly-bird fee is ₹20,000 till 30 Oct (₹25,000 after). 3-day no-questions-asked refund. Batch starts 21 Nov.\n\nI will get back to you as we agreed. Message me here if anything comes up before that." } },
+  end_callback: { stage: 0, end: { tone: "mid", label: "Call back later", note: "Send this so they recognise your number next time.",
+    msg: "Hi {name}, {me} from TechSimPlus here. I called about Vector 2.0, our live Gen-AI developer cohort. I will call you at the time we agreed.\n\nDetails if you want a look first: " + SITE } },
+  end_details: { stage: 5, end: { tone: "mid", label: "Details only", note: "Send this once. Do not chase with calls unless they agreed to one.",
+    msg: "Hi {name}, {me} from TechSimPlus here. Thanks for your time today. Here are the details of Vector 2.0, our live Gen-AI developer cohort: " + SITE + "\n\nBatch starts 21 Nov. Early-bird fee is ₹20,000 till 30 Oct.\n\nNo rush. Message me here if you have any questions." } },
+  end_noanswer: { stage: 0, end: { tone: "mid", label: "No answer", note: "Send this, then try once more at a different time of day.",
+    msg: "Hi {name}, {me} from TechSimPlus here. I tried calling about the Gen-AI interview PDF you downloaded. When is a good time for a quick 5-minute call?" } },
+  end_lost: { stage: 5, end: { tone: "bad", label: "Not this time", note: "No message needed. Note the reason they gave. It will sharpen your next call." } },
+  end_wrong: { stage: 0, end: { tone: "bad", label: "Wrong number", note: "Mark the number as wrong in your lead sheet." } },
+  end_dnc: { stage: 0, end: { tone: "bad", label: "Do not call", note: "Mark this lead as do-not-call. No message, no second try." } }
+};
+
+const OBJECTIONS = [
+  { g: "push", chip: "Not interested", say: "Totally fair. Just one thing before I go. Is Gen-AI on your radar at all, career-wise?", exit: "exit_polite" },
+  { g: "push", chip: "Where did you get my number?", say: "From the form on our site. You’d asked for the Gen-AI interview PDF. If you’d rather I don’t call, just say so.", exit: "exit_dnc" },
+  { g: "push", chip: "I never downloaded anything", say: "Oh, sorry about that. Maybe someone typed your number by mistake. Since I have you, is Gen-AI something you’re looking at?", exit: "exit_dnc" },
+  { g: "push", chip: "Just WhatsApp me", say: "Sure, I will. One quick question, so I send the right thing. Are you looking to move into a Gen-AI role?", exit: "followup_n" },
+  { g: "push", chip: "Is this a scam?", say: "Fair to ask! Please check us out first. The instructor’s LinkedIn is public, and we have a YouTube channel. Plus there’s a 3-day refund.", exit: "exit_polite" },
+  { g: "push", chip: "Courses are useless", say: "I hear that a lot. Most are recorded videos nobody finishes. This one is live, with deadlines, and your work gets reviewed. Want to hear how?", exit: "exit_polite" },
+  { g: "push", chip: "AI is just hype", say: "Could be! But Gen-AI keeps showing up in job posts. This is about staying hireable, not the hype.", exit: "exit_polite" },
+  { g: "push", chip: "Already in another course", say: "Oh nice, which one? Is it live, with projects you deploy, and mock interviews? If yes, stick with it. If not, that’s the gap we fill.", exit: "exit_polite" },
+  { g: "push", chip: "Stop calling me", say: "Understood. I won’t call again. Sorry for the trouble. Take care.", only: "end_dnc" },
+  { g: "push", chip: "They got angry", say: "I’m sorry, I didn’t mean to bother you. I’ll let you go. Have a good day.", tip: "Do not argue or explain. End the call calmly.", only: "end_lost" },
+  { g: "push", chip: "No answer or call dropped", say: "Hi {name}, {me} from TechSimPlus. I’ll drop you a WhatsApp. Talk soon!", tip: "Say this only if you reach voicemail. Otherwise just send the message.", only: "end_noanswer" },
+
+  { g: "worry", chip: "What is TechSimPlus?", say: "We\u2019re a tech training company, based in Bhopal. We\u2019ve trained over 12,000 students, in Python, full stack, AI and more. Vector 2.0 is our live Gen-AI course.", tip: "If they ask about placements: our site lists past students at TCS, Infosys, Wipro, Flipkart and Samsung. That is TechSimPlus overall, not a promise for Vector." },
+  { g: "worry", chip: "Where are you based? Is it online?", say: "Our studio is in Bhopal. But Vector 2.0 is fully live online, so you can join from anywhere." },
+  { g: "worry", chip: "Too expensive", say: "I hear you, ₹20,000 isn’t small. But it’s three months live, five projects, five mock interviews. And a 3-day refund. If fee wasn’t the issue, would you join?" },
+  { g: "worry", chip: "Any discount or EMI?", say: "₹20,000 is the early-bird price, till 30 October. For anything else, let me ask my team and message you today.", tip: "Do not promise a discount or EMI." },
+  { g: "worry", chip: "Will I get a job?", say: "Honest answer? Nobody can guarantee a job. What you get is five projects, five mock interviews, a Demo Day with hiring partners, and referrals when we hear of openings. That gets you interview-ready." },
+  { g: "worry", chip: "No Gen-AI experience", say: "That’s exactly who it’s for. You just need Python, Docker and Git. We start from FastAPI and go step by step." },
+  { g: "worry", chip: "No time, full-time job", say: "Most people in the batch have jobs. Weekdays, it’s only Tuesday and Thursday. And everything’s recorded. Morning or night, which suits you?" },
+  { g: "worry", chip: "What if I miss a class?", say: "No stress. The recording is up within 24 hours, and it’s yours for life." },
+  { g: "worry", chip: "YouTube is free", say: "True, for the basics. But YouTube won’t review your code, or take your mock interview. Has it made you interview-ready so far?" },
+  { g: "worry", chip: "Too basic for me", say: "The first few weeks might be revision. Later it’s fine-tuning, Bedrock, Azure AI, MCP, and scaling on Kubernetes. Done those in production?" },
+  { g: "worry", chip: "150 is a big batch", say: "It’s capped at 150. But your capstone is reviewed one-on-one, and so are the five mock interviews. You can also message the instructor directly." },
+  { g: "worry", chip: "Who is the instructor?", say: "Prateek Mishra. Senior Gen-AI developer at an MNC, 8 years in, 20-plus production projects. He taught the first batch too. I’ll send you his LinkedIn." },
+  { g: "worry", chip: "Need to ask family", say: "Of course. What will they ask you? Tell me, and I’ll give you the answer now." },
+  { g: "worry", chip: "I will join next batch", say: "You can. Just know the ₹20,000 ends on 30 October. What would be different for you by the next batch?" },
+  { g: "worry", chip: "Will my company pay?", say: "Many people ask that. Let me check the invoice details with my team, and I’ll send them today." },
+  { g: "worry", chip: "I do not know the answer", say: "Good question. I don’t want to guess. Let me check with my team, and I’ll message you today." }
+];
+/*END*/
+
+const WORD = { yes: "Yes", no: "No", maybe: "Maybe", next: "Next" };
+const KEY = { yes: "Y", no: "N", maybe: "M", next: "Enter" };
+const LABEL = { open: "Right person", wrong_person: "Lead available", intro: "Has time", intro_maybe: "Okay with questions", frame: "Agreed to talk", ni_soft: "Gen-AI on radar", send_details: "Okay to check back", callback: "Gave callback time", q_work: "Working engineer", fresher: "Python good", q_python: "Comfortable with Python", python_no: "Will do pre-work", q_genai: "Tried Gen-AI", burned: "Past course was recorded", trust: "Open to hear more", q_scale: "Can answer scaling question", experienced: "Done it all in production", q_goal: "Wants Gen-AI role", goal_no: "Projects would help", goal_no2: "Okay to send details", pitch1: "Following the pitch", trust_brand: "Okay to continue", pitch2: "Projects interesting", pitch3: "Is what they want", diff: "Wants timings", pitch_no: "Worry answered", time: "Timings doable", time_no: "Recordings help", time_no2: "Can adjust", fee: "Fine with fee", fee_maybe: "Okay after refund", fee_no: "Would join if fee was no issue", fee_only: "Okay to wait on payment options", close: "Send link now", think: "Ready after worry", followup: "Follow-up agreed" };
+const RESULT_COLS = ["Call outcome", "Called at", "Call duration", "Answers", "Objections raised", "Notes"];
+const RESULT_KEYS = ["outcome", "at", "duration", "answers", "objections", "notes"];
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+const state = { node: "open", history: [], trail: [], objs: [], objection: null, started: null, elapsed: 0, timer: null };
+let sheet = null;
+
+/*SHEET*/
+function findCol(header, re, skip) { return header.findIndex((h, i) => i !== skip && re.test(h)); }
+function ingest(aoa, fileName) {
+  const rows = aoa.map((r) => Array.from(r, (c) => (c == null ? "" : c))).filter((r) => r.some((c) => String(c).trim() !== ""));
+  if (rows.length < 2) return { error: "That sheet has no lead rows under the header row." };
+  const header = rows.shift().map((h) => String(h).trim());
+  let name = findCol(header, /^(full[ _]?name|name|lead[ _]?name|student[ _]?name|candidate)/i, -1);
+  if (name < 0) name = findCol(header, /name/i, -1);
+  let phone = findCol(header, /phone|mobile|whats|cell/i, name);
+  if (phone < 0) phone = findCol(header, /contact|number/i, name);
+  const guessed = name < 0 || phone < 0;
+  if (name < 0) name = phone === 0 ? 1 : 0;
+  if (phone < 0) phone = name === 0 ? 1 : 0;
+  const cols = { name, phone };
+  RESULT_KEYS.forEach((key, i) => {
+    let c = header.findIndex((h) => h.toLowerCase() === RESULT_COLS[i].toLowerCase());
+    if (c < 0) { header.push(RESULT_COLS[i]); c = header.length - 1; }
+    cols[key] = c;
+  });
+  rows.forEach((r) => { while (r.length < header.length) r.push(""); });
+  let idx = rows.findIndex((r) => String(r[cols.outcome]).trim() === "");
+  if (idx < 0) idx = 0;
+  return { fileName, header, rows, cols, idx, guessed };
+}
+function isCalled(s, i) { return String(s.rows[i][s.cols.outcome]).trim() !== ""; }
+function calledCount(s) { return s.rows.filter((r, i) => isCalled(s, i)).length; }
+function nextOpen(s) { for (let n = 1; n <= s.rows.length; n++) { const i = (s.idx + n) % s.rows.length; if (!isCalled(s, i)) return i; } return -1; }
+function writeResult(s, st, label, when) {
+  const r = s.rows[s.idx], c = s.cols;
+  r[c.outcome] = label; r[c.at] = when;
+  r[c.duration] = String(Math.floor(st.elapsed / 60)).padStart(2, "0") + ":" + String(st.elapsed % 60).padStart(2, "0");
+  r[c.answers] = st.trail.map((t) => (LABEL[t.node] || t.node) + ": " + WORD[t.k]).join("; ");
+  r[c.objections] = st.objs.join("; ");
+}
+function exportAoa(s) { return [s.header].concat(s.rows); }
+/*ENDSHEET*/
+
+function note(text) { $("sheet-msg").textContent = text || ""; }
+function persist() { try { if (sheet) localStorage.setItem("vca2-sheet", JSON.stringify(sheet)); else localStorage.removeItem("vca2-sheet"); } catch (e) {} }
+function leadName() { return sheet ? String(sheet.rows[sheet.idx][sheet.cols.name]).trim() : ""; }
+
+function names() { return { me: $("me-name").value.trim(), name: $("lead-name").value.trim() }; }
+function plain(text) { const n = names(); return text.replace(/\{name\}/g, n.name || "there").replace(/\{me\}/g, n.me || "your caller"); }
+function fillInto(parent, text) {
+  const n = names();
+  text.split(/(\{name\}|\{me\})/).forEach((part) => {
+    if (part === "{name}" || part === "{me}") {
+      const v = part === "{name}" ? n.name : n.me;
+      parent.appendChild(el("span", v ? "fill" : "fill blank", v || (part === "{name}" ? "lead's name" : "your name")));
+    } else if (part) parent.appendChild(document.createTextNode(part));
+  });
+}
+
+function tick() {
+  const s = state.started ? Math.floor((Date.now() - state.started) / 1000) : state.elapsed;
+  state.elapsed = s;
+  $("clock").textContent = String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+}
+function startClock() { if (state.timer) return; state.started = Date.now() - state.elapsed * 1000; state.timer = setInterval(tick, 1000); }
+function stopClock() { tick(); clearInterval(state.timer); state.timer = null; state.started = null; }
+
+function go(to, pick) {
+  state.history.push({ node: state.node, trail: state.trail.length });
+  if (pick && pick.k !== "next") state.trail.push(pick);
+  state.node = to; state.objection = null;
+  if (FLOW[to].end) {
+    stopClock();
+    if (sheet) {
+      const when = new Date().toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+      writeResult(sheet, state, FLOW[to].end.label, when); persist();
+    }
+  } else startClock();
+  render();
+}
+function back() {
+  if (state.objection != null) { state.objection = null; render(); return; }
+  if (!state.history.length) return;
+  const h = state.history.pop(); state.node = h.node; state.trail.length = h.trail;
+  if (state.history.length) startClock();
+  render();
+}
+function resetCall() { stopClock(); state.node = "open"; state.history = []; state.trail = []; state.objs = []; state.objection = null; state.elapsed = 0; tick(); }
+function restart() { resetCall(); if (!sheet) $("lead-name").value = ""; render(); }
+function loadLead(i) { sheet.idx = i; $("lead-name").value = leadName(); resetCall(); persist(); render(); window.scrollTo({ top: 0, behavior: "auto" }); }
+
+function copyText(text, btn, target, idle) {
+  const done = () => { btn.textContent = "Copied"; setTimeout(() => { btn.textContent = idle; }, 1800); };
+  const select = () => { const r = document.createRange(); r.selectNodeContents(target); const s = getSelection(); s.removeAllRanges(); s.addRange(r); btn.textContent = "Selected, now copy"; };
+  try { navigator.clipboard.writeText(text).then(done, select); } catch (e) { select(); }
+}
+
+async function readSheet(file) {
+  if (typeof XLSX === "undefined") { note("The spreadsheet reader did not load. Check your internet connection and reload the page."); return; }
+  try {
+    const wb = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: "array", raw: true, cellDates: true });
+    const aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "", raw: true });
+    const s = ingest(aoa, file.name);
+    if (s.error) { note(s.error); return; }
+    sheet = s;
+    const done = calledCount(s);
+    note((s.guessed ? "No clear name or phone heading found, so this is a guess. " : "") + "Names from “" + s.header[s.cols.name] + "”, numbers from “" + s.header[s.cols.phone] + "”. " + s.rows.length + " leads loaded" + (done ? ", " + done + " already called." : "."));
+    loadLead(s.idx);
+  } catch (e) { note("Could not read that file. Use an .xlsx or .csv file with a header row."); }
+}
+async function downloadSheet() {
+  if (typeof XLSX === "undefined") { note("The spreadsheet writer did not load. Check your internet connection and reload the page."); return; }
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(exportAoa(sheet)), "Leads");
+  const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+  const filename = sheet.fileName.replace(/\.[^.]+$/, "") + "-called.xlsx";
+  note("Preparing " + filename + "…");
+  try {
+    let ns = null;
+    if (window.claude && window.claude.use) { try { ns = await window.claude.use("downloads"); } catch (e) {} }
+    if (ns) { await ns.save({ filename, data: new Blob([buf]) }); }
+    else {
+      const url = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+      const a = document.createElement("a"); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    }
+    note("Saved " + filename + " with " + calledCount(sheet) + " of " + sheet.rows.length + " leads called.");
+  } catch (e) { note(e && e.code === "declined" ? "Download cancelled. Your results are still here." : "Could not save the file from this view. Your results are still here."); }
+}
+
+function tool(id, text, fn, cls) { const b = el("button", cls || "plain", text); b.type = "button"; b.id = id; b.addEventListener("click", fn); return b; }
+
+function renderSheet() {
+  const bar = $("sheet-bar");
+  $("sheet-empty").hidden = !!sheet; bar.hidden = !sheet; bar.textContent = "";
+  syncImportButton();
+  if (!sheet) return;
+  const r = sheet.rows[sheet.idx], c = sheet.cols, n = sheet.rows.length;
+  bar.appendChild(el("span", "label", "Lead " + (sheet.idx + 1) + " of " + n + " · " + calledCount(sheet) + " called · " + sheet.fileName));
+  const row = el("div", "leadrow");
+  row.appendChild(el("strong", "", leadName() || "No name in this row"));
+  const phone = String(r[c.phone]).trim();
+  if (phone) {
+    const num = el("span", "phone", phone); row.appendChild(num);
+    const cp = tool("copy-phone", "Copy number", () => copyText(phone, cp, num, "Copy number")); row.appendChild(cp);
+    const a = el("a", "plain", "Call"); a.href = "tel:" + phone.replace(/[^\d+]/g, ""); a.id = "call-link"; row.appendChild(a);
+  } else row.appendChild(el("span", "hint", "No number in this row"));
+  bar.appendChild(row);
+  const out = String(r[c.outcome]).trim();
+  bar.appendChild(el("p", "hint", out ? "Already called: " + out + (r[c.at] ? ", " + r[c.at] : "") + ". Calling again replaces that result." : "Not called yet."));
+  const tools = el("div", "tools");
+  const prev = tool("lead-prev", "Previous lead", () => loadLead(sheet.idx - 1)); prev.disabled = sheet.idx === 0; tools.appendChild(prev);
+  const next = tool("lead-next", "Skip to next lead", () => loadLead(sheet.idx + 1)); next.disabled = sheet.idx >= n - 1; tools.appendChild(next);
+  tools.appendChild(tool("sheet-save", "Download updated sheet", downloadSheet));
+  const rm = tool("sheet-remove", "Remove sheet", () => {
+    if (rm.dataset.sure) { sheet = null; persist(); note("Sheet removed from this browser."); $("lead-name").value = ""; resetCall(); render(); }
+    else { rm.dataset.sure = "1"; rm.textContent = "Tap again to remove"; }
+  });
+  tools.appendChild(rm);
+  bar.appendChild(tools);
+}
+
+function render() {
+  const node = FLOW[state.node];
+  renderSheet();
+  const rail = $("rail"); rail.textContent = "";
+  STAGES.forEach((s, i) => { const li = el("li", i < node.stage ? "done" : i === node.stage ? "now" : "", s); if (i === node.stage) li.setAttribute("aria-current", "step"); rail.appendChild(li); });
+
+  const stage = $("stage"); stage.textContent = "";
+  const card = el("div", "card");
+  const mk = (k, word, hint, fn) => {
+    const b = el("button", "ans " + k); b.type = "button"; b.id = "ans-" + k;
+    const t = el("b", "", word); t.appendChild(el("kbd", "", KEY[k])); b.appendChild(t);
+    b.appendChild(el("span", "", hint)); b.addEventListener("click", fn); return b;
+  };
+
+  if (state.objection != null) {
+    const o = OBJECTIONS[state.objection];
+    card.appendChild(el("span", "label", "They said"));
+    card.appendChild(el("p", "heard", "“" + o.chip + "”"));
+    card.appendChild(el("span", "label", "Read this aloud"));
+    const say = el("div", "say"); const p = el("p"); fillInto(p, o.say); say.appendChild(p); card.appendChild(say);
+    if (o.tip) card.appendChild(el("p", "tip", o.tip));
+    const resume = () => { state.objection = null; render(); };
+    const wrap = el("div", "answers" + (o.exit ? " two" : " one"));
+    if (o.only) wrap.appendChild(mk("next", "Next", "Call finished", () => go(o.only)));
+    else if (o.exit) {
+      card.appendChild(el("p", "label ask", "How did they respond?"));
+      wrap.appendChild(mk("yes", "Yes", "They are okay, back to the script", resume));
+      wrap.appendChild(mk("no", "No", "Still a no, close the call", () => go(o.exit)));
+    } else wrap.appendChild(mk("next", "Back to the script", "Returns to the line you were on", resume));
+    card.appendChild(wrap);
+  } else if (node.end) {
+    const e = node.end;
+    card.appendChild(el("span", "outcome " + e.tone, "Call ended: " + e.label));
+    card.appendChild(el("p", "heard", e.note));
+    const row = el("div", "tools");
+    if (e.msg) {
+      card.appendChild(el("span", "label", "WhatsApp message to send"));
+      const text = plain(e.msg);
+      const pre = el("pre", "msg", text); card.appendChild(pre);
+      const c = tool("copy-msg", "Copy message", () => copyText(text, c, pre, "Copy message")); row.appendChild(c);
+    }
+    if (sheet) {
+      const r = sheet.rows[sheet.idx], col = sheet.cols.notes;
+      const lab = el("label", "notes"); lab.appendChild(el("span", "label", "Notes for this lead, saved to the sheet"));
+      const ta = el("textarea"); ta.id = "lead-notes"; ta.rows = 2; ta.value = String(r[col]); ta.placeholder = "Follow-up day and time, the reason they gave, anything to remember";
+      ta.addEventListener("input", () => { r[col] = ta.value; persist(); });
+      lab.appendChild(ta); card.appendChild(lab);
+      card.appendChild(el("p", "hint", "Result written to row " + (sheet.idx + 2) + " of the sheet. Download the updated sheet when you finish calling."));
+      const ni = nextOpen(sheet);
+      const nx = tool("lead-next-open", ni < 0 ? "All leads called" : "Next lead", () => loadLead(ni), "primary"); nx.disabled = ni < 0;
+      row.appendChild(nx);
+    }
+    if (row.childNodes.length) card.appendChild(row);
+  } else {
+    card.appendChild(el("span", "label", "Read this aloud"));
+    const say = el("div", "say");
+    node.say.forEach((line) => { const p = el("p"); fillInto(p, line); say.appendChild(p); });
+    card.appendChild(say);
+    if (node.tip) card.appendChild(el("p", "tip", node.tip));
+    const single = node.opts.length === 1;
+    card.appendChild(el("p", "label ask", single ? "When you have said it" : "How did they respond?"));
+    const wrap = el("div", "answers" + (single ? " one" : ""));
+    const from = state.node;
+    node.opts.forEach((o) => wrap.appendChild(mk(o.k, WORD[o.k], o.hint, () => go(o.to, { node: from, k: o.k }))));
+    card.appendChild(wrap);
+  }
+  stage.appendChild(card);
+  $("back").disabled = !state.history.length && state.objection == null;
+  $("obj-section").hidden = !!node.end;
+}
+
+OBJECTIONS.forEach((o, i) => {
+  const b = el("button", "chip", o.chip); b.type = "button"; b.id = "obj-" + i;
+  b.addEventListener("click", () => { if (!state.objs.includes(o.chip)) state.objs.push(o.chip); state.objection = i; render(); window.scrollTo({ top: 0, behavior: "auto" }); });
+  $("chips-" + o.g).appendChild(b);
+});
+$("back").addEventListener("click", back);
+$("restart").addEventListener("click", restart);
+$("lead-name").addEventListener("input", () => { if (state.objection != null || !FLOW[state.node].end) render(); });
+$("me-name").addEventListener("input", () => { try { localStorage.setItem("vca2-me", $("me-name").value); } catch (e) {} if (state.objection != null || !FLOW[state.node].end) render(); });
+$("sheet-file").addEventListener("change", (ev) => { const f = ev.target.files && ev.target.files[0]; if (f) readSheet(f); ev.target.value = ""; });
+try { const saved = localStorage.getItem("vca2-me"); if (saved) $("me-name").value = saved; } catch (e) {}
+try {
+  const raw = localStorage.getItem("vca2-sheet");
+  if (raw) { const s = JSON.parse(raw); if (s && s.rows && s.cols && s.rows[s.idx]) { sheet = s; $("lead-name").value = leadName(); note("Picked up where you left off in " + s.fileName + "."); } }
+} catch (e) { sheet = null; }
+
+/* One-time copy from v1 (same github.io origin, so same localStorage). v1's keys are only read, never changed. */
+function v1Sheet() { try { const raw = localStorage.getItem("vcg-sheet"); const s = raw && JSON.parse(raw); return s && s.rows && s.cols && s.rows[s.idx] ? s : null; } catch (e) { return null; } }
+function syncImportButton() { $("import-v1").hidden = !!sheet || !v1Sheet(); }
+$("import-v1").addEventListener("click", () => {
+  const s = v1Sheet(); if (!s) { syncImportButton(); return; }
+  sheet = s; persist();
+  try { const me = localStorage.getItem("vcg-me"); if (me && !localStorage.getItem("vca2-me")) { $("me-name").value = me; localStorage.setItem("vca2-me", me); } } catch (e) {}
+  $("lead-name").value = leadName(); resetCall(); render();
+  note("Imported " + s.fileName + " from the old call guide. The old guide still has its own copy.");
+});
+
+document.addEventListener("keydown", (ev) => {
+  const tag = ev.target.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  const k = ev.key.toLowerCase();
+  const map = { y: "yes", n: "no", m: "maybe" };
+  if (map[k]) { const b = $("ans-" + map[k]); if (b) { ev.preventDefault(); b.click(); } }
+  else if (k === "enter" && tag !== "BUTTON" && tag !== "A") { const b = $("ans-next"); if (b) { ev.preventDefault(); b.click(); } }
+  else if (k === "backspace") { ev.preventDefault(); back(); }
+});
+
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Place a normal cellular call when you press Call (TelecomManager.placeCall). -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+    <!-- Observe IDLE / RINGING / OFFHOOK and list your SIMs. No numbers are read with this. -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <!-- Optional: Hang Up button (TelecomManager.endCall). -->
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
+    <!-- Optional, off by default: read the one call-log row of the call this app just placed. -->
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <!-- Lets Telecom bind our observer-only InCallService if Android allows companion apps. Normal permission. -->
+    <uses-permission android:name="android.permission.CALL_COMPANION_APP" />
+
+    <!-- Keep monitoring while the screen is off. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- Required prerequisite for the connectedDevice service type; Phase 3 also uses the network link. -->
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <uses-feature android:name="android.hardware.telephony" android:required="true" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@android:drawable/sym_action_call"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.DeviceDefault.DayNight">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".CallMonitorService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <!-- Observer only: no UI, never answers or changes calls. Bound by Telecom only if
+             this app is accepted as a call companion; Phase 2 tests whether that happens. -->
+        <service
+            android:name=".CompanionInCallService"
+            android:exported="true"
+            android:permission="android.permission.BIND_INCALL_SERVICE">
+            <intent-filter>
+                <action android:name="android.telecom.InCallService" />
+            </intent-filter>
+        </service>
+
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>
