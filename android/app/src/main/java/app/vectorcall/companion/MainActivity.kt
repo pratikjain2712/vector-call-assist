@@ -183,7 +183,7 @@ class MainActivity : Activity() {
                 if (LinkServer.isRunning()) LinkServer.newPairingCode() else toast("Link is stopped. Tap Start link + code.")
                 refreshLink()
             },
-            button("Stop link") { LinkServer.stop(); refreshLink() },
+            button("Stop link") { LinkServer.stop(this); refreshLink() },
         ))
 
         // 4. Log

@@ -37,6 +37,7 @@ class CallMonitorService : Service() {
         val w = CallStateWatcher(this)
         watcher = w
         watching = w.start()
+        LinkServer.listen(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

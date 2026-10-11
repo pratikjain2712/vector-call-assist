@@ -39,6 +39,8 @@ object Sessions {
         var offhookMono = 0L
         var activeMono = 0L          // from companion InCallService only
         var endMono = 0L
+        var offhookWallMs = 0L       // wall clock, for the laptop website
+        var endWallMs = 0L
         var manualAnswerMono = 0L    // tester's "they answered" tap, ground truth for Phase 2
         var incomingSeen = false
         var disconnectCause: String? = null
@@ -56,6 +58,11 @@ object Sessions {
 
     var current: Session? = null
         private set
+
+    /** Recent sessions, newest first, so the laptop can ask for a result after the call ends. */
+    private val history = ArrayDeque<Session>()
+
+    fun find(id: String): Session? = history.firstOrNull { it.id == id }
 
     fun init(c: Context) {
         if (!::app.isInitialized) app = c.applicationContext
@@ -101,6 +108,8 @@ object Sessions {
         }
         val s = Session(UUID.randomUUID().toString(), e164, simLabel, System.currentTimeMillis(), SystemClock.elapsedRealtime())
         current = s
+        history.addFirst(s)
+        while (history.size > 20) history.removeLast()
         Prefs.setActiveSession(app, s.toJson())
         EventLog.add("DIAL_REQUESTED", s.id, "to=${Phone.mask(e164)} sim=$simLabel")
         main.postDelayed({
@@ -144,12 +153,14 @@ object Sessions {
         if (s.phase == Phase.REQUESTED && agg == TelephonyManager.CALL_STATE_OFFHOOK) {
             s.phase = Phase.OFFHOOK
             s.offhookMono = now
+            s.offhookWallMs = System.currentTimeMillis()
             EventLog.add("SESSION_BOUND", s.id, "OFFHOOK ${ms(now - s.dialMono)} after request (dialling started, NOT answered)")
             return
         }
         if (s.phase == Phase.OFFHOOK && agg == TelephonyManager.CALL_STATE_IDLE) {
             s.phase = Phase.ENDED
             s.endMono = now
+            s.endWallMs = System.currentTimeMillis()
             EventLog.add("SESSION_ENDED", s.id, "all SIMs IDLE")
             summarize(s)
             close(s)
@@ -200,6 +211,7 @@ object Sessions {
     }
 
     private fun close(s: Session) {
+        if (s.endWallMs == 0L) s.endWallMs = System.currentTimeMillis()
         if (current === s) Prefs.setActiveSession(app, null)
     }
 
