@@ -42,6 +42,19 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    packaging {
+        resources {
+            // bcprov and bcpkix both ship this file; without the exclude the APK merge step fails.
+            excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+        }
+    }
 }
 
-// No third-party libraries: only the Android framework and the Kotlin standard library.
+dependencies {
+    // Makes the phone's self-signed HTTPS certificate (LinkTls.kt). Android cannot do this with its own API.
+    implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
+    implementation("org.bouncycastle:bcpkix-jdk18on:1.78.1")
+    // Draws the pairing QR code on the phone's screen (QrCode.kt). Encoding only, no camera code.
+    implementation("com.google.zxing:core:3.5.3")
+}

@@ -2,74 +2,51 @@ package app.vectorcall.companion
 
 import android.Manifest
 import android.app.Activity
-import android.app.role.RoleManager
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Intent
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
-import android.text.InputType
+import android.view.Gravity
 import android.view.View
-import android.view.ViewGroup
 import android.view.WindowInsets
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
 import android.widget.Button
-import android.widget.CheckBox
-import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
+import org.json.JSONObject
 
 /**
- * Phase 2 test screen. Built in code (no layouts, no libraries) to keep the proof of concept small.
- *
- *  1. Permissions and status
- *  2. SIM choice, number, Call / Hang up, "They answered" ground-truth button
- *  3. Scenario marker, live event log, share/copy/clear
+ * Vector Companion. One screen:
+ *  - a pairing QR code to scan with the laptop's camera on the Vector page
+ *  - link and calling status
+ *  - the permissions the app needs
+ * The website calls and records the results; this screen only pairs and shows status.
  */
 class MainActivity : Activity() {
-    private lateinit var status: TextView
-    private lateinit var logView: TextView
-    private lateinit var logScroll: ScrollView
-    private lateinit var numberInput: EditText
-    private lateinit var linkStatus: TextView
-    private lateinit var simSpinner: Spinner
-    private lateinit var callLogBox: CheckBox
-    private var sims: List<Dialer.Sim> = emptyList()
-    private var bindingSims = false
+    private lateinit var pairInfo: TextView
+    private lateinit var qrView: ImageView
+    private lateinit var manualView: TextView
+    private lateinit var statusView: TextView
 
-    private val onEvent: (EventLog.Entry) -> Unit = { e ->
-        appendLog(e)
-        refreshStatus()
-    }
+    private var wantQrAfterPerms = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         EventLog.init(this)
         Sessions.init(this)
         setContentView(buildUi())
-        renderLog()
         if (Dialer.has(this, Manifest.permission.READ_PHONE_STATE)) CallMonitorService.start(this)
+        // Ask on launch if anything essential is missing. No pairing code is made until these are granted.
+        if (!corePermissionsGranted()) requestCorePermissions()
     }
 
     override fun onResume() {
         super.onResume()
-        EventLog.addListener(onEvent)
-        renderLog()
-        loadSims()
-        refreshStatus()
-        refreshLink()
-    }
-
-    override fun onPause() {
-        EventLog.removeListener(onEvent)
-        super.onPause()
+        refresh()
     }
 
     // ---------------------------------------------------------------- UI
@@ -80,11 +57,12 @@ class MainActivity : Activity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(px(16), px(12), px(16), px(12))
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(px(20), px(24), px(20), px(24))
         }
         val outer = ScrollView(this).apply {
             addView(root)
-            // Android 15 draws apps edge to edge; keep content clear of the status and nav bars.
+            // Android 15 draws edge to edge; keep content clear of the status and nav bars.
             setOnApplyWindowInsetsListener { v, insets ->
                 val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.ime())
                 v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
@@ -92,202 +70,133 @@ class MainActivity : Activity() {
             }
         }
 
-        fun heading(t: String) = TextView(this).apply {
-            text = t
-            textSize = 13f
-            setTypeface(typeface, Typeface.BOLD)
-            setPadding(0, px(16), 0, px(4))
-            isAllCaps = true
+        fun label(s: String, size: Float = 15f, bold: Boolean = false) = TextView(this).apply {
+            text = s
+            textSize = size
+            if (bold) setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, px(6), 0, px(6))
         }
-        fun button(t: String, onClick: () -> Unit) = Button(this).apply {
-            text = t
+        fun button(s: String, onClick: () -> Unit) = Button(this).apply {
+            text = s
             isAllCaps = false
             setOnClickListener { onClick() }
         }
-        fun row(vararg views: View) = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            for (v in views) addView(v, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        }
+        fun gap(h: Int) = View(this).apply { minimumHeight = px(h) }
 
-        root.addView(TextView(this).apply {
-            text = "Vector Companion · call-state test"
-            textSize = 20f
-            setTypeface(typeface, Typeface.BOLD)
-        })
-        root.addView(TextView(this).apply {
-            text = "Phase 2 proof of concept. Records what Android reports during calls. " +
-                "No audio, contacts or SMS are accessed. Numbers are masked in the log."
-            textSize = 13f
-        })
+        root.addView(label("Vector Companion", 22f, bold = true))
+        root.addView(gap(8))
 
-        // 1. Permissions and status
-        root.addView(heading("1 · Setup"))
-        status = TextView(this).apply { typeface = Typeface.MONOSPACE; textSize = 12f }
-        root.addView(status)
-        root.addView(row(
-            button("Grant phone permissions") { requestCorePermissions() },
-            button("Battery: unrestricted") { openBatterySettings() },
-        ))
-        root.addView(row(
-            button("Restart monitor") { CallMonitorService.start(this, restartWatcher = true) },
-            button("Request companion role") { requestCompanionRole() },
-        ))
-        callLogBox = CheckBox(this).apply {
-            text = "Call-log lookup after each call (optional; reads only that one call)"
-            isChecked = Prefs.callLogProbe(this@MainActivity)
-            setOnCheckedChangeListener { _, on ->
-                Prefs.setCallLogProbe(this@MainActivity, on)
-                EventLog.add("SETTING", null, "callLogProbe=$on")
-                if (on && !Dialer.has(this@MainActivity, Manifest.permission.READ_CALL_LOG)) {
-                    requestPermissions(arrayOf(Manifest.permission.READ_CALL_LOG), REQ_CALL_LOG)
-                }
-            }
-        }
-        root.addView(callLogBox)
+        pairInfo = label("")
+        root.addView(pairInfo)
 
-        // 2. Calling
-        root.addView(heading("2 · Test call"))
-        simSpinner = Spinner(this)
-        simSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
-                if (bindingSims) return
-                val h = if (pos == 0) null else sims.getOrNull(pos - 1)?.handle
-                Prefs.setSimHandle(this@MainActivity, h)
-                EventLog.add("SETTING", null, "sim=${Dialer.simLabel(this@MainActivity, h)}")
-            }
-            override fun onNothingSelected(p: AdapterView<*>?) {}
+        root.addView(button("Show pairing QR") { showQr() })
+        qrView = ImageView(this).apply {
+            visibility = View.GONE
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            contentDescription = "Pairing QR code"
         }
-        root.addView(simSpinner)
-        numberInput = EditText(this).apply {
-            hint = "Number, e.g. 98765 43210 or +91…"
-            inputType = InputType.TYPE_CLASS_PHONE
-        }
-        root.addView(numberInput)
-        root.addView(row(
-            button("Call") { placeCall() },
-            button("Hang up") { hangUp() },
-        ))
-        root.addView(button("They answered — tap at the moment you hear them") { Sessions.markAnswered() })
-
-        // 3. Laptop link (Phase 3 spike)
-        root.addView(heading("3 · Laptop link (spike)"))
-        linkStatus = TextView(this).apply {
-            textSize = 13f
-            setTextIsSelectable(true)
-        }
-        root.addView(linkStatus)
-        root.addView(row(
-            button("Start link + code") { startLink() },
-            button("New code") {
-                // A code is useless while stopped (stop() clears it), so only issue one when running.
-                if (LinkServer.isRunning()) LinkServer.newPairingCode() else toast("Link is stopped. Tap Start link + code.")
-                refreshLink()
-            },
-            button("Stop link") { LinkServer.stop(this); refreshLink() },
-        ))
-
-        // 4. Log
-        root.addView(heading("4 · Scenario and log"))
-        val scenario = Spinner(this).apply {
-            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, SCENARIOS)
-        }
-        root.addView(scenario)
-        root.addView(button("Start this scenario (writes a marker in the log)") {
-            EventLog.add("SCENARIO", null, scenario.selectedItem.toString())
-        })
-        root.addView(row(
-            button("Share log") { shareLog() },
-            button("Copy log") { copyLog() },
-            button("Clear") { confirmClear() },
-        ))
-        logView = TextView(this).apply {
+        root.addView(qrView, LinearLayout.LayoutParams(px(280), px(280)).apply { topMargin = px(12) })
+        // The same address and code as text, for typing in by hand if the laptop cannot scan.
+        manualView = label("", 16f).apply {
+            visibility = View.GONE
             typeface = Typeface.MONOSPACE
-            textSize = 11f
             setTextIsSelectable(true)
         }
-        logScroll = ScrollView(this).apply {
-            isNestedScrollingEnabled = true
-            addView(logView)
-        }
-        root.addView(logScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(360)))
+        root.addView(manualView)
+        root.addView(label("On the laptop, open the Vector page, tap Scan pairing QR and point the camera here, " +
+            "or enter the address and code shown below by hand. The code is valid for 2 minutes.", 13f))
+
+        root.addView(gap(12))
+        root.addView(button("Stop laptop link") {
+            LinkServer.stop(this)
+            hideQr()
+            toast("Laptop link stopped")
+            refresh()
+        })
+        root.addView(button("Forget this laptop") {
+            LinkKeyStore.clear(this)
+            hideQr()
+            toast("Laptop forgotten")
+            refresh()
+        })
+
+        root.addView(gap(20))
+        root.addView(label("Status", 17f, bold = true))
+        statusView = label("", 14f)
+        root.addView(statusView)
+        root.addView(button("Grant phone permissions") { requestCorePermissions() })
+        root.addView(button("Battery: set to unrestricted") { openBatterySettings() })
+        root.addView(label("Unrestricted battery keeps calls working with the screen off.", 13f))
 
         return outer
     }
 
-    private fun refreshStatus() {
-        val lines = mutableListOf<String>()
-        fun p(label: String, perm: String) = lines.add("$label: " + if (Dialer.has(this, perm)) "granted" else "NOT granted")
-        p("Place calls (CALL_PHONE)", Manifest.permission.CALL_PHONE)
-        p("Call state (READ_PHONE_STATE)", Manifest.permission.READ_PHONE_STATE)
-        p("Hang up (ANSWER_PHONE_CALLS)", Manifest.permission.ANSWER_PHONE_CALLS)
-        p("Notifications", Manifest.permission.POST_NOTIFICATIONS)
-        p("Call log (optional)", Manifest.permission.READ_CALL_LOG)
-        val pm = getSystemService(PowerManager::class.java)
-        lines += "Battery unrestricted: " + if (pm?.isIgnoringBatteryOptimizations(packageName) == true) "yes" else "no"
-        lines += "Monitor: " + when {
-            CallMonitorService.watching -> "watching call state"
-            CallMonitorService.running -> "running, NOT watching (permission?)"
-            else -> "stopped"
+    private fun refresh() {
+        val paired = LinkServer.isPaired(this)
+        val running = LinkServer.isRunning()
+        pairInfo.text = when {
+            paired && running -> "Paired with your laptop. Calls from the Vector page work."
+            paired -> "Paired with your laptop. The link is off: tap Show pairing QR to turn it on."
+            else -> "Not paired yet. Tap Show pairing QR and scan it on the laptop."
         }
-        lines += "Companion role: " + companionRoleStatus()
-        lines += "Companion InCallService bound: ${CompanionInCallService.bindCount} time(s) this run"
-        val s = Sessions.current
-        lines += "Session: " + if (s == null) "none" else "${s.id.take(8)} ${s.phase}"
-        status.text = lines.joinToString("\n")
-    }
 
-    private fun loadSims() {
-        sims = Dialer.sims(this)
-        val labels = listOf("SIM: phone default / ask every time") + sims.map { "SIM: ${it.label}" }
-        bindingSims = true
-        simSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, labels)
-        val saved = Prefs.simHandle(this)
-        val idx = sims.indexOfFirst { it.handle == saved }
-        simSpinner.setSelection(if (idx >= 0) idx + 1 else 0, false)
-        simSpinner.post { bindingSims = false }
-    }
-
-    private fun renderLog() {
-        if (!::logView.isInitialized) return
-        logView.text = EventLog.snapshot().takeLast(300).joinToString("\n") { it.line() }
-        logScroll.post { logScroll.fullScroll(View.FOCUS_DOWN) }
-    }
-
-    private fun appendLog(e: EventLog.Entry) {
-        if (logView.text.isNotEmpty()) logView.append("\n")
-        logView.append(e.line())
-        logScroll.post { logScroll.fullScroll(View.FOCUS_DOWN) }
+        val pm = getSystemService(PowerManager::class.java)
+        val permsOk = Dialer.has(this, Manifest.permission.CALL_PHONE) &&
+            Dialer.has(this, Manifest.permission.READ_PHONE_STATE)
+        val lines = listOf(
+            "Phone permissions: " + if (permsOk) "ready" else "missing, tap Grant phone permissions (QR is locked until then)",
+            "Notifications: " + if (Dialer.has(this, Manifest.permission.POST_NOTIFICATIONS)) "allowed" else "not allowed",
+            "Call log (answered and talk time): " + if (Dialer.has(this, Manifest.permission.READ_CALL_LOG)) "allowed" else "not allowed, tap Grant phone permissions",
+            "Laptop link: " + (LinkServer.address()?.let { "on at $it" } ?: "off"),
+            "Call monitoring: " + if (CallMonitorService.watching) "on" else "off",
+            "Battery: " + if (pm?.isIgnoringBatteryOptimizations(packageName) == true) "unrestricted" else "optimised (may stop calls)",
+        )
+        statusView.text = lines.joinToString("\n")
     }
 
     // ---------------------------------------------------------------- actions
 
-    private fun placeCall() {
-        val e164 = Phone.normalize(numberInput.text.toString())
-        if (e164 == null) {
-            toast("Enter a valid number (10-digit Indian, or + and country code)")
-            return
-        }
-        if (!Dialer.has(this, Manifest.permission.CALL_PHONE) || !Dialer.has(this, Manifest.permission.READ_PHONE_STATE)) {
-            toast("Grant phone permissions first")
+    /** Permissions the calling feature cannot work without. */
+    private fun corePermissionsGranted(): Boolean =
+        listOf(
+            Manifest.permission.CALL_PHONE,
+            Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.POST_NOTIFICATIONS,
+        ).all { Dialer.has(this, it) }
+
+    private fun showQr() {
+        if (!corePermissionsGranted()) {
+            // No code is generated until the permissions are granted. Ask again, and show the QR after.
+            wantQrAfterPerms = true
+            toast("Allow the permissions first. The QR code appears after that.")
             requestCorePermissions()
             return
         }
-        val sim = Prefs.simHandle(this)
-        val session = Sessions.request(this, e164, Dialer.simLabel(this, sim)) ?: run {
-            toast("Not dialling, see the log for why")
-            return
-        }
-        val error = Dialer.place(this, e164, sim)
-        if (error != null) Sessions.dialFailed(session, error)
-        else EventLog.add("PLACE_CALL_OK", session.id, "Telecom accepted the request")
+        makeQr()
     }
 
-    private fun hangUp() {
-        val error = Dialer.end(this)
-        EventLog.add(if (error == null) "HANGUP_SENT" else "HANGUP_FAILED", Sessions.current?.takeIf { it.open }?.id, error ?: "")
-        if (error != null && !Dialer.has(this, Manifest.permission.ANSWER_PHONE_CALLS)) {
-            requestPermissions(arrayOf(Manifest.permission.ANSWER_PHONE_CALLS), REQ_CORE)
+    private fun makeQr() {
+        val payload = try {
+            LinkServer.pairingQrPayload(this)
+        } catch (e: Exception) {
+            toast("Could not start the link. Check that the phone is on Wi-Fi.")
+            refresh()
+            return
         }
+        qrView.setImageBitmap(QrCode.bitmap(payload, 840))
+        qrView.visibility = View.VISIBLE
+        val j = JSONObject(payload)
+        manualView.text = "Can't scan? Enter by hand:
+Address  ${j.optString("host")}:${j.optInt("port")}
+Code     ${j.optString("code")}"
+        manualView.visibility = View.VISIBLE
+        refresh()
+    }
+
+    private fun hideQr() {
+        qrView.visibility = View.GONE
+        manualView.visibility = View.GONE
     }
 
     private fun requestCorePermissions() {
@@ -297,6 +206,8 @@ class MainActivity : Activity() {
                 Manifest.permission.READ_PHONE_STATE,
                 Manifest.permission.ANSWER_PHONE_CALLS,
                 Manifest.permission.POST_NOTIFICATIONS,
+                // Lets the website show whether a call was answered and for how long. Reads only Vector's calls.
+                Manifest.permission.READ_CALL_LOG,
             ),
             REQ_CORE,
         )
@@ -304,19 +215,33 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        EventLog.add("PERMISSIONS", null, CallMonitorService.permissionSnapshot(this))
         if (Dialer.has(this, Manifest.permission.READ_PHONE_STATE)) {
             CallMonitorService.start(this, restartWatcher = CallMonitorService.running)
         }
-        if (requestCode == REQ_CALL_LOG && !Dialer.has(this, Manifest.permission.READ_CALL_LOG)) {
-            callLogBox.isChecked = false
+        if (corePermissionsGranted()) {
+            if (wantQrAfterPerms) {
+                wantQrAfterPerms = false
+                makeQr()
+            }
+        } else {
+            wantQrAfterPerms = false
+            // Android stops showing the dialog after a permanent "Don't allow". Send the person to settings then.
+            val blocked = listOf(
+                Manifest.permission.CALL_PHONE,
+                Manifest.permission.READ_PHONE_STATE,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ).any { !Dialer.has(this, it) && !shouldShowRequestPermissionRationale(it) }
+            if (blocked) {
+                toast("Permission is blocked. Allow it in the app settings, then come back.")
+                startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
+            } else {
+                toast("Permissions are needed before the pairing code can be made.")
+            }
         }
-        loadSims()
-        refreshStatus()
+        refresh()
     }
 
     private fun openBatterySettings() {
-        // Opens the system list; pick Vector Companion and choose "Unrestricted" / "Don't optimise".
         try {
             startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
         } catch (e: Exception) {
@@ -324,119 +249,9 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun companionRoleStatus(): String {
-        val rm = getSystemService(RoleManager::class.java) ?: return "no RoleManager"
-        return try {
-            when {
-                !rm.isRoleAvailable(ROLE_CALL_COMPANION) -> "role not available on this phone"
-                rm.isRoleHeld(ROLE_CALL_COMPANION) -> "HELD"
-                else -> "available, not held"
-            }
-        } catch (e: Exception) {
-            "error: ${e.javaClass.simpleName}"
-        }
-    }
-
-    private fun requestCompanionRole() {
-        val rm = getSystemService(RoleManager::class.java)
-        val status = companionRoleStatus()
-        EventLog.add("COMPANION_ROLE_CHECK", null, status)
-        if (rm == null || status != "available, not held") {
-            toast("Companion role: $status")
-            return
-        }
-        try {
-            startActivityForResult(rm.createRequestRoleIntent(ROLE_CALL_COMPANION), REQ_ROLE)
-        } catch (e: Exception) {
-            EventLog.add("COMPANION_ROLE_ERROR", null, "${e.javaClass.simpleName}: ${e.message?.take(80)}")
-        }
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQ_ROLE) {
-            EventLog.add("COMPANION_ROLE_RESULT", null, if (resultCode == RESULT_OK) "granted" else "not granted (result $resultCode)")
-            refreshStatus()
-        }
-    }
-
-    private fun shareLog() {
-        val send = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_SUBJECT, "Vector Companion event log")
-            putExtra(Intent.EXTRA_TEXT, EventLog.exportText())
-        }
-        startActivity(Intent.createChooser(send, "Share log"))
-    }
-
-    private fun copyLog() {
-        val cm = getSystemService(ClipboardManager::class.java)
-        cm?.setPrimaryClip(ClipData.newPlainText("Vector Companion log", EventLog.exportText()))
-        toast("Log copied")
-    }
-
-    private var clearArmed = 0L
-    private fun confirmClear() {
-        val now = System.currentTimeMillis()
-        if (now - clearArmed < 3000) {
-            EventLog.clear()
-            renderLog()
-            EventLog.add("LOG_CLEARED")
-            clearArmed = 0
-        } else {
-            clearArmed = now
-            toast("Tap Clear again within 3 seconds to delete the log")
-        }
-    }
-
-    private fun startLink() {
-        try {
-            LinkServer.start(this)
-        } catch (e: Exception) {
-            toast("Could not start link: ${e.javaClass.simpleName}")
-        }
-        refreshLink()
-    }
-
-    private fun refreshLink() {
-        val running = LinkServer.isRunning()
-        val addresses = LinkServer.lanAddresses().map { "$it:${LinkServer.PORT}" }
-            .joinToString(" or ").ifEmpty { "no Wi-Fi address" }
-        linkStatus.text = buildString {
-            append("Link: ").append(if (running) "running" else "stopped").append('\n')
-            append("Address: ").append(addresses).append('\n')
-            if (running) {
-                append("Pairing code: ").append(LinkServer.activeCode() ?: "none, tap New code").append('\n')
-            }
-            append("Paired: ").append(if (LinkServer.isPaired(this@MainActivity)) "yes" else "no")
-        }
-    }
-
     private fun toast(t: String) = Toast.makeText(this, t, Toast.LENGTH_SHORT).show()
 
     companion object {
         private const val REQ_CORE = 1
-        private const val REQ_CALL_LOG = 2
-        private const val REQ_ROLE = 3
-        // RoleManager.ROLE_CALL_COMPANION is a hidden constant; this is its value.
-        private const val ROLE_CALL_COMPANION = "android.app.role.CALL_COMPANION"
-
-        private val SCENARIOS = listOf(
-            "1 Outgoing answered normally",
-            "2 Rings, never answered",
-            "3 Busy or rejected",
-            "4 I cancel before answer",
-            "5 Call ends normally (I hang up)",
-            "6 Remote party hangs up",
-            "7 Incoming call, no session",
-            "8 Incoming call during a session",
-            "9 SIM 1 vs SIM 2 / eSIM",
-            "10 Phone loses network",
-            "11 App in background / screen off",
-            "12 (Phase 4) browser refresh",
-            "13 (Phase 3) duplicate / out-of-order events",
-            "14 (Phase 3) pairing lost",
-            "15 Phone restart / permission revoked",
-        )
     }
 }

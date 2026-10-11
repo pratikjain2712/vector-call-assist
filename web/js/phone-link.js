@@ -1,8 +1,9 @@
 /* Vector link: pairs this browser with the Vector Companion app on the phone and sends encrypted
-   requests over the Wi-Fi. Must match android/.../LinkCrypto.kt and LinkServer.kt (protocol v2). */
+   requests over HTTPS on the Wi-Fi. Must match android/.../LinkCrypto.kt and LinkServer.kt (protocol v2). */
 (function () {
   const STORE = 'vca2-link';
   const ALPHA = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+  const DEFAULT_PORT = 8765;
   const enc = new TextEncoder();
   const dec = new TextDecoder();
 
@@ -10,6 +11,7 @@
   const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
   const concat = (a, b) => { const o = new Uint8Array(a.length + b.length); o.set(a); o.set(b, a.length); return o; };
   const cleanHost = (v) => String(v || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  const validHost = (h) => /^(\d{1,3}\.){3}\d{1,3}(:\d{1,5})?$/.test(h);
 
   function load() { try { return JSON.parse(localStorage.getItem(STORE) || 'null'); } catch (e) { return null; } }
   function save(v) { try { localStorage.setItem(STORE, JSON.stringify(v)); } catch (e) {} }
@@ -33,30 +35,49 @@
     return { proof, encKey };
   }
 
+  /* The phone's QR code holds JSON: {"vca":2,"host":"192.168.1.42","port":8765,"code":"XXXX-XXXX-XXXX-XXXX"}.
+     Returns { host: "ip:port", code } or null when the text is not a Vector pairing code. */
+  function parseQr(text) {
+    let j;
+    try { j = JSON.parse(String(text || '')); } catch (e) { return null; }
+    if (!j || j.vca !== 2 || typeof j.host !== 'string') return null;
+    const port = Number(j.port) || DEFAULT_PORT;
+    const host = cleanHost(j.host) + ':' + port;
+    if (!validHost(host) || !normalizeSecret(j.code)) return null;
+    return { host, code: j.code };
+  }
+
+  /* Browser could not reach the phone over HTTPS. Most often the certificate has not been accepted yet. */
+  function unreachable(host) {
+    const e = new Error('Could not reach the phone at ' + host + '. Open https://' + host + '/ in this browser, accept the certificate warning once, then try again.');
+    e.unreachable = true;
+    e.host = host;
+    return e;
+  }
+
   /* Pair with the phone. Throws an Error with a message a person can read. */
   async function pair(hostInput, codeInput) {
     const host = cleanHost(hostInput);
-    if (!host) throw new Error('Enter the phone address shown in the app, for example 192.168.1.20:8765.');
+    if (!validHost(host.includes(':') ? host : host + ':' + DEFAULT_PORT)) {
+      throw new Error('Enter the phone address shown in the app, for example 192.168.1.20:8765.');
+    }
+    const hostPort = host.includes(':') ? host : host + ':' + DEFAULT_PORT;
     const secret = normalizeSecret(codeInput);
     if (!secret) throw new Error('The pairing code has 16 letters and digits, shown as XXXX-XXXX-XXXX-XXXX.');
     const nonce = b64(crypto.getRandomValues(new Uint8Array(16)));
     const { proof, encKey } = await derive(secret, nonce);
     let res;
     try {
-      res = await fetch('http://' + host + '/pair', {
+      res = await fetch('https://' + hostPort + '/pair', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nonce, proof: b64(proof) }),
       });
-    } catch (e) { throw unreachable(); }
+    } catch (e) { throw unreachable(hostPort); }
     const j = await res.json().catch(() => ({ ok: false, error: 'unexpected reply (HTTP ' + res.status + ')' }));
     if (!j.ok) throw new Error(j.error || 'pairing refused');
-    save({ host, ek: b64(encKey), lastSeq: 0 });
-    return host;
-  }
-
-  function unreachable() {
-    return new Error('Could not reach the phone. Check that both are on the same Wi-Fi, the app shows the link as running, and Chrome is allowed to reach local devices.');
+    save({ host: hostPort, ek: b64(encKey), lastSeq: 0 });
+    return hostPort;
   }
 
   /* One encrypted request. op: ping | dial | hangup | status | result | events. */
@@ -74,18 +95,23 @@
 
     let res;
     try {
-      res = await fetch('http://' + st.host + path, {
+      res = await fetch('https://' + st.host + path, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain', 'X-Vca-Ts': ts, 'X-Vca-Nonce': nonce },
         body: b64(concat(iv, ct)),
       });
-    } catch (e) { throw unreachable(); }
+    } catch (e) { throw unreachable(st.host); }
 
     const text = await res.text();
     if (!res.ok) {
       let msg = text;
       try { msg = JSON.parse(text).error || text; } catch (e) {}
-      throw new Error(msg || ('phone said HTTP ' + res.status));
+      const err = new Error(msg || ('phone said HTTP ' + res.status));
+      err.status = res.status;
+      // The phone has no key for this browser, or a different one: it was forgotten there or another browser paired.
+      if (res.status === 401 && (msg === 'not paired' || msg === 'authentication failed')) err.unpaired = true;
+      if (msg === 'stale or missing timestamp') err.clock = true;
+      throw err;
     }
     const raw = unb64(text);
     const plain = await crypto.subtle.decrypt(
@@ -109,7 +135,9 @@
   window.PhoneLink = {
     isPaired: () => !!load(),
     host: () => (load() || {}).host || '',
+    certUrl: (host) => 'https://' + host + '/',
     pair,
+    parseQr,
     request,
     forget: () => { try { localStorage.removeItem(STORE); } catch (e) {} },
     normalizeSecret,

@@ -9,7 +9,8 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@500;700&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
-/* Layout: one narrow column, like a teleprompter. One line to read, then the answer buttons, then objections. */
+/* Layout: a pairing gate first. Once paired, the script is the main column (one line to read, then the
+   answer buttons) and a side column holds objections and the lead sheet. One column on narrow screens. */
 :root {
   --bg: #F2F4F8; --surface: #FFFFFF; --fg: #111A2E; --muted: #5A657C; --line: #D5DAE5; --accent: #2447C8;
   --yes: #0F7A3D; --yes-bg: #E2F4E8; --no: #B4232A; --no-bg: #FBE6E6; --maybe: #8A5A00; --maybe-bg: #FBF0D3;
@@ -30,17 +31,11 @@
 }
 * { box-sizing: border-box; }
 body { background: var(--bg); color: var(--fg); font-family: var(--read); font-size: 16px; line-height: 1.5; }
-.wrap { max-width: 720px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 48px; display: flex; flex-direction: column; gap: 20px; }
 .label { font-family: var(--util); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 
-.top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
-.top h1 { margin: 0; font-size: 1.15rem; font-weight: 700; }
 .clock { font-family: var(--util); font-variant-numeric: tabular-nums; font-size: 1rem; }
 .clock small { color: var(--muted); font-size: 0.72rem; margin-left: 8px; }
 
-.setup { display: flex; flex-wrap: wrap; gap: 12px; }
-.setup label { display: flex; flex-direction: column; gap: 4px; flex: 1 1 160px; min-width: 0; }
-.setup input { font: inherit; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; }
 
 .rail { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0; padding: 0; list-style: none; }
 .rail li { font-family: var(--util); font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding-bottom: 4px; border-bottom: 2px solid transparent; }
@@ -100,62 +95,168 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
 .msg { font-family: var(--read); font-size: 0.98rem; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 12px; margin: 0; }
 .outcome { font-family: var(--util); font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; }
 .outcome.good { color: var(--yes); } .outcome.mid { color: var(--maybe); } .outcome.bad { color: var(--no); }
-.link { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; margin: 12px 0; }
-.link summary { cursor: pointer; font-family: var(--util); font-size: 0.8rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
-.link > *:not(summary) { margin-top: 10px; }
-.link input { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; box-sizing: border-box; margin-top: 4px; }
-.callpanel { background: var(--surface); border: 2px solid var(--accent); border-radius: 10px; padding: 14px 16px; margin: 12px 0; display: flex; flex-direction: column; gap: 10px; }
+
+/* ---- Pairing gate: the only thing on screen until a phone is paired ---- */
+.gate { min-height: 100vh; display: grid; place-items: center; padding: 32px 16px; }
+.gate-card { width: 100%; max-width: 560px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 28px 24px; display: flex; flex-direction: column; gap: 18px; }
+.gate-card h1 { margin: 0; font-size: 1.6rem; line-height: 1.2; }
+.gate-card > p { margin: 0; color: var(--muted); }
+.steps { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 12px; counter-reset: step; }
+.steps li { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; align-items: start; counter-increment: step; }
+.steps li::before { content: counter(step); width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--bg); font-family: var(--util); font-weight: 700; font-size: 0.85rem; }
+.big { font-size: 1.05rem; padding: 12px 18px; }
+.or { display: flex; align-items: center; gap: 12px; color: var(--muted); font-family: var(--util); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; }
+.or::before, .or::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
+.fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 12px; }
+@media (max-width: 540px) { .fields { grid-template-columns: minmax(0, 1fr); } }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field input, .topbar input { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 9px 10px; width: 100%; }
+#link-code, #link-host { font-family: var(--util); letter-spacing: 0.04em; }
+.subcard { border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: var(--bg); }
+#scan-video { width: 100%; border-radius: 8px; background: #000; display: block; aspect-ratio: 4 / 3; object-fit: cover; }
+.msgline { margin: 0; font-size: 0.92rem; color: var(--no); }
+.msgline:empty { display: none; }
+
+/* ---- Workspace, once paired ---- */
+.topbar { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
+.topbar-in { max-width: 1180px; margin: 0 auto; padding: 10px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; }
+.topbar h1 { margin: 0; font-size: 1.05rem; font-weight: 700; margin-right: auto; }
+@media (max-width: 540px) { .topbar { position: static; } }
+.me { display: flex; align-items: center; gap: 8px; }
+.me input { width: 130px; padding: 6px 8px; }
+.pill { position: relative; }
+.pill summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; font-size: 0.85rem; background: var(--surface); }
+.pill summary::-webkit-details-marker { display: none; }
+.pill summary::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--yes); }
+.pill[open] summary { border-color: var(--accent); }
+.pill-menu { position: absolute; right: 0; top: calc(100% + 6px); width: min(300px, calc(100vw - 32px)); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.12); }
+.shell { max-width: 1180px; margin: 0 auto; padding: 20px 16px 48px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+.main, .side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+@media (min-width: 980px) {
+  .shell { grid-template-columns: minmax(0, 1fr) 380px; align-items: start; }
+  .side .chip { font-size: 0.84rem; padding: 5px 11px; }
+  .side .chips { gap: 6px; }
+  .side { position: sticky; top: 72px; max-height: calc(100vh - 88px); overflow-y: auto; padding-right: 2px; }
+}
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.panel h2 { margin: 0; font-family: var(--util); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.leadtop { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.leadnav { display: flex; gap: 6px; }
+.leadnav .plain { padding: 4px 10px; font-size: 0.85rem; }
+.leadrow .primary { margin-left: auto; }
+.progress { height: 6px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
+.progress > span { display: block; height: 100%; background: var(--accent); }
+.fname { font-size: 0.92rem; overflow-wrap: anywhere; margin: 0; }
+.stackbtns { display: flex; flex-direction: column; gap: 8px; }
+.stackbtns > * { text-align: center; }
+.callpanel { background: var(--surface); border: 2px solid var(--accent); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .callpanel p { margin: 0; }
+.scriptnav { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+.pill[data-health="checking"] summary::before { background: var(--muted); }
+.pill[data-health="offline"] summary::before, .pill[data-health="unpaired"] summary::before, .pill[data-health="clock"] summary::before { background: var(--no); }
+.banner { border: 2px solid var(--no); background: var(--no-bg); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.banner h2 { margin: 0; font-size: 1.05rem; color: var(--no); }
+.banner p { margin: 0; }
+.banner a.plain, .banner .plain { background: var(--surface); }
+.keys { color: var(--muted); font-size: 0.85rem; margin: 0; }
+.keys kbd { font-family: var(--util); font-size: 0.75rem; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; background: var(--surface); }
 </style>
 
 </head>
 <body>
-<div class="wrap">
-  <header class="top">
-    <h1>Vector 2.0 call guide</h1>
-    <div class="clock" aria-label="Call time"><span id="clock">00:00</span><small>aim for 10 to 12 min</small></div>
+<!-- Step 1: pair a phone. Nothing else is shown until this browser is paired. -->
+<section class="gate" id="gate" hidden>
+  <div class="gate-card">
+    <span class="label">Vector 2.0 call guide · first-time setup</span>
+    <h1>Connect your phone</h1>
+    <p>Calls go out from your phone's SIM, and the phone reports when each call connects and ends. Pair once; this browser remembers the phone.</p>
+    <ol class="steps">
+      <li><span>On the phone, open <b>Vector Companion</b> and tap <b>Show pairing QR</b>. Phone and laptop must be on the same Wi-Fi.</span></li>
+      <li><span>Here, scan the QR code with the laptop camera, or type in the address and code shown under it.</span></li>
+    </ol>
+    <button class="primary big" id="link-scan" type="button">Scan pairing QR</button>
+    <div class="subcard" id="scan-box" hidden>
+      <video id="scan-video" playsinline muted></video>
+      <p class="hint">Hold the phone's QR code up to the camera. It pairs as soon as it reads the code.</p>
+      <div class="tools"><button class="plain" id="scan-cancel" type="button">Cancel</button></div>
+    </div>
+    <div class="subcard" id="cert-box" hidden>
+      <p class="hint" id="cert-hint"></p>
+      <div class="tools"><a class="plain" id="cert-open" href="#" target="_blank" rel="noopener">1. Open phone certificate page</a><button class="primary" id="cert-retry" type="button">2. Pair again</button></div>
+    </div>
+    <div class="or">or enter by hand</div>
+    <div class="fields">
+      <label class="field"><span class="label">Phone address</span><input id="link-host" type="text" autocomplete="off" inputmode="decimal" placeholder="192.168.1.20:8765"></label>
+      <label class="field"><span class="label">Pairing code</span><input id="link-code" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="19" placeholder="XXXX-XXXX-XXXX-XXXX"></label>
+    </div>
+    <button class="plain" id="link-pair" type="button">Pair with phone</button>
+    <p class="msgline" id="gate-msg" role="status"></p>
+  </div>
+</section>
+
+<!-- Step 2: the calling workspace. -->
+<div id="app" hidden>
+  <header class="topbar">
+    <div class="topbar-in">
+      <h1>Vector 2.0 call guide</h1>
+      <div class="clock" aria-label="Call time"><span id="clock">00:00</span><small>aim for 10 to 12 min</small></div>
+      <label class="me"><span class="label">You</span><input id="me-name" type="text" autocomplete="off" value="Pratik"></label>
+      <details class="pill" id="link-panel">
+        <summary><span id="link-summary">Phone connected</span></summary>
+        <div class="pill-menu">
+          <p class="hint" id="link-status"></p>
+          <button class="plain" id="link-forget" type="button">Forget phone</button>
+        </div>
+      </details>
+    </div>
   </header>
 
-  <div class="setup">
-    <label><span class="label">Your name</span><input id="me-name" type="text" autocomplete="off" value="Pratik"></label>
-    <label><span class="label">Lead's name</span><input id="lead-name" type="text" autocomplete="off" placeholder="Type before you dial"></label>
+  <div class="shell">
+    <div class="main">
+      <section class="banner" id="link-banner" role="alert" hidden>
+        <h2 id="link-banner-title"></h2>
+        <p id="link-banner-text"></p>
+        <div class="tools" id="link-banner-tools"></div>
+      </section>
+      <section class="panel" id="sheet-empty">
+        <h2>Lead</h2>
+        <label class="field"><span class="label">Lead's name</span><input id="lead-name" type="text" autocomplete="off" placeholder="Type before you dial, or load a lead sheet"></label>
+        <div class="tools">
+          <label class="plain filebtn" for="sheet-file">Load a lead sheet</label>
+          <input id="sheet-file" class="vh" type="file" accept=".xlsx,.xls,.csv">
+          <button class="plain" id="import-v1" type="button" hidden>Import my lead sheet from the old call guide</button>
+        </div>
+        <p class="hint">Excel or CSV with a name column and a phone column. Leads load one at a time, and each call's result is written to that lead's row. The file stays in this browser.</p>
+      </section>
+      <section class="panel" id="sheet-bar" hidden></section>
+      <p class="hint" id="sheet-msg" role="status"></p>
+      <section class="callpanel" id="call-panel" hidden></section>
+
+      <ol class="rail" id="rail" aria-label="Call stages"></ol>
+      <main id="stage" aria-live="polite"></main>
+
+      <div class="scriptnav">
+        <div class="tools">
+          <button class="plain" id="back" type="button">Back one step</button>
+          <button class="plain" id="restart" type="button">Start a new call</button>
+        </div>
+        <p class="keys"><kbd>Y</kbd> <kbd>N</kbd> <kbd>M</kbd> answer · <kbd>Enter</kbd> next · <kbd>Backspace</kbd> back</p>
+      </div>
+    </div>
+
+    <aside class="side">
+      <section class="panel" id="sheet-tools" hidden></section>
+      <section class="panel obj" id="obj-section">
+        <h2>Pushback: tap what they said</h2>
+        <div class="chips" id="chips-push"></div>
+        <h2>Worries and questions</h2>
+        <div class="chips" id="chips-worry"></div>
+      </section>
+    </aside>
   </div>
-
-  <details class="link" id="link-panel">
-    <summary><span id="link-summary">Phone: not paired</span></summary>
-    <p class="hint" id="link-status"></p>
-    <label><span class="label">Phone address (shown in the app)</span><input id="link-host" type="text" autocomplete="off" placeholder="192.168.1.20:8765"></label>
-    <label><span class="label">Pairing code (shown in the app)</span><input id="link-code" type="text" autocomplete="off" placeholder="XXXX-XXXX-XXXX-XXXX"></label>
-    <div class="tools"><button class="primary" id="link-pair" type="button">Pair with phone</button><button class="plain" id="link-forget" type="button" hidden>Forget phone</button></div>
-  </details>
-
-  <section class="sheet" id="sheet-empty">
-    <label class="plain filebtn" for="sheet-file">Load a lead sheet</label>
-    <input id="sheet-file" class="vh" type="file" accept=".xlsx,.xls,.csv">
-    <p class="hint">Excel or CSV with a name column and a phone column. Leads load one at a time, and each call's result is written to that lead's row. The file stays in this browser.</p>
-    <button class="plain" id="import-v1" type="button" hidden>Import my lead sheet from the old call guide</button>
-  </section>
-  <section class="card leadcard" id="sheet-bar" hidden></section>
-  <p class="hint" id="sheet-msg" role="status"></p>
-  <section class="callpanel" id="call-panel" hidden></section>
-
-  <ol class="rail" id="rail" aria-label="Call stages"></ol>
-
-  <main id="stage" aria-live="polite"></main>
-
-  <div class="tools">
-    <button class="plain" id="back" type="button">Back one step</button>
-    <button class="plain" id="restart" type="button">Start a new call</button>
-  </div>
-
-  <section class="obj" id="obj-section">
-    <span class="label">Pushback: tap what they said</span>
-    <div class="chips" id="chips-push"></div>
-    <span class="label">Worries and questions</span>
-    <div class="chips" id="chips-worry"></div>
-  </section>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="js/phone-link.js"></script>
 <script src="js/call-session.js"></script>
 <script>
@@ -386,7 +487,7 @@ function leadsAoa(s) {
 }
 /*ENDSHEET*/
 
-function note(text) { $("sheet-msg").textContent = text || ""; }
+function note(text) { $("sheet-msg").textContent = text || ""; $("gate-msg").textContent = text || ""; }
 function persist() { try { if (sheet) localStorage.setItem("vca2-sheet", JSON.stringify(sheet)); else localStorage.removeItem("vca2-sheet"); } catch (e) {} }
 function leadName() { return sheet ? String(sheet.rows[sheet.idx][sheet.cols.name]).trim() : ""; }
 
@@ -488,12 +589,21 @@ async function downloadSheet() {
 function tool(id, text, fn, cls) { const b = el("button", cls || "plain", text); b.type = "button"; b.id = id; b.addEventListener("click", fn); return b; }
 
 function renderSheet() {
-  const bar = $("sheet-bar");
-  $("sheet-empty").hidden = !!sheet; bar.hidden = !sheet; bar.textContent = "";
+  const bar = $("sheet-bar"), side = $("sheet-tools");
+  $("sheet-empty").hidden = !!sheet; bar.hidden = !sheet; side.hidden = !sheet;
+  bar.textContent = ""; side.textContent = "";
   syncImportButton();
   if (!sheet) return;
-  const r = sheet.rows[sheet.idx], c = sheet.cols, n = sheet.rows.length;
-  bar.appendChild(el("span", "label", "Lead " + (sheet.idx + 1) + " of " + n + " · " + calledCount(sheet) + " called · " + sheet.fileName));
+  const r = sheet.rows[sheet.idx], c = sheet.cols, n = sheet.rows.length, done = calledCount(sheet);
+
+  // Main column: the lead on screen, how to call them, and moving between leads.
+  const top = el("div", "leadtop");
+  top.appendChild(el("h2", "", "Lead " + (sheet.idx + 1) + " of " + n));
+  const nav = el("div", "leadnav");
+  const prev = tool("lead-prev", "Previous", () => loadLead(sheet.idx - 1)); prev.disabled = sheet.idx === 0; nav.appendChild(prev);
+  const next = tool("lead-next", "Skip", () => loadLead(sheet.idx + 1)); next.disabled = sheet.idx >= n - 1; nav.appendChild(next);
+  top.appendChild(nav);
+  bar.appendChild(top);
   const row = el("div", "leadrow");
   row.appendChild(el("strong", "", leadName() || "No name in this row"));
   const phone = String(r[c.phone]).trim();
@@ -501,21 +611,31 @@ function renderSheet() {
     const num = el("span", "phone", phone); row.appendChild(num);
     const cp = tool("copy-phone", "Copy number", () => copyText(phone, cp, num, "Copy number")); row.appendChild(cp);
     const a = el("a", "plain", "Call on this device"); a.href = "tel:" + phone.replace(/[^\d+]/g, ""); a.id = "call-link"; row.appendChild(a);
-    if (PhoneLink.isPaired()) row.appendChild(tool("call-laptop", "Call from laptop", callFromLaptop, "primary"));
+    if (PhoneLink.isPaired()) {
+      const cb = tool("call-laptop", "Call from laptop", callFromLaptop, "primary");
+      cb.disabled = !(linkHealth === "ok" || linkHealth === "checking");
+      if (cb.disabled) cb.title = "The phone is not reachable. See the message above.";
+      row.appendChild(cb);
+    }
   } else row.appendChild(el("span", "hint", "No number in this row"));
   bar.appendChild(row);
   const out = String(r[c.outcome]).trim();
   bar.appendChild(el("p", "hint", out ? "Already called: " + out + (r[c.at] ? ", " + r[c.at] : "") + ". Calling again replaces that result." : "Not called yet."));
-  const tools = el("div", "tools");
-  const prev = tool("lead-prev", "Previous lead", () => loadLead(sheet.idx - 1)); prev.disabled = sheet.idx === 0; tools.appendChild(prev);
-  const next = tool("lead-next", "Skip to next lead", () => loadLead(sheet.idx + 1)); next.disabled = sheet.idx >= n - 1; tools.appendChild(next);
-  tools.appendChild(tool("sheet-save", "Download results (.xlsx)", downloadSheet));
+
+  // Side column: the sheet as a whole.
+  side.appendChild(el("h2", "", "Lead sheet"));
+  side.appendChild(el("p", "fname", sheet.fileName));
+  const meter = el("div", "progress"); const fill = el("span"); fill.style.width = (n ? Math.round(done / n * 100) : 0) + "%"; meter.appendChild(fill);
+  side.appendChild(meter);
+  side.appendChild(el("p", "hint", done + " of " + n + " leads called"));
+  const tools = el("div", "stackbtns");
+  tools.appendChild(tool("sheet-save", "Download results (.xlsx)", downloadSheet, "primary"));
   const rm = tool("sheet-remove", "Remove sheet", () => {
     if (rm.dataset.sure) { sheet = null; persist(); note("Sheet removed from this browser."); $("lead-name").value = ""; resetCall(); render(); }
     else { rm.dataset.sure = "1"; rm.textContent = "Tap again to remove"; }
   });
   tools.appendChild(rm);
-  bar.appendChild(tools);
+  side.appendChild(tools);
 }
 
 /* ---- Calls from the laptop, through the paired phone ---- */
@@ -564,7 +684,7 @@ async function callFromLaptop() {
   if (!number) { note("This number cannot be dialled as it is. Check it, or add the country code, for example +91."); return; }
   note("Dialling " + number + " through the phone…");
   let res;
-  try { res = await PhoneLink.request("dial", { number: number }); }
+  try { res = await phone("dial", { number: number }); }
   catch (e) { note("Could not dial: " + e.message); return; }
   if (!res.ok) { note("Could not dial: " + res.error); return; }
   CallRecords.add({
@@ -585,7 +705,7 @@ function watchCall(sessionId) {
   const step = async () => {
     if (token !== watchToken) return;
     try {
-      const st = await PhoneLink.request("status", { session: sessionId });
+      const st = await phone("status", { session: sessionId });
       fails = 0;
       if (!st.found) { finishCall(sessionId, { callStatus: "ended_unknown", detection: "approximate" }, "Call status is no longer on the phone; connected time unknown."); return; }
       callView = { sessionId: sessionId, phase: st.phase, offhookWallMs: st.offhookWallMs, endWallMs: st.endWallMs, final: false, summary: "" };
@@ -610,7 +730,7 @@ async function readResult(sessionId, token, failed) {
   for (let i = 0; i < 12; i++) {
     if (token !== watchToken) return;
     try {
-      const r = await PhoneLink.request("result", { session: sessionId });
+      const r = await phone("result", { session: sessionId });
       if (!r.pending) {
         if (r.connectedSeconds == null) {
           finishCall(sessionId, { callStatus: "ended_unknown", detection: "approximate" }, "Call ended. Connected time not available: " + (r.reason || "unknown") + ".");
@@ -631,7 +751,7 @@ async function readResult(sessionId, token, failed) {
 
 async function hangupCall() {
   try {
-    const r = await PhoneLink.request("hangup");
+    const r = await phone("hangup");
     note(r.ok ? "Hang up sent to the phone." : "Hang up failed: " + r.error);
   } catch (e) { note("Could not hang up: " + e.message); }
 }
@@ -664,22 +784,133 @@ function finishRecord(label, code) {
 
 function refreshLinkPanel() {
   const paired = PhoneLink.isPaired();
-  if (paired && !$("link-host").value) $("link-host").value = PhoneLink.host();
-  $("link-summary").textContent = paired ? "Phone: paired with " + PhoneLink.host() : "Phone: not paired";
-  $("link-status").textContent = paired
-    ? "Calls from this page go through the phone. Each call is recorded below and in the Calls tab of the results download."
-    : "Not paired. On the phone, open Vector Companion and tap Start link + code, then enter the address and code here.";
-  $("link-forget").hidden = !paired;
+  // Pairing comes first: until a phone is paired, only the pairing screen is shown.
+  $("gate").hidden = paired; $("app").hidden = !paired;
+  if (paired) { stopScan(); $("cert-box").hidden = true; $("gate-msg").textContent = ""; }
+  renderHealth();
+}
+
+/* ---- Phone connection: checked every 15 s while this tab is visible, and on every request ---- */
+let linkHealth = "checking";   // checking | ok | offline | unpaired | clock
+let linkError = "";
+
+async function phone(op, extra) {
+  try {
+    const r = await PhoneLink.request(op, extra);
+    setHealth("ok");
+    return r;
+  } catch (e) {
+    setHealth(e.unpaired ? "unpaired" : e.clock ? "clock" : e.unreachable ? "offline" : linkHealth, e.message);
+    throw e;
+  }
+}
+
+function setHealth(h, msg) {
+  const was = linkHealth;
+  linkHealth = h; linkError = msg || "";
+  renderHealth();
+  if (was !== h) renderSheet();   // the Call button follows the connection
+}
+
+async function checkPhone() {
+  if (!PhoneLink.isPaired() || document.hidden) return;
+  try { await phone("ping"); } catch (e) {}
+}
+
+function renderHealth() {
+  const host = PhoneLink.host();
+  $("link-panel").dataset.health = linkHealth;
+  $("link-summary").textContent = { checking: "Checking phone…", ok: "Phone connected", offline: "Phone offline", unpaired: "Phone needs pairing", clock: "Clock mismatch" }[linkHealth];
+  $("link-status").textContent = (host ? "Paired with the phone at " + host + ". " : "") +
+    (linkHealth === "ok" ? "Calls from this page go through the phone. Each call is recorded in the Calls tab of the results download." : "");
+  const banner = $("link-banner"), tools = $("link-banner-tools");
+  tools.textContent = "";
+  banner.hidden = linkHealth === "ok" || linkHealth === "checking" || !PhoneLink.isPaired();
+  if (banner.hidden) return;
+  const pairAgain = tool("link-repair", "Pair again", () => { forgetPhone(); note("Show the pairing QR on the phone, then scan it here."); }, linkHealth === "unpaired" ? "primary" : "plain");
+  const retry = tool("link-retry", "Try again", checkPhone, "primary");
+  if (linkHealth === "offline") {
+    $("link-banner-title").textContent = "Can't reach your phone";
+    $("link-banner-text").textContent = "Check that the phone is on the same Wi-Fi as this laptop and that Vector Companion is running (its notification is showing). " +
+      "If the phone's Wi-Fi address changed, pair again. If the phone was restarted, open the certificate page once and accept the warning.";
+    tools.appendChild(retry);
+    const cert = el("a", "plain", "Open certificate page"); cert.href = PhoneLink.certUrl(host); cert.target = "_blank"; cert.rel = "noopener";
+    tools.appendChild(cert);
+    tools.appendChild(pairAgain);
+  } else if (linkHealth === "unpaired") {
+    $("link-banner-title").textContent = "The phone no longer recognises this browser";
+    $("link-banner-text").textContent = "This happens after Forget this laptop on the phone, or when another browser pairs with it: the phone keeps one laptop at a time. Pair again to continue.";
+    tools.appendChild(pairAgain);
+  } else {
+    $("link-banner-title").textContent = "This laptop's clock and the phone's clock disagree";
+    $("link-banner-text").textContent = "They differ by more than a minute, so the phone refuses requests. Set both to automatic date and time, then try again.";
+    tools.appendChild(retry);
+  }
+}
+
+let pendingPair = null;      // { host, code } kept while the certificate step is open
+let scanStream = null;
+let scanTimer = null;
+
+async function pairWith(host, code) {
+  pendingPair = { host, code };
+  try {
+    await PhoneLink.pair(host, code);
+    pendingPair = null;
+    linkHealth = "ok"; linkError = "";
+    $("cert-box").hidden = true;
+    note("Paired with the phone.");
+  } catch (e) {
+    if (e.unreachable) {
+      $("cert-open").href = PhoneLink.certUrl(e.host);
+      $("cert-hint").textContent = "The browser has not accepted the phone's certificate yet. Step 1 opens the phone's page: accept the warning there, then come back and tap step 2.";
+      $("cert-box").hidden = false;
+    } else {
+      note("Pairing failed: " + e.message);
+    }
+  } finally { refreshLinkPanel(); render(); }
 }
 
 async function pairFromUi() {
   $("link-pair").disabled = true;
-  try {
-    await PhoneLink.pair($("link-host").value, $("link-code").value);
-    $("link-code").value = "";
-    note("Paired with the phone.");
-  } catch (e) { note("Pairing failed: " + e.message); }
-  finally { $("link-pair").disabled = false; refreshLinkPanel(); render(); }
+  try { await pairWith($("link-host").value, $("link-code").value); $("link-code").value = ""; }
+  finally { $("link-pair").disabled = false; }
+}
+
+/* Reads the phone's pairing QR code with the laptop camera, then pairs. */
+async function startScan() {
+  if (scanStream) return;
+  if (typeof jsQR !== "function") { note("The QR reader did not load. Check the internet connection, or enter the code by hand."); return; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { note("This browser cannot use the camera here. Enter the code by hand."); return; }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false }); }
+  catch (e) { note("Camera not available (" + (e.name || "error") + "). Enter the code by hand."); return; }
+  scanStream = stream;
+  const v = $("scan-video");
+  v.srcObject = stream;
+  $("scan-box").hidden = false;
+  try { await v.play(); } catch (e) {}
+  const canvas = document.createElement("canvas");
+  const cx = canvas.getContext("2d", { willReadFrequently: true });
+  scanTimer = setInterval(() => {
+    if (v.readyState < 2 || !v.videoWidth) return;
+    canvas.width = v.videoWidth;
+    canvas.height = v.videoHeight;
+    cx.drawImage(v, 0, 0, canvas.width, canvas.height);
+    const img = cx.getImageData(0, 0, canvas.width, canvas.height);
+    const hit = jsQR(img.data, img.width, img.height, { inversionAttempts: "dontInvert" });
+    const found = hit && hit.data ? PhoneLink.parseQr(hit.data) : null;
+    if (found) { stopScan(); pairWith(found.host, found.code); }
+  }, 250);
+}
+
+function stopScan() {
+  if (scanTimer) clearInterval(scanTimer);
+  scanTimer = null;
+  if (scanStream) scanStream.getTracks().forEach((t) => t.stop());
+  scanStream = null;
+  $("scan-video").srcObject = null;
+  $("scan-box").hidden = true;
 }
 
 function forgetPhone() {
@@ -821,6 +1052,7 @@ $("import-v1").addEventListener("click", () => {
 });
 
 document.addEventListener("keydown", (ev) => {
+  if ($("app").hidden) return;   // pairing screen: no script shortcuts
   const tag = ev.target.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA" || ev.metaKey || ev.ctrlKey || ev.altKey) return;
   const k = ev.key.toLowerCase();
@@ -831,11 +1063,30 @@ document.addEventListener("keydown", (ev) => {
 });
 
 render();
+$("link-scan").addEventListener("click", startScan);
+$("scan-cancel").addEventListener("click", stopScan);
+$("cert-retry").addEventListener("click", () => {
+  if (pendingPair) pairWith(pendingPair.host, pendingPair.code); else note("Scan the pairing QR again.");
+});
 $("link-pair").addEventListener("click", pairFromUi);
+/* Pairing code box: upper case, and a dash after every 4 characters as you type or paste.
+   The cursor stays after the same character, so editing in the middle still works. */
+$("link-code").addEventListener("input", (ev) => {
+  const box = ev.target;
+  const before = box.value.slice(0, box.selectionStart).replace(/[^0-9a-z]/gi, "").length;
+  const raw = box.value.toUpperCase().replace(/[^0-9A-Z]/g, "").slice(0, 16);
+  box.value = raw.replace(/(.{4})(?=.)/g, "$1-");
+  const pos = Math.min(before, raw.length);
+  const caret = pos + Math.floor(Math.max(0, pos - 1) / 4);
+  box.setSelectionRange(caret, caret);
+});
 $("link-forget").addEventListener("click", forgetPhone);
 refreshLinkPanel();
 render();
 resumeLastCall();
+checkPhone();
+setInterval(checkPhone, 15000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) checkPhone(); });
 </script>
 </body>
 </html>

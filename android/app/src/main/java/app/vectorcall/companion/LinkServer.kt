@@ -4,6 +4,11 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.LinkProperties
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.os.Handler
 import android.os.Looper
 import org.json.JSONArray
@@ -26,10 +31,11 @@ import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
 
 /**
- * Small HTTP server on the phone for the Vector website. Plain HTTP on the Wi-Fi, no library.
- * Bodies are encrypted (LinkCrypto), so the network sees no numbers or events in clear text.
+ * Small HTTPS server on the phone for the Vector website. Self-signed certificate (LinkTls), so the
+ * website, served from GitHub Pages over HTTPS, can call it. Request bodies are also encrypted (LinkCrypto).
  * It keeps running with the monitor service, so it survives the screen being off or a reboot.
  *
+ *   GET  /      plain-text page; the browser opens it once to accept the certificate
  *   POST /pair  {"nonce":"<b64>","proof":"<b64>"}     one pairing secret, valid 2 minutes, 5 tries
  *   POST /api   encrypted:
  *       {"op":"ping"}
@@ -65,6 +71,8 @@ object LinkServer {
     private const val NOTIFY_ID = 4201
 
     @Volatile private var server: ServerSocket? = null
+    @Volatile private var host: String? = null     // the Wi-Fi address the certificate names
+    private var netCallback: ConnectivityManager.NetworkCallback? = null
     private val pool = Executors.newCachedThreadPool()
     private val main = Handler(Looper.getMainLooper())
     private val seenNonces = ConcurrentHashMap<String, Long>()
@@ -88,6 +96,7 @@ object LinkServer {
     @Synchronized
     fun start(c: Context): String {
         bindLocked(c.applicationContext)
+        watchNetworkLocked(c.applicationContext)
         prefs(c).edit().putBoolean(KEY_ENABLED, true).apply()
         return newPairingCode()
     }
@@ -96,6 +105,8 @@ object LinkServer {
     @Synchronized
     fun listen(c: Context) {
         if (!enabled(c)) return
+        // Registered first, so a phone that boots before Wi-Fi connects still starts the link when it does.
+        watchNetworkLocked(c.applicationContext)
         try {
             bindLocked(c.applicationContext)
         } catch (e: Exception) {
@@ -106,6 +117,7 @@ object LinkServer {
     @Synchronized
     fun stop(c: Context) {
         prefs(c).edit().putBoolean(KEY_ENABLED, false).apply()
+        unwatchNetworkLocked(c.applicationContext)
         val s = server ?: return   // already stopped: nothing to close or log
         s.close()
         server = null
@@ -116,12 +128,29 @@ object LinkServer {
 
     private fun bindLocked(ctx: Context) {
         if (server != null) return
-        val s = ServerSocket()
+        val ip = lanAddresses().firstOrNull() ?: throw IllegalStateException("no Wi-Fi address")
+        val tls = LinkTls.contextFor(ctx, ip)
+        val s = tls.serverSocketFactory.createServerSocket()
         s.reuseAddress = true
         s.bind(InetSocketAddress(PORT))
         server = s
+        host = ip
         Thread({ acceptLoop(s, ctx) }, "vca-link").start()
-        EventLog.add("LINK_STARTED", null, "port $PORT")
+        EventLog.add("LINK_STARTED", null, "https port $PORT")
+    }
+
+    /**
+     * What the phone's screen shows as a QR code: where to reach the phone and the pairing code.
+     * Turns the link on if it is off, and issues a new code if none is active.
+     */
+    @Synchronized
+    fun pairingQrPayload(c: Context): String {
+        prefs(c).edit().putBoolean(KEY_ENABLED, true).apply()
+        watchNetworkLocked(c.applicationContext)
+        refreshAddressLocked(c.applicationContext, force = true)   // starts the link, or moves it to the current address
+        if (server == null) bindLocked(c.applicationContext)        // still off: throws "no Wi-Fi address"
+        val code = activeCode() ?: newPairingCode()
+        return JSONObject().put("vca", 2).put("host", host).put("port", PORT).put("code", code).toString()
     }
 
     @Synchronized
@@ -140,14 +169,70 @@ object LinkServer {
     fun activeCode(): String? =
         if (pendingSecret != null && System.currentTimeMillis() <= pendingExpires && tries < MAX_TRIES) pendingDisplay else null
 
+    /**
+     * The phone's local-network addresses, Wi-Fi first. Mobile data (rmnet, ccmni, CGNAT 100.x), VPN and
+     * tunnel addresses are left out: the laptop cannot reach them. The phone's own hotspot is kept.
+     */
     fun lanAddresses(): List<String> = try {
         Collections.list(NetworkInterface.getNetworkInterfaces())
-            .filter { it.isUp && !it.isLoopback }
+            .filter { nif -> nif.isUp && !nif.isLoopback && !nif.isVirtual && NOT_LAN.none { nif.name.startsWith(it) } }
+            .sortedBy { if (it.name.startsWith("wlan")) 0 else 1 }
             .flatMap { Collections.list(it.inetAddresses) }
             .filterIsInstance<Inet4Address>()
+            .filter { it.isSiteLocalAddress }
             .mapNotNull { it.hostAddress }
+            .distinct()
     } catch (e: Exception) {
         emptyList()
+    }
+
+    private val NOT_LAN = listOf("rmnet", "ccmni", "v4-", "clat", "tun", "ppp", "ipsec", "dummy")
+
+    /** The address and port the laptop should use, or null while the link is off. */
+    fun address(): String? = host?.takeIf { server != null }?.let { "$it:$PORT" }
+
+    /**
+     * Follows the Wi-Fi: starts the link once Wi-Fi is up, and restarts it with a certificate for the new
+     * address if the router gave the phone a different one. The laptop then needs to pair again.
+     */
+    @Synchronized
+    fun refreshAddress(c: Context) = refreshAddressLocked(c.applicationContext, force = false)
+
+    private fun refreshAddressLocked(ctx: Context, force: Boolean) {
+        if (!enabled(ctx) && !force) return
+        val ip = lanAddresses().firstOrNull() ?: return
+        if (server != null && ip == host) return
+        val moved = server != null
+        server?.close()
+        server = null
+        try {
+            bindLocked(ctx)
+            if (moved) EventLog.add("LINK_ADDRESS_CHANGED", null, "now $ip:$PORT, laptop must pair again")
+        } catch (e: Exception) {
+            EventLog.add("LINK_RESUME_FAILED", null, "${e.javaClass.simpleName}: ${e.message?.take(80)}")
+        }
+    }
+
+    private fun watchNetworkLocked(ctx: Context) {
+        if (netCallback != null) return
+        val cm = ctx.getSystemService(ConnectivityManager::class.java) ?: return
+        val cb = object : ConnectivityManager.NetworkCallback() {
+            // The address can lag the "available" event slightly, so look again a moment later.
+            override fun onAvailable(network: Network) { main.postDelayed({ refreshAddress(ctx) }, 1_500) }
+            override fun onLinkPropertiesChanged(network: Network, lp: LinkProperties) { main.post { refreshAddress(ctx) } }
+        }
+        try {
+            cm.registerNetworkCallback(NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build(), cb)
+            netCallback = cb
+        } catch (e: Exception) {
+            EventLog.add("LINK_WATCH_FAILED", null, e.javaClass.simpleName)
+        }
+    }
+
+    private fun unwatchNetworkLocked(ctx: Context) {
+        val cb = netCallback ?: return
+        netCallback = null
+        try { ctx.getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(cb) } catch (e: Exception) {}
     }
 
     // ---- HTTP plumbing -------------------------------------------------------------------
@@ -216,6 +301,11 @@ object LinkServer {
         val method = parts[0]
         val path = parts[1].substringBefore('?')
 
+        // Opened once in the browser so it accepts the phone's certificate; the website asks for this.
+        if (method == "GET" && path == "/") {
+            return reply.send(200, "text/plain; charset=utf-8",
+                "Vector link: certificate accepted. Go back to the Vector page and tap Scan pairing QR.")
+        }
         if (method == "OPTIONS") return reply.send(204, null, "")
         val len = headers["content-length"]?.toIntOrNull() ?: 0
         if (len < 0 || len > MAX_BODY) return reply.send(413, JSON, errJson("body too large"))
