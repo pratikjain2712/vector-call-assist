@@ -77,11 +77,9 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); ou
 .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .filebtn { cursor: pointer; display: inline-block; }
 .filebtn:has(+ input:focus-visible) { outline: 3px solid var(--accent); outline-offset: 2px; }
-.leadcard { padding: 16px 20px; gap: 10px; }
-.leadrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
-.leadrow strong { font-size: 1.2rem; overflow-wrap: anywhere; min-width: 0; }
 .phone { font-family: var(--util); font-variant-numeric: tabular-nums; font-size: 1.05rem; overflow-wrap: anywhere; }
 a.plain { color: var(--fg); text-decoration: none; }
+a.primary { text-decoration: none; text-align: center; }
 .primary { background: var(--accent); color: var(--bg); border: 1px solid var(--accent); border-radius: 6px; padding: 8px 14px; font-weight: 700; }
 .primary:disabled { opacity: 0.5; cursor: default; }
 .notes { display: flex; flex-direction: column; gap: 4px; }
@@ -118,12 +116,38 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
 .msgline:empty { display: none; }
 
 /* ---- Workspace, once paired ---- */
-.topbar { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
-.topbar-in { max-width: 1180px; margin: 0 auto; padding: 10px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; }
-.topbar h1 { margin: 0; font-size: 1.05rem; font-weight: 700; margin-right: auto; }
-@media (max-width: 540px) { .topbar { position: static; } }
-.me { display: flex; align-items: center; gap: 8px; }
-.me input { width: 130px; padding: 6px 8px; }
+.topbar { background: var(--bg); border-bottom: 1px solid var(--line); }
+.topbar-in { max-width: 1180px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+.brand { margin: 0 auto 0 0; font-size: 1.05rem; font-weight: 700; }
+.brand span { color: var(--muted); font-weight: 400; }
+
+/* The call card: who you are calling on top, what to say below. */
+.callcard { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; min-width: 0; }
+.callhead { display: flex; align-items: center; gap: 12px 16px; padding: 14px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.callhead .grow { flex: 1 1 220px; }
+.callhead .filebtn { align-self: flex-end; }
+.arrow { width: 40px; height: 40px; padding: 0; border-radius: 50%; font-size: 1.4rem; line-height: 1; display: grid; place-items: center; flex: none; }
+.who { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.who strong { font-size: 1.3rem; line-height: 1.25; overflow-wrap: anywhere; }
+.whosub { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; font-size: 0.92rem; color: var(--muted); }
+.whosub .phone { color: var(--fg); font-size: 0.95rem; }
+.whostate.done { color: var(--yes); font-weight: 700; }
+.calls { display: flex; flex-wrap: wrap; gap: 8px; order: 3; }
+.calls .primary, .calls .plain { padding: 11px 20px; font-size: 1rem; text-decoration: none; display: inline-block; text-align: center; border-radius: 8px; }
+.lead .next { order: 4; margin-left: auto; }
+.callcard .callpanel { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--bg); }
+.railrow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 16px 20px 0; }
+.callcard #stage .card { border: 0; border-radius: 0; background: transparent; }
+@media (max-width: 540px) {
+  .callhead.lead { display: grid; grid-template-columns: 40px minmax(0, 1fr) 40px; gap: 12px 10px; }
+  .lead .who { align-items: center; text-align: center; }
+  .lead .whosub { justify-content: center; }
+  .lead .next, .calls { order: 0; margin: 0; }
+  .calls { grid-column: 1 / -1; }
+  .calls > * { flex: 1 1 0; padding: 11px 8px !important; font-size: 0.95rem !important; }
+  .railrow { padding: 14px 16px 0; }
+  .callcard #stage .card { padding: 18px 16px; }
+}
 .pill { position: relative; }
 .pill summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; font-size: 0.85rem; background: var(--surface); }
 .pill summary::-webkit-details-marker { display: none; }
@@ -136,18 +160,15 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
   .shell { grid-template-columns: minmax(0, 1fr) 380px; align-items: start; }
   .side .chip { font-size: 0.84rem; padding: 5px 11px; }
   .side .chips { gap: 6px; }
-  .side { position: sticky; top: 72px; max-height: calc(100vh - 88px); overflow-y: auto; padding-right: 2px; }
+  .side { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; padding-right: 2px; }
 }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .panel h2 { margin: 0; font-family: var(--util); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
-.leadtop { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
-.leadnav { display: flex; gap: 6px; }
-.leadnav .plain { padding: 4px 10px; font-size: 0.85rem; }
-.leadrow .primary { margin-left: auto; }
 .progress { height: 6px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
 .progress > span { display: block; height: 100%; background: var(--accent); }
 .fname { font-size: 0.92rem; overflow-wrap: anywhere; margin: 0; }
 .stackbtns { display: flex; flex-direction: column; gap: 8px; }
+#sheet-load, #sheet-tools { display: flex; flex-direction: column; gap: 10px; }
 .stackbtns > * { text-align: center; }
 .callpanel { background: var(--surface); border: 2px solid var(--accent); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .callpanel p { margin: 0; }
@@ -159,6 +180,8 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
 .banner p { margin: 0; }
 .banner a.plain, .banner .plain { background: var(--surface); }
 .keys { color: var(--muted); font-size: 0.85rem; margin: 0; }
+.btnkey { font-family: var(--util); font-size: 0.72rem; font-weight: 500; opacity: 0.8; margin-left: 10px; border: 1px solid currentColor; border-radius: 4px; padding: 0 5px; }
+@media (hover: none) and (pointer: coarse) { .keys { display: none; } }
 .keys kbd { font-family: var(--util); font-size: 0.75rem; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; background: var(--surface); }
 </style>
 
@@ -194,13 +217,11 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
   </div>
 </section>
 
-<!-- Step 2: the calling workspace. -->
+<!-- Step 2: the calling workspace. One call card: who you are calling, then what to say. -->
 <div id="app" hidden>
   <header class="topbar">
     <div class="topbar-in">
-      <h1>Vector 2.0 call guide</h1>
-      <div class="clock" aria-label="Call time"><span id="clock">00:00</span><small>aim for 10 to 12 min</small></div>
-      <label class="me"><span class="label">You</span><input id="me-name" type="text" autocomplete="off" value="Pratik"></label>
+      <h1 class="brand">Vector <span>call guide</span></h1>
       <details class="pill" id="link-panel">
         <summary><span id="link-summary">Phone connected</span></summary>
         <div class="pill-menu">
@@ -218,39 +239,54 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
         <p id="link-banner-text"></p>
         <div class="tools" id="link-banner-tools"></div>
       </section>
-      <section class="panel" id="sheet-empty">
-        <h2>Lead</h2>
-        <label class="field"><span class="label">Lead's name</span><input id="lead-name" type="text" autocomplete="off" placeholder="Type before you dial, or load a lead sheet"></label>
-        <div class="tools">
-          <label class="plain filebtn" for="sheet-file">Load a lead sheet</label>
-          <input id="sheet-file" class="vh" type="file" accept=".xlsx,.xls,.csv">
-          <button class="plain" id="import-v1" type="button" hidden>Import my lead sheet from the old call guide</button>
-        </div>
-        <p class="hint">Excel or CSV with a name column and a phone column. Leads load one at a time, and each call's result is written to that lead's row. The file stays in this browser.</p>
-      </section>
-      <section class="panel" id="sheet-bar" hidden></section>
-      <p class="hint" id="sheet-msg" role="status"></p>
-      <section class="callpanel" id="call-panel" hidden></section>
 
-      <ol class="rail" id="rail" aria-label="Call stages"></ol>
-      <main id="stage" aria-live="polite"></main>
+      <article class="callcard">
+        <div class="callhead lead" id="sheet-bar" hidden></div>
+        <div class="callhead" id="sheet-empty">
+          <label class="field grow"><span class="label">Calling</span><input id="lead-name" type="text" autocomplete="off" placeholder="Lead's name"></label>
+          <label class="plain filebtn" for="sheet-file">Load lead sheet</label>
+        </div>
+        <section class="callpanel" id="call-panel" hidden></section>
+        <div class="railrow">
+          <ol class="rail" id="rail" aria-label="Call stages"></ol>
+          <div class="clock" aria-label="Call time"><span id="clock">00:00</span><small>aim 10 to 12 min</small></div>
+        </div>
+        <main id="stage" aria-live="polite"></main>
+      </article>
+      <p class="hint" id="sheet-msg" role="status"></p>
 
       <div class="scriptnav">
         <div class="tools">
           <button class="plain" id="back" type="button">Back one step</button>
           <button class="plain" id="restart" type="button">Start a new call</button>
         </div>
-        <p class="keys"><kbd>Y</kbd> <kbd>N</kbd> <kbd>M</kbd> answer · <kbd>Enter</kbd> next · <kbd>Backspace</kbd> back</p>
+        <p class="keys"><kbd>C</kbd> call · <kbd>1</kbd> yes · <kbd>2</kbd> no · <kbd>3</kbd> maybe · <kbd>Enter</kbd> next · <kbd>Space</kbd> back · <kbd>←</kbd> <kbd>→</kbd> lead</p>
       </div>
     </div>
 
     <aside class="side">
-      <section class="panel" id="sheet-tools" hidden></section>
       <section class="panel obj" id="obj-section">
         <h2>Pushback: tap what they said</h2>
         <div class="chips" id="chips-push"></div>
         <h2>Worries and questions</h2>
         <div class="chips" id="chips-worry"></div>
+      </section>
+
+      <section class="panel" id="sheet-side">
+        <h2>Lead sheet</h2>
+        <div id="sheet-load">
+          <div class="stackbtns">
+            <label class="plain filebtn" for="sheet-file">Load a lead sheet</label>
+            <input id="sheet-file" class="vh" type="file" accept=".xlsx,.xls,.csv">
+            <button class="plain" id="import-v1" type="button" hidden>Import my lead sheet from the old call guide</button>
+          </div>
+          <p class="hint">Excel or CSV with a name column and a phone column. Each call's result is written to that lead's row. The file stays in this browser.</p>
+        </div>
+        <div id="sheet-tools" hidden></div>
+      </section>
+
+      <section class="panel">
+        <label class="field"><span class="label">Your name, used in the script</span><input id="me-name" type="text" autocomplete="off" value="Pratik"></label>
       </section>
     </aside>
   </div>
@@ -416,7 +452,7 @@ const OBJECTIONS = [
 /*END*/
 
 const WORD = { yes: "Yes", no: "No", maybe: "Maybe", next: "Next" };
-const KEY = { yes: "Y", no: "N", maybe: "M", next: "Enter" };
+const KEY = { yes: "1", no: "2", maybe: "3", next: "Enter" };
 const LABEL = { open: "Right person", wrong_person: "Lead available", intro: "Has time", intro_maybe: "Okay with questions", frame: "Agreed to talk", ni_soft: "Gen-AI on radar", send_details: "Okay to check back", callback: "Gave callback time", q_work: "Working engineer", fresher: "Python good", q_python: "Comfortable with Python", python_no: "Will do pre-work", q_genai: "Tried Gen-AI", burned: "Past course was recorded", trust: "Open to hear more", q_scale: "Can answer scaling question", experienced: "Done it all in production", q_goal: "Wants Gen-AI role", goal_no: "Projects would help", goal_no2: "Okay to send details", pitch1: "Following the pitch", trust_brand: "Okay to continue", pitch2: "Projects interesting", pitch3: "Is what they want", diff: "Wants timings", pitch_no: "Worry answered", time: "Timings doable", time_no: "Recordings help", time_no2: "Can adjust", fee: "Fine with fee", fee_maybe: "Okay after refund", fee_no: "Would join if fee was no issue", fee_only: "Okay to wait on payment options", close: "Send link now", think: "Ready after worry", followup: "Follow-up agreed" };
 // Every script question that has a real choice, in script order. Each gets its own column in the Calls tab.
 const QUESTIONS = Object.keys(FLOW).filter((k) => LABEL[k]).map((k) => ({ key: k, label: LABEL[k] }));
@@ -588,54 +624,68 @@ async function downloadSheet() {
 
 function tool(id, text, fn, cls) { const b = el("button", cls || "plain", text); b.type = "button"; b.id = id; b.addEventListener("click", fn); return b; }
 
+// Phones and tablets get "Call on this device" (a tel: link); laptops call through the paired phone.
+const TOUCH = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+
 function renderSheet() {
-  const bar = $("sheet-bar"), side = $("sheet-tools");
-  $("sheet-empty").hidden = !!sheet; bar.hidden = !sheet; side.hidden = !sheet;
-  bar.textContent = ""; side.textContent = "";
+  const bar = $("sheet-bar"), tools = $("sheet-tools");
+  $("sheet-empty").hidden = !!sheet; bar.hidden = !sheet;
+  $("sheet-load").hidden = !!sheet; tools.hidden = !sheet;
+  bar.textContent = ""; tools.textContent = "";
   syncImportButton();
   if (!sheet) return;
   const r = sheet.rows[sheet.idx], c = sheet.cols, n = sheet.rows.length, done = calledCount(sheet);
 
-  // Main column: the lead on screen, how to call them, and moving between leads.
-  const top = el("div", "leadtop");
-  top.appendChild(el("h2", "", "Lead " + (sheet.idx + 1) + " of " + n));
-  const nav = el("div", "leadnav");
-  const prev = tool("lead-prev", "Previous", () => loadLead(sheet.idx - 1)); prev.disabled = sheet.idx === 0; nav.appendChild(prev);
-  const next = tool("lead-next", "Skip", () => loadLead(sheet.idx + 1)); next.disabled = sheet.idx >= n - 1; nav.appendChild(next);
-  top.appendChild(nav);
-  bar.appendChild(top);
-  const row = el("div", "leadrow");
-  row.appendChild(el("strong", "", leadName() || "No name in this row"));
+  // Top bar: previous / the lead on screen / next, then how to call them.
+  const arrow = (id, text, label, to, off) => {
+    const b = tool(id, text, () => loadLead(to), "plain arrow");
+    b.setAttribute("aria-label", label); b.title = label; b.disabled = off;
+    return b;
+  };
+  bar.appendChild(arrow("lead-prev", "‹", "Previous lead (← key)", sheet.idx - 1, sheet.idx === 0));
+  const who = el("div", "who");
+  who.appendChild(el("span", "label", "Lead " + (sheet.idx + 1) + " of " + n));
+  const name = leadName();
+  who.appendChild(el("strong", "", name || "No name in this row"));
+  const sub = el("div", "whosub");
   const phone = String(r[c.phone]).trim();
-  if (phone) {
-    const num = el("span", "phone", phone); row.appendChild(num);
-    const cp = tool("copy-phone", "Copy number", () => copyText(phone, cp, num, "Copy number")); row.appendChild(cp);
-    const a = el("a", "plain", "Call on this device"); a.href = "tel:" + phone.replace(/[^\d+]/g, ""); a.id = "call-link"; row.appendChild(a);
-    if (PhoneLink.isPaired()) {
-      const cb = tool("call-laptop", "Call from laptop", callFromLaptop, "primary");
-      cb.disabled = !(linkHealth === "ok" || linkHealth === "checking");
-      if (cb.disabled) cb.title = "The phone is not reachable. See the message above.";
-      row.appendChild(cb);
-    }
-  } else row.appendChild(el("span", "hint", "No number in this row"));
-  bar.appendChild(row);
+  sub.appendChild(el("span", "phone", phone || "no number"));
   const out = String(r[c.outcome]).trim();
-  bar.appendChild(el("p", "hint", out ? "Already called: " + out + (r[c.at] ? ", " + r[c.at] : "") + ". Calling again replaces that result." : "Not called yet."));
+  sub.appendChild(el("span", "whostate" + (out ? " done" : ""), out ? "Called: " + out : "Not called yet"));
+  who.appendChild(sub);
+  bar.appendChild(who);
+  const nx = arrow("lead-next", "›", "Next lead (→ key)", sheet.idx + 1, sheet.idx >= n - 1);
+  nx.classList.add("next");
+  bar.appendChild(nx);
 
-  // Side column: the sheet as a whole.
-  side.appendChild(el("h2", "", "Lead sheet"));
-  side.appendChild(el("p", "fname", sheet.fileName));
+  const calls = el("div", "calls");
+  if (phone && TOUCH) {
+    const a = el("a", PhoneLink.isPaired() ? "plain" : "primary", "Call on this device");
+    a.href = "tel:" + phone.replace(/[^\d+]/g, ""); a.id = "call-link"; calls.appendChild(a);
+  }
+  if (phone && PhoneLink.isPaired()) {
+    const first = name.split(/\s+/)[0];
+    const cb = tool("call-laptop", TOUCH ? "Call via phone link" : (first ? "Call " + first : "Call"), callFromLaptop, "primary");
+    cb.disabled = !(linkHealth === "ok" || linkHealth === "checking");
+    cb.title = cb.disabled ? "The phone is not reachable. See the message below." : "Dial this lead on your paired phone (C)";
+    if (!TOUCH) cb.appendChild(el("kbd", "btnkey", "C"));
+    calls.appendChild(cb);
+  }
+  if (calls.childNodes.length) bar.appendChild(calls);
+
+  // Side column, at the bottom: the sheet as a whole.
+  tools.appendChild(el("p", "fname", sheet.fileName));
   const meter = el("div", "progress"); const fill = el("span"); fill.style.width = (n ? Math.round(done / n * 100) : 0) + "%"; meter.appendChild(fill);
-  side.appendChild(meter);
-  side.appendChild(el("p", "hint", done + " of " + n + " leads called"));
-  const tools = el("div", "stackbtns");
-  tools.appendChild(tool("sheet-save", "Download results (.xlsx)", downloadSheet, "primary"));
+  tools.appendChild(meter);
+  tools.appendChild(el("p", "hint", done + " of " + n + " leads called"));
+  const btns = el("div", "stackbtns");
+  btns.appendChild(tool("sheet-save", "Download results (.xlsx)", downloadSheet, "primary"));
   const rm = tool("sheet-remove", "Remove sheet", () => {
     if (rm.dataset.sure) { sheet = null; persist(); note("Sheet removed from this browser."); $("lead-name").value = ""; resetCall(); render(); }
     else { rm.dataset.sure = "1"; rm.textContent = "Tap again to remove"; }
   });
-  tools.appendChild(rm);
-  side.appendChild(tools);
+  btns.appendChild(rm);
+  tools.appendChild(btns);
 }
 
 /* ---- Calls from the laptop, through the paired phone ---- */
@@ -1056,10 +1106,23 @@ document.addEventListener("keydown", (ev) => {
   const tag = ev.target.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA" || ev.metaKey || ev.ctrlKey || ev.altKey) return;
   const k = ev.key.toLowerCase();
-  const map = { y: "yes", n: "no", m: "maybe" };
+  const map = { "1": "yes", "2": "no", "3": "maybe" };
+  if ((ev.key === "ArrowLeft" || ev.key === "ArrowRight") && sheet) {
+    const live = callView && (callView.phase === "REQUESTED" || callView.phase === "OFFHOOK");
+    const midScript = state.history.length > 0 && !FLOW[state.node].end;
+    if (live || midScript) { note("Finish or restart this call before moving to another lead."); return; }
+    const to = sheet.idx + (ev.key === "ArrowLeft" ? -1 : 1);
+    if (to >= 0 && to < sheet.rows.length) { ev.preventDefault(); note(""); loadLead(to); }
+    return;
+  }
   if (map[k]) { const b = $("ans-" + map[k]); if (b) { ev.preventDefault(); b.click(); } }
   else if (k === "enter" && tag !== "BUTTON" && tag !== "A") { const b = $("ans-next"); if (b) { ev.preventDefault(); b.click(); } }
-  else if (k === "backspace") { ev.preventDefault(); back(); }
+  else if (k === " " || k === "backspace") { ev.preventDefault(); back(); }   // Space (or Backspace): back one step
+  else if (k === "c") {
+    const b = $("call-laptop");
+    if (b && !b.disabled) { ev.preventDefault(); b.click(); }
+    else if (b) note("The phone is not reachable, so the call cannot start. See the message above.");
+  }
 });
 
 render();
