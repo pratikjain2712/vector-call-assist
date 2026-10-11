@@ -160,7 +160,10 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
 /* Wide screens: the call on the left, objections beside it. Narrower: objections under the call. */
 .work, .workmain { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 @media (min-width: 1100px) {
-  .work { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); align-items: start; gap: 20px; }
+  .work { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); grid-template-rows: auto 1fr; align-items: start; gap: 16px 20px; }
+  .work .workmain { grid-column: 1; grid-row: 1; }
+  .work .objcard { grid-column: 2; grid-row: 1 / span 2; }
+  .work .sheetbar { grid-column: 1; grid-row: 2; }
   .work .objcard { grid-template-columns: minmax(0, 1fr); position: sticky; top: 16px; }
   .callcard .say p { font-size: 2rem; }
   .callcard .ans { padding: 18px 16px; }
@@ -174,13 +177,17 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
 .objcol h2, .sheetbar .label { margin: 0; font-family: var(--util); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
 .objcard .chips { gap: 6px; }
 .objcard .chip { font-size: 0.86rem; padding: 5px 11px; }
-.sheetbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 4px 4px 0; }
-.sheetrow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; flex: 1 1 520px; min-width: 0; }
-.sheetrow .hint { flex: 1 1 240px; }
-.sheetrow .progress { flex: 1 1 120px; max-width: 220px; }
-.sheetrow .fname { font-weight: 700; }
+.sheetbar { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+.sheetload { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.sheetload .hint { flex: 1 1 240px; }
+.sheettools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.sheetinfo { display: flex; flex-direction: column; gap: 6px; flex: 1 1 220px; min-width: 0; }
+.sheetinfo .top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.sheetinfo .fname { font-weight: 700; margin: 0; }
+.sheetinfo .progress { width: 100%; }
+.sheettools .actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .me { display: flex; align-items: center; gap: 8px; }
-.me input { font: inherit; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; width: 150px; }
+.me input { font: inherit; font-size: 0.92rem; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; width: 130px; }
 @media (max-width: 700px) { .objcard { grid-template-columns: minmax(0, 1fr); padding: 14px 16px; } }
 .progress { height: 6px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
 .progress > span { display: block; height: 100%; background: var(--accent); }
@@ -235,6 +242,7 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
   <header class="topbar">
     <div class="topbar-in">
       <h1 class="brand">Vector <span>call guide</span></h1>
+      <label class="me"><span class="label">You</span><input id="me-name" type="text" autocomplete="off" value="Pratik" title="Your name, used in the script"></label>
       <details class="pill" id="link-panel">
         <summary><span id="link-summary">Phone connected</span></summary>
         <div class="pill-menu">
@@ -284,18 +292,18 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
         <div class="chips" id="chips-worry"></div>
       </div>
     </section>
-    </div>
 
-    <footer class="sheetbar">
-      <div id="sheet-load" class="sheetrow">
+    <section class="sheetbar">
+      <div id="sheet-load" class="sheetload">
         <label class="plain filebtn" for="sheet-file">Load a lead sheet</label>
         <input id="sheet-file" class="vh" type="file" accept=".xlsx,.xls,.csv">
         <button class="plain" id="import-v1" type="button" hidden>Import my lead sheet from the old call guide</button>
         <span class="hint">Excel or CSV with a name and a phone column. Results are written to each lead's row; the file stays in this browser.</span>
       </div>
-      <div id="sheet-tools" class="sheetrow" hidden></div>
-      <label class="me"><span class="label">Your name</span><input id="me-name" type="text" autocomplete="off" value="Pratik"></label>
-    </footer>
+      <div id="sheet-tools" class="sheettools" hidden></div>
+    </section>
+    </div>
+
   </div>
 </div>
 
@@ -680,17 +688,23 @@ function renderSheet() {
   }
   if (calls.childNodes.length) bar.appendChild(calls);
 
-  // Bottom bar: the sheet as a whole.
-  tools.appendChild(el("span", "fname", sheet.fileName));
-  tools.appendChild(el("span", "hint", done + " of " + n + " called"));
+  // Sheet card: name, progress, and the download.
+  const info = el("div", "sheetinfo");
+  const top = el("div", "top");
+  top.appendChild(el("p", "fname", sheet.fileName));
+  top.appendChild(el("span", "hint", done + " of " + n + " called"));
+  info.appendChild(top);
   const meter = el("div", "progress"); const fill = el("span"); fill.style.width = (n ? Math.round(done / n * 100) : 0) + "%"; meter.appendChild(fill);
-  tools.appendChild(meter);
-  tools.appendChild(tool("sheet-save", "Download results (.xlsx)", downloadSheet, "primary"));
+  info.appendChild(meter);
+  tools.appendChild(info);
+  const actions = el("div", "actions");
+  actions.appendChild(tool("sheet-save", "Download results (.xlsx)", downloadSheet, "primary"));
   const rm = tool("sheet-remove", "Remove sheet", () => {
     if (rm.dataset.sure) { sheet = null; persist(); note("Sheet removed from this browser."); $("lead-name").value = ""; resetCall(); render(); }
     else { rm.dataset.sure = "1"; rm.textContent = "Tap again to remove"; }
   });
-  tools.appendChild(rm);
+  actions.appendChild(rm);
+  tools.appendChild(actions);
 }
 
 /* ---- Calls from the laptop, through the paired phone ---- */
