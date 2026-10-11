@@ -145,13 +145,27 @@ object LinkServer {
      */
     @Synchronized
     fun pairingQrPayload(c: Context): String {
+        turnOn(c)
+        val code = activeCode() ?: newPairingCode()
+        return JSONObject().put("vca", 2).put("host", host).put("port", PORT).put("code", code).toString()
+    }
+
+    /** Turns the link on without issuing a pairing code. Throws if there is no Wi-Fi address. */
+    @Synchronized
+    fun turnOn(c: Context) {
         prefs(c).edit().putBoolean(KEY_ENABLED, true).apply()
         watchNetworkLocked(c.applicationContext)
         refreshAddressLocked(c.applicationContext, force = true)   // starts the link, or moves it to the current address
         if (server == null) bindLocked(c.applicationContext)        // still off: throws "no Wi-Fi address"
-        val code = activeCode() ?: newPairingCode()
-        return JSONObject().put("vca", 2).put("host", host).put("port", PORT).put("code", code).toString()
     }
+
+    /** When the active pairing code stops working (ms since epoch), or 0 when there is none. */
+    @Synchronized
+    fun codeExpiresAt(): Long = if (activeCode() != null) pendingExpires else 0L
+
+    /** Time of the last successful pairing in this run, so the phone screen can switch to "connected". */
+    @Volatile var lastPairedAt = 0L
+        private set
 
     @Synchronized
     fun newPairingCode(): String {
@@ -351,6 +365,7 @@ object LinkServer {
                         LinkKeyStore.save(ctx, LinkCrypto.encKey(LinkCrypto.pairingKey(secret, nonce)))
                         pendingSecret = null
                         pendingDisplay = null
+                        lastPairedAt = System.currentTimeMillis()
                         EventLog.add(if (existed) "LINK_REPAIRED" else "LINK_PAIRED", null, "laptop paired")
                         "ok"
                     }
