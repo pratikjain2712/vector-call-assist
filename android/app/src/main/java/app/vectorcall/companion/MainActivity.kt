@@ -187,9 +187,9 @@ class MainActivity : Activity() {
         qrView.setImageBitmap(QrCode.bitmap(payload, 840))
         qrView.visibility = View.VISIBLE
         val j = JSONObject(payload)
-        manualView.text = "Can't scan? Enter by hand:
-Address  ${j.optString("host")}:${j.optInt("port")}
-Code     ${j.optString("code")}"
+        manualView.text = "Can't scan? Enter by hand:\n" +
+            "Address  ${j.optString("host")}:${j.optInt("port")}\n" +
+            "Code     ${j.optString("code")}"
         manualView.visibility = View.VISIBLE
         refresh()
     }
