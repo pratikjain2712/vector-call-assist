@@ -26,12 +26,26 @@ android {
         }
     }
 
+    // Release builds are signed with the institute's own key, supplied through environment
+    // variables (set from GitHub secrets in CI). The key never lives in the repo.
+    signingConfigs {
+        create("release") {
+            System.getenv("VECTOR_KEYSTORE_PATH")?.let { path ->
+                storeFile = file(path)
+                storePassword = System.getenv("VECTOR_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("VECTOR_KEY_ALIAS")
+                keyPassword = System.getenv("VECTOR_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         getByName("debug") {
             signingConfig = signingConfigs.getByName("debug")
         }
         getByName("release") {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 

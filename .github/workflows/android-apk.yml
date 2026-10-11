@@ -1,13 +1,10 @@
-name: Android debug APK
+name: Android release APK
 
 on:
   push:
     paths:
       - "android/**"
       - ".github/workflows/android-apk.yml"
-  pull_request:
-    paths:
-      - "android/**"
   workflow_dispatch:
 
 permissions:
@@ -29,18 +26,33 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Build debug APK
+      - name: Decode the release keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::Set the ANDROID_KEYSTORE_B64 secret before building a release."
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
+          echo "VECTOR_KEYSTORE_PATH=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+
+      - name: Build signed release APK
+        env:
+          VECTOR_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          VECTOR_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          VECTOR_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon assembleDebug
+          ./gradlew --no-daemon assembleRelease
 
       - name: Name the APK
         run: |
           mkdir -p out
-          cp app/build/outputs/apk/debug/app-debug.apk "out/vector-companion-${GITHUB_SHA::7}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "out/vector-companion-${GITHUB_SHA::7}.apk"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: vector-companion-debug-apk
+          name: vector-companion-release-apk
           path: android/out/*.apk
           retention-days: 30

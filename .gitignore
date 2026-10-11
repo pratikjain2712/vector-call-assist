@@ -7,3 +7,6 @@ local.properties
 captures/
 .externalNativeBuild/
 .cxx/
+
+# Local Claude tooling, not part of the app
+.claude/
