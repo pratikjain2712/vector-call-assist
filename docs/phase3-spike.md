@@ -71,7 +71,7 @@ Fixes after the test: Stop link no longer logs when already stopped, New code do
 - **Brute-force risk:** a 6-digit code sent in clear text on the Wi-Fi can be recovered offline by someone who captures the `/pair` exchange, within the 2-minute window. Production should pair with a 128-bit secret (for example in a QR code) instead.
 - **Per-call notification:** the plan requires a notification for every laptop-initiated call. Not yet implemented.
 - **Server lifetime:** runs only while the app is open. Production needs the foreground service (`connectedDevice`) to keep it alive with the screen off.
-- **Origin allowlist:** includes `http://localhost:8000` for testing. Remove before release.
+- **Origin allowlist:** includes `http://localhost:8000` and `http://127.0.0.1:8000` for testing. Remove before release.
 - **Local Network Access:** Firefox needed no prompt. Chrome's prompt is expected but not yet observed, and Edge is unverified.
 - **No WebSockets:** events are fetched on demand, not pushed.
 

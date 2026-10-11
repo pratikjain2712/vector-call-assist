@@ -45,8 +45,13 @@ import java.util.concurrent.TimeUnit
 object LinkServer {
     const val PORT = 8765
 
-    // The only origin allowed to call the phone. Test from the GitHub Pages address.
-    private const val ALLOWED_ORIGIN = "https://pratikjain2712.github.io"
+    // Origins allowed to call the phone. The laptop test copy runs at http://localhost:8000
+    // (plain http from a secure localhost origin avoids the browser mixed-content block).
+    private val ALLOWED_ORIGINS = setOf(
+        "https://pratikjain2712.github.io",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    )
 
     private const val PREFS = "vector_link"
     private const val KEY_ENABLED = "link_enabled"
@@ -205,7 +210,7 @@ object LinkServer {
             val i = line.indexOf(':')
             if (i > 0) headers[line.substring(0, i).trim().lowercase()] = line.substring(i + 1).trim()
         }
-        val origin = headers["origin"]?.takeIf { it == ALLOWED_ORIGIN }
+        val origin = headers["origin"]?.takeIf { it in ALLOWED_ORIGINS }
         val reply = Reply(out, origin)
         if (parts.size < 2) return reply.send(400, "text/plain", "bad request")
         val method = parts[0]
