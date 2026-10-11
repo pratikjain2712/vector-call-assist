@@ -1,5 +1,8 @@
 package app.vectorcall.companion
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
@@ -14,6 +17,7 @@ import java.net.InetSocketAddress
 import java.net.NetworkInterface
 import java.net.ServerSocket
 import java.net.Socket
+import java.security.MessageDigest
 import java.util.Collections
 import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
@@ -22,90 +26,114 @@ import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
 
 /**
- * Tiny HTTP server on the phone (Phase 3 spike). Plain HTTP on the Wi-Fi, no library.
- * Bodies are encrypted with LinkCrypto, so the network never sees numbers or events in clear text.
+ * Small HTTP server on the phone for the Vector website. Plain HTTP on the Wi-Fi, no library.
+ * Bodies are encrypted (LinkCrypto), so the network sees no numbers or events in clear text.
+ * It keeps running with the monitor service, so it survives the screen being off or a reboot.
  *
- *   POST /pair  {"code":"123456","nonce":"<b64>"}      one-time code, valid 2 minutes, 5 tries
- *   POST /api   encrypted {"op":"ping"}                phone is alive and paired
- *                         {"op":"events","after":N}    event log entries with seq > N
- *                         {"op":"dial","number":"+91…"} places a call, same rules as the Call button
+ *   POST /pair  {"nonce":"<b64>","proof":"<b64>"}     one pairing secret, valid 2 minutes, 5 tries
+ *   POST /api   encrypted:
+ *       {"op":"ping"}
+ *       {"op":"dial","number":"+91…"}                 same rules as the Call button; shows a notification
+ *       {"op":"hangup"}                               ends the current call
+ *       {"op":"status","session":"<id>"}              phase and wall-clock times, for a live timer
+ *       {"op":"result","session":"<id>"}              connected time from the call log, when available
+ *       {"op":"events","after":N}                     event log entries with seq > N
  *
- * SPIKE LIMITS (see docs/phase3-spike.md before production):
- *  - the pairing key is stored in plain SharedPreferences; production must use the Android Keystore
- *  - a 6-digit code can be brute-forced offline by someone who captures the /pair exchange
- *  - no notification is shown per laptop-initiated call yet
- *  - the server only runs while this app is running in the foreground
+ * LIMITS STILL OPEN (see docs/phase3-spike.md): the server runs only while the monitor service runs,
+ * and the call-log result needs READ_CALL_LOG, which is opt-in.
  */
 object LinkServer {
     const val PORT = 8765
 
-    // Origins allowed to call the phone. localhost is for testing from the laptop; remove before release.
-    private val ALLOWED_ORIGINS = setOf("https://pratikjain2712.github.io", "http://localhost:8000")
+    // The only origin allowed to call the phone. Test from the GitHub Pages address.
+    private const val ALLOWED_ORIGIN = "https://pratikjain2712.github.io"
 
     private const val PREFS = "vector_link"
-    private const val KEY_ENC = "enc_key"          // SPIKE ONLY: plain prefs
+    private const val KEY_ENABLED = "link_enabled"
     private const val CODE_TTL_MS = 120_000L
     private const val MAX_TRIES = 5
     private const val SKEW_MS = 60_000L
     private const val DIAL_GAP_MS = 5_000L
     private const val MAX_BODY = 16_384
     private const val JSON = "application/json"
+    private const val NOTIFY_CHANNEL = "vector_link_calls"
+    private const val NOTIFY_ID = 4201
 
     @Volatile private var server: ServerSocket? = null
     private val pool = Executors.newCachedThreadPool()
     private val main = Handler(Looper.getMainLooper())
     private val seenNonces = ConcurrentHashMap<String, Long>()
 
-    // Pairing state, in memory only. A code lives for 2 minutes anyway.
-    private var pendingCode: String? = null
+    // Pairing state, in memory only.
+    private var pendingSecret: String? = null     // normalised, 16 characters
+    private var pendingDisplay: String? = null    // XXXX-XXXX-XXXX-XXXX
     private var pendingExpires = 0L
     private var tries = 0
     private var lastDialMs = 0L
 
     fun isRunning() = server != null
 
-    fun isPaired(c: Context) = prefs(c).contains(KEY_ENC)
+    fun isPaired(c: Context) = LinkKeyStore.isSaved(c)
+
+    fun enabled(c: Context) = prefs(c).getBoolean(KEY_ENABLED, false)
 
     private fun prefs(c: Context) = c.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    /** Starts the listener if needed and issues a pairing code. Throws if the port is unavailable. */
+    /** Turns the link on: starts listening and issues a pairing secret. Throws if the port is unavailable. */
     @Synchronized
     fun start(c: Context): String {
-        val ctx = c.applicationContext
-        if (server == null) {
-            val s = ServerSocket()
-            s.reuseAddress = true
-            s.bind(InetSocketAddress(PORT))
-            server = s
-            Thread({ acceptLoop(s, ctx) }, "vca-link").start()
-            EventLog.add("LINK_STARTED", null, "port $PORT")
-        }
+        bindLocked(c.applicationContext)
+        prefs(c).edit().putBoolean(KEY_ENABLED, true).apply()
         return newPairingCode()
     }
 
+    /** Called when the monitor service starts: resumes listening if the link was on before. */
     @Synchronized
-    fun stop() {
+    fun listen(c: Context) {
+        if (!enabled(c)) return
+        try {
+            bindLocked(c.applicationContext)
+        } catch (e: Exception) {
+            EventLog.add("LINK_RESUME_FAILED", null, "${e.javaClass.simpleName}: ${e.message?.take(80)}")
+        }
+    }
+
+    @Synchronized
+    fun stop(c: Context) {
+        prefs(c).edit().putBoolean(KEY_ENABLED, false).apply()
         val s = server ?: return   // already stopped: nothing to close or log
         s.close()
         server = null
-        pendingCode = null
+        pendingSecret = null
+        pendingDisplay = null
         EventLog.add("LINK_STOPPED")
+    }
+
+    private fun bindLocked(ctx: Context) {
+        if (server != null) return
+        val s = ServerSocket()
+        s.reuseAddress = true
+        s.bind(InetSocketAddress(PORT))
+        server = s
+        Thread({ acceptLoop(s, ctx) }, "vca-link").start()
+        EventLog.add("LINK_STARTED", null, "port $PORT")
     }
 
     @Synchronized
     fun newPairingCode(): String {
-        val code = LinkCrypto.newCode()
-        pendingCode = code
+        val display = LinkCrypto.newSecret()
+        pendingSecret = LinkCrypto.normalizeSecret(display)
+        pendingDisplay = display
         pendingExpires = System.currentTimeMillis() + CODE_TTL_MS
         tries = 0
-        EventLog.add("LINK_PAIR_CODE", null, "new code issued, valid 2 min")   // the code itself is never logged
-        return code
+        EventLog.add("LINK_PAIR_CODE", null, "new pairing code issued, valid 2 min")   // the code is never logged
+        return display
     }
 
     /** The pairing code that can still be used, or null. */
     @Synchronized
     fun activeCode(): String? =
-        pendingCode?.takeIf { System.currentTimeMillis() <= pendingExpires && tries < MAX_TRIES }
+        if (pendingSecret != null && System.currentTimeMillis() <= pendingExpires && tries < MAX_TRIES) pendingDisplay else null
 
     fun lanAddresses(): List<String> = try {
         Collections.list(NetworkInterface.getNetworkInterfaces())
@@ -177,7 +205,7 @@ object LinkServer {
             val i = line.indexOf(':')
             if (i > 0) headers[line.substring(0, i).trim().lowercase()] = line.substring(i + 1).trim()
         }
-        val origin = headers["origin"]?.takeIf { it in ALLOWED_ORIGINS }
+        val origin = headers["origin"]?.takeIf { it == ALLOWED_ORIGIN }
         val reply = Reply(out, origin)
         if (parts.size < 2) return reply.send(400, "text/plain", "bad request")
         val method = parts[0]
@@ -207,25 +235,27 @@ object LinkServer {
     private fun pair(reply: Reply, body: String, ctx: Context) {
         val j = (try { JSONObject(body) } catch (e: Exception) { null })
             ?: return reply.send(400, JSON, errJson("bad request"))
-        val code = j.optString("code")
         val nonce = j.optString("nonce")
+        val proof = j.optString("proof")
 
         val result: String = synchronized(this) {
-            val expected = pendingCode
+            val secret = pendingSecret
             when {
-                expected == null || System.currentTimeMillis() > pendingExpires -> "code expired"
+                secret == null -> "code expired"
+                System.currentTimeMillis() > pendingExpires -> "code expired"
                 tries >= MAX_TRIES -> "too many attempts"
-                nonce.length !in 16..64 -> "bad request"
+                nonce.length !in 16..64 || proof.isEmpty() -> "bad request"
                 else -> {
                     tries++
-                    if (code != expected) {
-                        if (tries >= MAX_TRIES) pendingCode = null
+                    val given = try { LinkCrypto.unb64(proof) } catch (e: Exception) { ByteArray(0) }
+                    if (!MessageDigest.isEqual(LinkCrypto.proof(secret, nonce), given)) {
+                        if (tries >= MAX_TRIES) pendingSecret = null   // locked: a new code is needed
                         "wrong code"
                     } else {
-                        val existed = isPaired(ctx)
-                        val ek = LinkCrypto.encKey(LinkCrypto.pairingKey(code, nonce))
-                        prefs(ctx).edit().putString(KEY_ENC, LinkCrypto.b64(ek)).apply()
-                        pendingCode = null
+                        val existed = LinkKeyStore.isSaved(ctx)
+                        LinkKeyStore.save(ctx, LinkCrypto.encKey(LinkCrypto.pairingKey(secret, nonce)))
+                        pendingSecret = null
+                        pendingDisplay = null
                         EventLog.add(if (existed) "LINK_REPAIRED" else "LINK_PAIRED", null, "laptop paired")
                         "ok"
                     }
@@ -243,9 +273,7 @@ object LinkServer {
     // ---- /api ----------------------------------------------------------------------------
 
     private fun api(reply: Reply, body: String, headers: Map<String, String>, ctx: Context) {
-        val keyB64 = prefs(ctx).getString(KEY_ENC, null)
-            ?: return reply.send(401, JSON, errJson("not paired"))
-        val key = LinkCrypto.unb64(keyB64)
+        val key = LinkKeyStore.load(ctx) ?: return reply.send(401, JSON, errJson("not paired"))
 
         val ts = headers["x-vca-ts"]?.toLongOrNull()
         val nonce = headers["x-vca-nonce"] ?: ""
@@ -255,15 +283,12 @@ object LinkServer {
         if (nonce.length !in 16..64) return reply.send(401, JSON, errJson("bad nonce"))
 
         val aad = "POST\n/api\n$ts\n$nonce"
-        val plain = LinkCrypto.open(key, body, aad)
-            ?: return reply.send(401, JSON, errJson("authentication failed"))
+        val plain = LinkCrypto.open(key, body, aad) ?: return reply.send(401, JSON, errJson("authentication failed"))
 
-        // Replay check only after the message has authenticated, so forged requests cannot fill the cache.
+        // Replay check only after the message authenticates, so forged requests cannot fill the cache.
         val now = System.currentTimeMillis()
         seenNonces.values.removeIf { now - it > 2 * SKEW_MS }
-        if (seenNonces.putIfAbsent(nonce, ts) != null) {
-            return reply.send(401, JSON, errJson("replayed request"))
-        }
+        if (seenNonces.putIfAbsent(nonce, ts) != null) return reply.send(401, JSON, errJson("replayed request"))
 
         val req = (try { JSONObject(String(plain, Charsets.UTF_8)) } catch (e: Exception) { null })
             ?: return reply.send(400, JSON, errJson("bad request"))
@@ -273,19 +298,21 @@ object LinkServer {
         } catch (e: Exception) {
             JSONObject().put("ok", false).put("error", "phone error: ${e.javaClass.simpleName}")
         }
-        val sealed = LinkCrypto.seal(key, answer.toString().toByteArray(Charsets.UTF_8), "RESP\n$nonce")
-        reply.send(200, "text/plain", sealed)
+        reply.send(200, "text/plain", LinkCrypto.seal(key, answer.toString().toByteArray(Charsets.UTF_8), "RESP\n$nonce"))
     }
 
     private fun route(req: JSONObject, ctx: Context): JSONObject = when (req.optString("op")) {
         "ping" -> JSONObject().put("ok", true).put("op", "ping").put("phoneTime", EventLog.nowIso())
+        "dial" -> dial(req.optString("number"), ctx)
+        "hangup" -> hangup(ctx)
+        "status" -> status(req.optString("session"))
+        "result" -> result(req.optString("session"), ctx)
         "events" -> {
             val after = req.optLong("after", 0L)
             val arr = JSONArray()
             EventLog.snapshot().filter { it.seq > after }.takeLast(200).forEach { arr.put(it.toJson()) }
             JSONObject().put("ok", true).put("events", arr)
         }
-        "dial" -> dial(req.optString("number"), ctx)
         else -> JSONObject().put("ok", false).put("error", "unknown op")
     }
 
@@ -306,7 +333,53 @@ object LinkServer {
             return fail(error)
         }
         EventLog.add("PLACE_CALL_OK", session.id, "requested from laptop link")
-        return JSONObject().put("ok", true).put("session", session.id)
+        showDialNotification(ctx, number)
+        return JSONObject().put("ok", true).put("session", session.id).put("dialWallMs", session.dialWallMs)
+    }
+
+    private fun hangup(ctx: Context): JSONObject {
+        val s = Sessions.current?.takeIf { it.open }
+        val error = Dialer.end(ctx)
+        EventLog.add(if (error == null) "HANGUP_SENT" else "HANGUP_FAILED", s?.id, error ?: "from laptop")
+        return JSONObject().put("ok", error == null).put("error", error ?: "")
+    }
+
+    private fun status(id: String): JSONObject {
+        val s = Sessions.find(id) ?: return JSONObject().put("ok", true).put("found", false)
+        return JSONObject().put("ok", true).put("found", true).put("phase", s.phase.name)
+            .put("dialWallMs", s.dialWallMs).put("offhookWallMs", s.offhookWallMs)
+            .put("endWallMs", s.endWallMs).put("nowWallMs", System.currentTimeMillis())
+    }
+
+    private fun result(id: String, ctx: Context): JSONObject {
+        val s = Sessions.find(id) ?: return JSONObject().put("ok", false).put("error", "unknown session")
+        val base = JSONObject().put("ok", true).put("phase", s.phase.name)
+            .put("dialWallMs", s.dialWallMs).put("offhookWallMs", s.offhookWallMs).put("endWallMs", s.endWallMs)
+        if (s.phase == Sessions.Phase.FAILED) return base.put("failed", true).put("pending", false)
+        if (s.phase != Sessions.Phase.ENDED) return base.put("pending", true).put("reason", "call still in progress")
+        if (!Dialer.has(ctx, android.Manifest.permission.READ_CALL_LOG)) {
+            return base.put("pending", false).put("connectedSeconds", JSONObject.NULL)
+                .put("answered", JSONObject.NULL).put("reason", "READ_CALL_LOG not granted on the phone")
+        }
+        val hit = CallLogProbe.lookup(ctx, s) ?: return base.put("pending", true).put("reason", "call log not updated yet")
+        return base.put("pending", false).put("connectedSeconds", hit.connectedSeconds)
+            .put("answered", hit.connectedSeconds > 0).put("logStartMs", hit.logStartMs)
+    }
+
+    private fun showDialNotification(ctx: Context, number: String) {
+        val nm = ctx.getSystemService(NotificationManager::class.java) ?: return
+        if (!nm.areNotificationsEnabled()) {
+            EventLog.add("LINK_NOTIFY_SKIPPED", null, "notifications are off for Vector Companion")
+            return
+        }
+        nm.createNotificationChannel(NotificationChannel(NOTIFY_CHANNEL, "Calls from the laptop", NotificationManager.IMPORTANCE_DEFAULT))
+        val note: Notification = Notification.Builder(ctx, NOTIFY_CHANNEL)
+            .setSmallIcon(android.R.drawable.sym_action_call)
+            .setContentTitle("Calling from your laptop")
+            .setContentText("Vector is calling ${Phone.mask(number)}")
+            .setAutoCancel(true)
+            .build()
+        nm.notify(NOTIFY_ID, note)
     }
 
     /** Runs a block on the main thread, where EventLog and Sessions are safe to touch. */

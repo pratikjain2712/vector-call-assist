@@ -100,6 +100,12 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
 .msg { font-family: var(--read); font-size: 0.98rem; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 12px; margin: 0; }
 .outcome { font-family: var(--util); font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; }
 .outcome.good { color: var(--yes); } .outcome.mid { color: var(--maybe); } .outcome.bad { color: var(--no); }
+.link { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; margin: 12px 0; }
+.link summary { cursor: pointer; font-family: var(--util); font-size: 0.8rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.link > *:not(summary) { margin-top: 10px; }
+.link input { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; box-sizing: border-box; margin-top: 4px; }
+.callpanel { background: var(--surface); border: 2px solid var(--accent); border-radius: 10px; padding: 14px 16px; margin: 12px 0; display: flex; flex-direction: column; gap: 10px; }
+.callpanel p { margin: 0; }
 </style>
 
 </head>
@@ -115,6 +121,14 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
     <label><span class="label">Lead's name</span><input id="lead-name" type="text" autocomplete="off" placeholder="Type before you dial"></label>
   </div>
 
+  <details class="link" id="link-panel">
+    <summary><span id="link-summary">Phone: not paired</span></summary>
+    <p class="hint" id="link-status"></p>
+    <label><span class="label">Phone address (shown in the app)</span><input id="link-host" type="text" autocomplete="off" placeholder="192.168.1.20:8765"></label>
+    <label><span class="label">Pairing code (shown in the app)</span><input id="link-code" type="text" autocomplete="off" placeholder="XXXX-XXXX-XXXX-XXXX"></label>
+    <div class="tools"><button class="primary" id="link-pair" type="button">Pair with phone</button><button class="plain" id="link-forget" type="button" hidden>Forget phone</button></div>
+  </details>
+
   <section class="sheet" id="sheet-empty">
     <label class="plain filebtn" for="sheet-file">Load a lead sheet</label>
     <input id="sheet-file" class="vh" type="file" accept=".xlsx,.xls,.csv">
@@ -123,6 +137,7 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
   </section>
   <section class="card leadcard" id="sheet-bar" hidden></section>
   <p class="hint" id="sheet-msg" role="status"></p>
+  <section class="callpanel" id="call-panel" hidden></section>
 
   <ol class="rail" id="rail" aria-label="Call stages"></ol>
 
@@ -141,6 +156,8 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
   </section>
 </div>
 
+<script src="js/phone-link.js"></script>
+<script src="js/call-session.js"></script>
 <script>
 /*DATA*/
 const STAGES = ["Opening", "Discovery", "Pitch", "Timings", "Fee", "Close"];
@@ -305,7 +322,7 @@ const RESULT_KEYS = ["outcome", "at", "duration", "answers", "objections", "note
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
-const state = { node: "open", history: [], trail: [], objs: [], objection: null, started: null, elapsed: 0, timer: null };
+const state = { node: "open", history: [], trail: [], objs: [], objection: null, started: null, elapsed: 0, timer: null, callId: null };
 let sheet = null;
 
 /*SHEET*/
@@ -379,6 +396,7 @@ function go(to, pick) {
       const when = new Date().toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
       writeResult(sheet, state, FLOW[to].end.label, when); persist();
     }
+    finishRecord(FLOW[to].end.label);
   } else startClock();
   render();
 }
@@ -389,7 +407,7 @@ function back() {
   if (state.history.length) startClock();
   render();
 }
-function resetCall() { stopClock(); state.node = "open"; state.history = []; state.trail = []; state.objs = []; state.objection = null; state.elapsed = 0; tick(); }
+function resetCall() { stopClock(); state.callId = null; state.node = "open"; state.history = []; state.trail = []; state.objs = []; state.objection = null; state.elapsed = 0; tick(); }
 function restart() { resetCall(); if (!sheet) $("lead-name").value = ""; render(); }
 function loadLead(i) { sheet.idx = i; $("lead-name").value = leadName(); resetCall(); persist(); render(); window.scrollTo({ top: 0, behavior: "auto" }); }
 
@@ -400,15 +418,23 @@ function copyText(text, btn, target, idle) {
 }
 
 async function readSheet(file) {
-  if (typeof XLSX === "undefined") { note("The spreadsheet reader did not load. Check your internet connection and reload the page."); return; }
+  const isCsv = /\.csv$/i.test(file.name);
+  if (!isCsv && typeof XLSX === "undefined") { note("The spreadsheet reader did not load. Check your internet connection and reload the page."); return; }
   try {
-    const wb = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: "array", raw: true, cellDates: true });
-    const aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "", raw: true });
+    let aoa;
+    if (isCsv) aoa = parseCsv(await file.text());   // CSV stays text, so 09876543210 keeps its 0
+    else {
+      const wb = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: "array", raw: true, cellDates: true });
+      aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "", raw: true });
+    }
     const s = ingest(aoa, file.name);
     if (s.error) { note(s.error); return; }
+    let numeric = 0;
+    s.rows.forEach((r) => { const v = r[s.cols.phone]; if (typeof v === "number") { numeric++; r[s.cols.phone] = String(v); } });
     sheet = s;
     const done = calledCount(s);
-    note((s.guessed ? "No clear name or phone heading found, so this is a guess. " : "") + "Names from “" + s.header[s.cols.name] + "”, numbers from “" + s.header[s.cols.phone] + "”. " + s.rows.length + " leads loaded" + (done ? ", " + done + " already called." : "."));
+    note((s.guessed ? "No clear name or phone heading found, so this is a guess. " : "") + "Names from “" + s.header[s.cols.name] + "”, numbers from “" + s.header[s.cols.phone] + "”. " + s.rows.length + " leads loaded" + (done ? ", " + done + " already called." : ".") +
+      (numeric ? " " + numeric + " phone numbers were stored as numbers in the file, so a leading 0 may be missing. Check them before calling." : ""));
     loadLead(s.idx);
   } catch (e) { note("Could not read that file. Use an .xlsx or .csv file with a header row."); }
 }
@@ -447,7 +473,8 @@ function renderSheet() {
   if (phone) {
     const num = el("span", "phone", phone); row.appendChild(num);
     const cp = tool("copy-phone", "Copy number", () => copyText(phone, cp, num, "Copy number")); row.appendChild(cp);
-    const a = el("a", "plain", "Call"); a.href = "tel:" + phone.replace(/[^\d+]/g, ""); a.id = "call-link"; row.appendChild(a);
+    const a = el("a", "plain", "Call on this device"); a.href = "tel:" + phone.replace(/[^\d+]/g, ""); a.id = "call-link"; row.appendChild(a);
+    if (PhoneLink.isPaired()) row.appendChild(tool("call-laptop", "Call from laptop", callFromLaptop, "primary"));
   } else row.appendChild(el("span", "hint", "No number in this row"));
   bar.appendChild(row);
   const out = String(r[c.outcome]).trim();
@@ -456,12 +483,209 @@ function renderSheet() {
   const prev = tool("lead-prev", "Previous lead", () => loadLead(sheet.idx - 1)); prev.disabled = sheet.idx === 0; tools.appendChild(prev);
   const next = tool("lead-next", "Skip to next lead", () => loadLead(sheet.idx + 1)); next.disabled = sheet.idx >= n - 1; tools.appendChild(next);
   tools.appendChild(tool("sheet-save", "Download updated sheet", downloadSheet));
+  tools.appendChild(tool("calls-csv", "Export calls (CSV)", exportCalls));
   const rm = tool("sheet-remove", "Remove sheet", () => {
     if (rm.dataset.sure) { sheet = null; persist(); note("Sheet removed from this browser."); $("lead-name").value = ""; resetCall(); render(); }
     else { rm.dataset.sure = "1"; rm.textContent = "Tap again to remove"; }
   });
   tools.appendChild(rm);
   bar.appendChild(tools);
+}
+
+/* ---- Calls from the laptop, through the paired phone ---- */
+let callView = null;      // { sessionId, phase, offhookWallMs, endWallMs, final, summary }
+let watchToken = 0;
+const CALL_FINAL = { answered: 1, not_answered: 1, failed: 1, ended_unknown: 1 };
+
+function phaseLabel(p) {
+  return { REQUESTED: "dialling", OFFHOOK: "line in use", ENDED: "ended", FAILED: "not connected" }[p] || p;
+}
+function fmtSecs(s) { return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); }
+
+function renderCallPanel() {
+  const box = $("call-panel");
+  if (!callView) { box.hidden = true; return; }
+  box.hidden = false; box.textContent = "";
+  const live = callView.phase === "REQUESTED" || callView.phase === "OFFHOOK";
+  box.appendChild(el("span", "label", live ? "On the phone" : "Last laptop call"));
+  let line;
+  if (callView.phase === "OFFHOOK" && callView.offhookWallMs) {
+    const secs = Math.max(0, Math.floor((Date.now() - callView.offhookWallMs) / 1000));
+    line = "Line in use for " + fmtSecs(secs) + ". This is not the answer time: the phone's call log gives that after the call.";
+  } else if (live) line = "Dialling…";
+  else line = callView.summary || "Call finished, checking the call log…";
+  box.appendChild(el("p", "heard", line));
+  if (live) box.appendChild(tool("call-hangup", "Hang up on the phone", hangupCall, "plain"));
+}
+
+function setCallSummary(sessionId, text) {
+  if (callView && callView.sessionId === sessionId) { callView.final = true; callView.summary = text; }
+  renderCallPanel();
+}
+
+function finishCall(sessionId, patch, summary) {
+  CallRecords.update(sessionId, patch);
+  setCallSummary(sessionId, summary);
+  note(summary);
+}
+
+async function callFromLaptop() {
+  if (!sheet) return;
+  if (callView && (callView.phase === "REQUESTED" || callView.phase === "OFFHOOK")) { note("A call is already in progress."); return; }
+  const r = sheet.rows[sheet.idx];
+  const raw = String(r[sheet.cols.phone]).trim();
+  const number = PhoneLink.toE164(raw);
+  if (!number) { note("This number cannot be dialled as it is. Check it, or add the country code, for example +91."); return; }
+  note("Dialling " + number + " through the phone…");
+  let res;
+  try { res = await PhoneLink.request("dial", { number: number }); }
+  catch (e) { note("Could not dial: " + e.message); return; }
+  if (!res.ok) { note("Could not dial: " + res.error); return; }
+  CallRecords.add({
+    sessionId: res.session, leadName: leadName(), phone: raw, phoneE164: number, rowIndex: sheet.idx,
+    dialWallMs: res.dialWallMs, offhookWallMs: 0, endWallMs: 0, connectedSeconds: null, answered: null,
+    detection: "", callStatus: "dialling", outcome: "", objections: "",
+    notes: String(r[sheet.cols.notes] || ""), saveStatus: "awaiting-outcome", updatedAt: Date.now(),
+  });
+  state.callId = res.session;
+  callView = { sessionId: res.session, phase: "REQUESTED", offhookWallMs: 0, endWallMs: 0, final: false, summary: "" };
+  renderCallPanel();
+  watchCall(res.session);
+}
+
+function watchCall(sessionId) {
+  const token = ++watchToken;
+  let fails = 0;
+  const step = async () => {
+    if (token !== watchToken) return;
+    try {
+      const st = await PhoneLink.request("status", { session: sessionId });
+      fails = 0;
+      if (!st.found) { finishCall(sessionId, { callStatus: "ended_unknown", detection: "approximate" }, "Call status is no longer on the phone; connected time unknown."); return; }
+      callView = { sessionId: sessionId, phase: st.phase, offhookWallMs: st.offhookWallMs, endWallMs: st.endWallMs, final: false, summary: "" };
+      CallRecords.update(sessionId, { offhookWallMs: st.offhookWallMs, endWallMs: st.endWallMs, callStatus: phaseLabel(st.phase) });
+      renderCallPanel();
+      if (st.phase === "ENDED" || st.phase === "FAILED") { readResult(sessionId, token, st.phase === "FAILED"); return; }
+    } catch (e) {
+      fails++;
+      if (fails >= 30) { finishCall(sessionId, { callStatus: "ended_unknown", detection: "approximate" }, "Lost contact with the phone. Connected time unknown."); return; }
+      note("Lost contact with the phone, retrying: " + e.message);
+    }
+    setTimeout(step, 1000);
+  };
+  step();
+}
+
+async function readResult(sessionId, token, failed) {
+  if (failed) {
+    finishCall(sessionId, { callStatus: "failed", answered: false, connectedSeconds: 0, detection: "phone" }, "The call did not start on the phone.");
+    return;
+  }
+  for (let i = 0; i < 12; i++) {
+    if (token !== watchToken) return;
+    try {
+      const r = await PhoneLink.request("result", { session: sessionId });
+      if (!r.pending) {
+        if (r.connectedSeconds == null) {
+          finishCall(sessionId, { callStatus: "ended_unknown", detection: "approximate" }, "Call ended. Connected time not available: " + (r.reason || "unknown") + ".");
+        } else if (r.answered) {
+          finishCall(sessionId, { connectedSeconds: r.connectedSeconds, answered: true, detection: "call-log", callStatus: "answered" },
+            "Answered. Connected for " + r.connectedSeconds + " s (from the phone's call log).");
+        } else {
+          finishCall(sessionId, { connectedSeconds: 0, answered: false, detection: "call-log", callStatus: "not_answered" },
+            "Not answered (no connected time in the call log).");
+        }
+        return;
+      }
+    } catch (e) { note("Could not read the call log yet: " + e.message); }
+    await new Promise((res) => setTimeout(res, 2500));
+  }
+  finishCall(sessionId, { callStatus: "ended_unknown", detection: "approximate" }, "Call ended. The call log did not update in time; connected time unknown.");
+}
+
+async function hangupCall() {
+  try {
+    const r = await PhoneLink.request("hangup");
+    note(r.ok ? "Hang up sent to the phone." : "Hang up failed: " + r.error);
+  } catch (e) { note("Could not hang up: " + e.message); }
+}
+
+/* Called when an outcome button reaches an end card: the call record gets the same outcome. */
+function finishRecord(label) {
+  const id = state.callId;
+  if (!id || !sheet) return;
+  CallRecords.update(id, {
+    outcome: label, objections: state.objs.join("; "),
+    notes: String(sheet.rows[sheet.idx][sheet.cols.notes] || ""), saveStatus: "saved",
+  });
+}
+
+function exportCalls() {
+  const list = CallRecords.all();
+  if (!list.length) { note("No laptop calls recorded in this browser yet."); return; }
+  const base = sheet ? sheet.fileName.replace(/\.[^.]+$/, "") : "vector";
+  CallRecords.download(base + "-calls.csv", list);
+  note("Exported " + list.length + " call record(s) to CSV.");
+}
+
+function refreshLinkPanel() {
+  const paired = PhoneLink.isPaired();
+  if (paired && !$("link-host").value) $("link-host").value = PhoneLink.host();
+  $("link-summary").textContent = paired ? "Phone: paired with " + PhoneLink.host() : "Phone: not paired";
+  $("link-status").textContent = paired
+    ? "Calls from this page go through the phone. Each call is recorded below and in the call export."
+    : "Not paired. On the phone, open Vector Companion and tap Start link + code, then enter the address and code here.";
+  $("link-forget").hidden = !paired;
+}
+
+async function pairFromUi() {
+  $("link-pair").disabled = true;
+  try {
+    await PhoneLink.pair($("link-host").value, $("link-code").value);
+    $("link-code").value = "";
+    note("Paired with the phone.");
+  } catch (e) { note("Pairing failed: " + e.message); }
+  finally { $("link-pair").disabled = false; refreshLinkPanel(); render(); }
+}
+
+function forgetPhone() {
+  PhoneLink.forget();
+  callView = null;
+  refreshLinkPanel(); renderCallPanel(); render();
+  note("This browser is no longer paired with the phone.");
+}
+
+/* After a reload: pick up a laptop call that was still open for the lead on screen. */
+function resumeLastCall() {
+  if (!PhoneLink.isPaired() || !sheet) return;
+  const open = CallRecords.all()
+    .filter((r) => r.saveStatus === "awaiting-outcome" && !CALL_FINAL[r.callStatus] && r.rowIndex === sheet.idx)
+    .sort((a, b) => b.dialWallMs - a.dialWallMs)[0];
+  if (!open) return;
+  state.callId = open.sessionId;
+  callView = { sessionId: open.sessionId, phase: "REQUESTED", offhookWallMs: 0, endWallMs: 0, final: false, summary: "" };
+  renderCallPanel();
+  watchCall(open.sessionId);
+}
+
+function parseCsv(text) {
+  const src = text.replace(/^﻿/, "");
+  const rows = [];
+  let row = [], cell = "", quoted = false;
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (quoted) {
+      if (c === '"') { if (src[i + 1] === '"') { cell += '"'; i++; } else quoted = false; }
+      else cell += c;
+    } else if (c === '"') quoted = true;
+    else if (c === ",") { row.push(cell); cell = ""; }
+    else if (c === "\n" || c === "\r") {
+      if (c === "\r" && src[i + 1] === "\n") i++;
+      row.push(cell); rows.push(row); row = []; cell = "";
+    } else cell += c;
+  }
+  if (cell !== "" || row.length) { row.push(cell); rows.push(row); }
+  return rows;
 }
 
 function render() {
@@ -509,7 +733,7 @@ function render() {
       const r = sheet.rows[sheet.idx], col = sheet.cols.notes;
       const lab = el("label", "notes"); lab.appendChild(el("span", "label", "Notes for this lead, saved to the sheet"));
       const ta = el("textarea"); ta.id = "lead-notes"; ta.rows = 2; ta.value = String(r[col]); ta.placeholder = "Follow-up day and time, the reason they gave, anything to remember";
-      ta.addEventListener("input", () => { r[col] = ta.value; persist(); });
+      ta.addEventListener("input", () => { r[col] = ta.value; persist(); if (state.callId) CallRecords.update(state.callId, { notes: ta.value }); });
       lab.appendChild(ta); card.appendChild(lab);
       card.appendChild(el("p", "hint", "Result written to row " + (sheet.idx + 2) + " of the sheet. Download the updated sheet when you finish calling."));
       const ni = nextOpen(sheet);
@@ -573,6 +797,11 @@ document.addEventListener("keydown", (ev) => {
 });
 
 render();
+$("link-pair").addEventListener("click", pairFromUi);
+$("link-forget").addEventListener("click", forgetPhone);
+refreshLinkPanel();
+render();
+resumeLastCall();
 </script>
 </body>
 </html>
