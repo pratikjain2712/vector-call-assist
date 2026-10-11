@@ -169,8 +169,8 @@ class MainActivity : Activity() {
         ))
         root.addView(button("They answered — tap at the moment you hear them") { Sessions.markAnswered() })
 
-        // 4. Laptop link (Phase 3 spike)
-        root.addView(heading("4 · Laptop link (spike)"))
+        // 3. Laptop link (Phase 3 spike)
+        root.addView(heading("3 · Laptop link (spike)"))
         linkStatus = TextView(this).apply {
             textSize = 13f
             setTextIsSelectable(true)
@@ -178,12 +178,16 @@ class MainActivity : Activity() {
         root.addView(linkStatus)
         root.addView(row(
             button("Start link + code") { startLink() },
-            button("New code") { LinkServer.newPairingCode(); refreshLink() },
+            button("New code") {
+                // A code is useless while stopped (stop() clears it), so only issue one when running.
+                if (LinkServer.isRunning()) LinkServer.newPairingCode() else toast("Link is stopped. Tap Start link + code.")
+                refreshLink()
+            },
             button("Stop link") { LinkServer.stop(); refreshLink() },
         ))
 
-        // 3. Log
-        root.addView(heading("3 · Scenario and log"))
+        // 4. Log
+        root.addView(heading("4 · Scenario and log"))
         val scenario = Spinner(this).apply {
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, SCENARIOS)
         }

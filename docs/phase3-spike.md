@@ -7,7 +7,7 @@ Goal: prove that the website on your laptop can reach the Nothing Phone over Wi-
 |---|---|
 | `android/.../LinkCrypto.kt` | Pairing key, AES-GCM seal/open (framework `javax.crypto` only) |
 | `android/.../LinkServer.kt` | Plain-HTTP server on port **8765**, no library. Routes `/pair` and `/api`. |
-| `android/.../MainActivity.kt` | Section **4 · Laptop link**: Start link + code, New code, Stop link, status |
+| `android/.../MainActivity.kt` | Section **3 · Laptop link**: Start link + code, New code, Stop link, status |
 | `android/.../AndroidManifest.xml` | `INTERNET` permission added |
 | `web/link-spike.html` | Test page: Pair, Ping, Fetch events, Dial from phone |
 
@@ -50,11 +50,27 @@ Browser ↔ phone crypto was cross-checked (pairing key, request decrypt, tamper
 
 Please report: which step failed, the exact message on the page, and the phone log.
 
+## Test results (2026-10-11, Nothing Phone + Firefox on the laptop, page served from localhost:8000)
+| Check | Result |
+|---|---|
+| Pair with the right code | Pass (`LINK_PAIRED`) |
+| Ping | Pass, phone time returned |
+| Fetch events | Pass, 20 events |
+| Dial from laptop | Pass. `DIAL_REQUESTED` to `PLACE_CALL_OK` in 19 ms, OFFHOOK 0.3 s after the request, call lasted 22.6 s |
+| Number validation on the page | Pass, a number without country code is refused before sending |
+| Wrong code | Pass, `Pairing refused: wrong code` |
+| Ping after page reload | Pass, the key is kept in browser storage |
+| Ping with link stopped | Pass, network error as expected |
+
+Not yet tested: the attempt limit (`too many attempts`), and Chrome/Edge. Firefox reached the phone from a localhost page with no permission prompt, so Chrome's Local Network Access prompt is still unobserved.
+
+Fixes after the test: Stop link no longer logs when already stopped, New code does nothing while the link is stopped, the test page restores the paired address after a reload, and the app sections are numbered in order.
+
 ## Known gaps (must close before production)
 - **Pairing key storage:** plain SharedPreferences. Move to an Android Keystore-wrapped key.
 - **Brute-force risk:** a 6-digit code sent in clear text on the Wi-Fi can be recovered offline by someone who captures the `/pair` exchange, within the 2-minute window. Production should pair with a 128-bit secret (for example in a QR code) instead.
 - **Per-call notification:** the plan requires a notification for every laptop-initiated call. Not yet implemented.
 - **Server lifetime:** runs only while the app is open. Production needs the foreground service (`connectedDevice`) to keep it alive with the screen off.
 - **Origin allowlist:** includes `http://localhost:8000` for testing. Remove before release.
-- **Local Network Access:** Chrome's prompt is expected but has not been observed yet on your laptop. Edge's behaviour is unverified.
+- **Local Network Access:** Firefox needed no prompt. Chrome's prompt is expected but not yet observed, and Edge is unverified.
 - **No WebSockets:** events are fetched on demand, not pushed.

@@ -85,7 +85,8 @@ object LinkServer {
 
     @Synchronized
     fun stop() {
-        server?.close()
+        val s = server ?: return   // already stopped: nothing to close or log
+        s.close()
         server = null
         pendingCode = null
         EventLog.add("LINK_STOPPED")

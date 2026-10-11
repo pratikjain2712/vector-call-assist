@@ -125,6 +125,13 @@ function guarded(fn) {
   };
 }
 
+// After a reload, show the address this browser is paired with (the key stays in storage).
+const saved = loadStore();
+if (saved && saved.host) {
+  $('host').value = saved.host;
+  say('Paired with ' + saved.host + ' earlier. Ping should work; pair again only if it fails.');
+}
+
 $('pair').onclick = guarded(pair);
 $('ping').onclick = guarded(async () => say('Ping: ' + JSON.stringify(await call('ping'))));
 
