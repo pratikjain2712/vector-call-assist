@@ -116,14 +116,14 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
 .msgline:empty { display: none; }
 
 /* ---- Workspace, once paired ---- */
-.topbar { background: var(--bg); border-bottom: 1px solid var(--line); }
-.topbar-in { max-width: 1180px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+.topbar { background: var(--bg); border-bottom: 1px solid var(--line); position: relative; z-index: 20; }
+.topbar-in { max-width: 1200px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
 .brand { margin: 0 auto 0 0; font-size: 1.05rem; font-weight: 700; }
 .brand span { color: var(--muted); font-weight: 400; }
 
 /* The call card: who you are calling on top, what to say below. */
 .callcard { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; min-width: 0; }
-.callhead { display: flex; align-items: center; gap: 12px 16px; padding: 14px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.callhead { display: flex; align-items: center; gap: 12px 16px; padding: 12px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .callhead .grow { flex: 1 1 220px; }
 .callhead .filebtn { align-self: flex-end; }
 .arrow { width: 40px; height: 40px; padding: 0; border-radius: 50%; font-size: 1.4rem; line-height: 1; display: grid; place-items: center; flex: none; }
@@ -136,8 +136,8 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
 .calls .primary, .calls .plain { padding: 11px 20px; font-size: 1rem; text-decoration: none; display: inline-block; text-align: center; border-radius: 8px; }
 .lead .next { order: 4; margin-left: auto; }
 .callcard .callpanel { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--bg); }
-.railrow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 16px 20px 0; }
-.callcard #stage .card { border: 0; border-radius: 0; background: transparent; }
+.railrow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 14px 20px 0; }
+.callcard #stage .card { border: 0; border-radius: 0; background: transparent; padding: 16px 20px; gap: 12px; }
 @media (max-width: 540px) {
   .callhead.lead { display: grid; grid-template-columns: 40px minmax(0, 1fr) 40px; gap: 12px 10px; }
   .lead .who { align-items: center; text-align: center; }
@@ -153,36 +153,49 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
 .pill summary::-webkit-details-marker { display: none; }
 .pill summary::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--yes); }
 .pill[open] summary { border-color: var(--accent); }
-.pill-menu { position: absolute; right: 0; top: calc(100% + 6px); width: min(300px, calc(100vw - 32px)); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.12); }
-.shell { max-width: 1180px; margin: 0 auto; padding: 20px 16px 48px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
-.main, .side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-@media (min-width: 980px) {
-  .shell { grid-template-columns: minmax(0, 1fr) 380px; align-items: start; }
-  .side .chip { font-size: 0.84rem; padding: 5px 11px; }
-  .side .chips { gap: 6px; }
-  .side { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; padding-right: 2px; }
-}
+.pill-menu { position: absolute; z-index: 30; right: 0; top: calc(100% + 6px); width: min(300px, calc(100vw - 32px)); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.12); }
+.shell { max-width: 1200px; margin: 0 auto; padding: 20px 16px 32px; display: flex; flex-direction: column; gap: 16px; }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .panel h2 { margin: 0; font-family: var(--util); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+/* Wide screens: the call on the left, objections beside it. Narrower: objections under the call. */
+.work, .workmain { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+@media (min-width: 1100px) {
+  .work { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); align-items: start; gap: 20px; }
+  .work .objcard { grid-template-columns: minmax(0, 1fr); position: sticky; top: 16px; }
+  .callcard .say p { font-size: 2rem; }
+  .callcard .ans { padding: 18px 16px; }
+  .callcard .ans b { font-size: 1.45rem; }
+  .callcard .ans span { font-size: 1rem; }
+  .objcard .chip { font-size: 0.92rem; padding: 7px 13px; }
+}
+.cardfoot { display: flex; flex-wrap: wrap; gap: 10px; padding: 0 20px 18px; }
+.objcard { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); gap: 16px 28px; }
+.objcol { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.objcol h2, .sheetbar .label { margin: 0; font-family: var(--util); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.objcard .chips { gap: 6px; }
+.objcard .chip { font-size: 0.86rem; padding: 5px 11px; }
+.sheetbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 4px 4px 0; }
+.sheetrow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; flex: 1 1 520px; min-width: 0; }
+.sheetrow .hint { flex: 1 1 240px; }
+.sheetrow .progress { flex: 1 1 120px; max-width: 220px; }
+.sheetrow .fname { font-weight: 700; }
+.me { display: flex; align-items: center; gap: 8px; }
+.me input { font: inherit; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; width: 150px; }
+@media (max-width: 700px) { .objcard { grid-template-columns: minmax(0, 1fr); padding: 14px 16px; } }
 .progress { height: 6px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
 .progress > span { display: block; height: 100%; background: var(--accent); }
 .fname { font-size: 0.92rem; overflow-wrap: anywhere; margin: 0; }
 .stackbtns { display: flex; flex-direction: column; gap: 8px; }
-#sheet-load, #sheet-tools { display: flex; flex-direction: column; gap: 10px; }
 .stackbtns > * { text-align: center; }
 .callpanel { background: var(--surface); border: 2px solid var(--accent); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .callpanel p { margin: 0; }
-.scriptnav { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
 .pill[data-health="checking"] summary::before { background: var(--muted); }
 .pill[data-health="offline"] summary::before, .pill[data-health="unpaired"] summary::before, .pill[data-health="clock"] summary::before { background: var(--no); }
 .banner { border: 2px solid var(--no); background: var(--no-bg); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
 .banner h2 { margin: 0; font-size: 1.05rem; color: var(--no); }
 .banner p { margin: 0; }
 .banner a.plain, .banner .plain { background: var(--surface); }
-.keys { color: var(--muted); font-size: 0.85rem; margin: 0; }
 .btnkey { font-family: var(--util); font-size: 0.72rem; font-weight: 500; opacity: 0.8; margin-left: 10px; border: 1px solid currentColor; border-radius: 4px; padding: 0 5px; }
-@media (hover: none) and (pointer: coarse) { .keys { display: none; } }
-.keys kbd { font-family: var(--util); font-size: 0.75rem; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; background: var(--surface); }
 </style>
 
 </head>
@@ -217,7 +230,7 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
   </div>
 </section>
 
-<!-- Step 2: the calling workspace. One call card: who you are calling, then what to say. -->
+<!-- Step 2: the calling workspace, one column: the call card, the objections right under it, the sheet at the bottom. -->
 <div id="app" hidden>
   <header class="topbar">
     <div class="topbar-in">
@@ -233,62 +246,56 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
   </header>
 
   <div class="shell">
-    <div class="main">
-      <section class="banner" id="link-banner" role="alert" hidden>
-        <h2 id="link-banner-title"></h2>
-        <p id="link-banner-text"></p>
-        <div class="tools" id="link-banner-tools"></div>
-      </section>
+    <section class="banner" id="link-banner" role="alert" hidden>
+      <h2 id="link-banner-title"></h2>
+      <p id="link-banner-text"></p>
+      <div class="tools" id="link-banner-tools"></div>
+    </section>
 
-      <article class="callcard">
-        <div class="callhead lead" id="sheet-bar" hidden></div>
-        <div class="callhead" id="sheet-empty">
-          <label class="field grow"><span class="label">Calling</span><input id="lead-name" type="text" autocomplete="off" placeholder="Lead's name"></label>
-          <label class="plain filebtn" for="sheet-file">Load lead sheet</label>
-        </div>
-        <section class="callpanel" id="call-panel" hidden></section>
-        <div class="railrow">
-          <ol class="rail" id="rail" aria-label="Call stages"></ol>
-          <div class="clock" aria-label="Call time"><span id="clock">00:00</span><small>aim 10 to 12 min</small></div>
-        </div>
-        <main id="stage" aria-live="polite"></main>
-      </article>
-      <p class="hint" id="sheet-msg" role="status"></p>
-
-      <div class="scriptnav">
-        <div class="tools">
-          <button class="plain" id="back" type="button">Back one step</button>
-          <button class="plain" id="restart" type="button">Start a new call</button>
-        </div>
-        <p class="keys"><kbd>C</kbd> call · <kbd>1</kbd> yes · <kbd>2</kbd> no · <kbd>3</kbd> maybe · <kbd>Enter</kbd> next · <kbd>Space</kbd> back · <kbd>←</kbd> <kbd>→</kbd> lead</p>
+    <div class="work">
+    <div class="workmain">
+    <article class="callcard">
+      <div class="callhead lead" id="sheet-bar" hidden></div>
+      <div class="callhead" id="sheet-empty">
+        <label class="field grow"><span class="label">Calling</span><input id="lead-name" type="text" autocomplete="off" placeholder="Lead's name"></label>
+        <label class="plain filebtn" for="sheet-file">Load lead sheet</label>
       </div>
+      <section class="callpanel" id="call-panel" hidden></section>
+      <div class="railrow">
+        <ol class="rail" id="rail" aria-label="Call stages"></ol>
+        <div class="clock" aria-label="Call time"><span id="clock">00:00</span><small>aim 10 to 12 min</small></div>
+      </div>
+      <main id="stage" aria-live="polite"></main>
+      <div class="cardfoot">
+        <button class="plain" id="back" type="button" title="Back one step (Space)">‹ Back one step</button>
+        <button class="plain" id="restart" type="button">Start a new call</button>
+      </div>
+    </article>
+    <p class="hint" id="sheet-msg" role="status"></p>
     </div>
 
-    <aside class="side">
-      <section class="panel obj" id="obj-section">
+    <section class="objcard" id="obj-section">
+      <div class="objcol">
         <h2>Pushback: tap what they said</h2>
         <div class="chips" id="chips-push"></div>
+      </div>
+      <div class="objcol">
         <h2>Worries and questions</h2>
         <div class="chips" id="chips-worry"></div>
-      </section>
+      </div>
+    </section>
+    </div>
 
-      <section class="panel" id="sheet-side">
-        <h2>Lead sheet</h2>
-        <div id="sheet-load">
-          <div class="stackbtns">
-            <label class="plain filebtn" for="sheet-file">Load a lead sheet</label>
-            <input id="sheet-file" class="vh" type="file" accept=".xlsx,.xls,.csv">
-            <button class="plain" id="import-v1" type="button" hidden>Import my lead sheet from the old call guide</button>
-          </div>
-          <p class="hint">Excel or CSV with a name column and a phone column. Each call's result is written to that lead's row. The file stays in this browser.</p>
-        </div>
-        <div id="sheet-tools" hidden></div>
-      </section>
-
-      <section class="panel">
-        <label class="field"><span class="label">Your name, used in the script</span><input id="me-name" type="text" autocomplete="off" value="Pratik"></label>
-      </section>
-    </aside>
+    <footer class="sheetbar">
+      <div id="sheet-load" class="sheetrow">
+        <label class="plain filebtn" for="sheet-file">Load a lead sheet</label>
+        <input id="sheet-file" class="vh" type="file" accept=".xlsx,.xls,.csv">
+        <button class="plain" id="import-v1" type="button" hidden>Import my lead sheet from the old call guide</button>
+        <span class="hint">Excel or CSV with a name and a phone column. Results are written to each lead's row; the file stays in this browser.</span>
+      </div>
+      <div id="sheet-tools" class="sheetrow" hidden></div>
+      <label class="me"><span class="label">Your name</span><input id="me-name" type="text" autocomplete="off" value="Pratik"></label>
+    </footer>
   </div>
 </div>
 
@@ -673,19 +680,17 @@ function renderSheet() {
   }
   if (calls.childNodes.length) bar.appendChild(calls);
 
-  // Side column, at the bottom: the sheet as a whole.
-  tools.appendChild(el("p", "fname", sheet.fileName));
+  // Bottom bar: the sheet as a whole.
+  tools.appendChild(el("span", "fname", sheet.fileName));
+  tools.appendChild(el("span", "hint", done + " of " + n + " called"));
   const meter = el("div", "progress"); const fill = el("span"); fill.style.width = (n ? Math.round(done / n * 100) : 0) + "%"; meter.appendChild(fill);
   tools.appendChild(meter);
-  tools.appendChild(el("p", "hint", done + " of " + n + " leads called"));
-  const btns = el("div", "stackbtns");
-  btns.appendChild(tool("sheet-save", "Download results (.xlsx)", downloadSheet, "primary"));
+  tools.appendChild(tool("sheet-save", "Download results (.xlsx)", downloadSheet, "primary"));
   const rm = tool("sheet-remove", "Remove sheet", () => {
     if (rm.dataset.sure) { sheet = null; persist(); note("Sheet removed from this browser."); $("lead-name").value = ""; resetCall(); render(); }
     else { rm.dataset.sure = "1"; rm.textContent = "Tap again to remove"; }
   });
-  btns.appendChild(rm);
-  tools.appendChild(btns);
+  tools.appendChild(rm);
 }
 
 /* ---- Calls from the laptop, through the paired phone ---- */
@@ -1087,7 +1092,7 @@ $("sheet-file").addEventListener("change", (ev) => { const f = ev.target.files &
 try { const saved = localStorage.getItem("vca2-me"); if (saved) $("me-name").value = saved; } catch (e) {}
 try {
   const raw = localStorage.getItem("vca2-sheet");
-  if (raw) { const s = JSON.parse(raw); if (s && s.rows && s.cols && s.rows[s.idx]) { sheet = s; $("lead-name").value = leadName(); note("Picked up where you left off in " + s.fileName + "."); } }
+  if (raw) { const s = JSON.parse(raw); if (s && s.rows && s.cols && s.rows[s.idx]) { sheet = s; $("lead-name").value = leadName(); } }
 } catch (e) { sheet = null; }
 
 /* One-time copy from v1 (same github.io origin, so same localStorage). v1's keys are only read, never changed. */
