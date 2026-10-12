@@ -32,7 +32,7 @@
   (function splitTitle() {
     var h = $('heroTitle');
     if (!h || reduce) return;
-    var parts = [{ t: 'Every call,' }, { t: 'on script', hot: true }, { t: 'and counted.' }];
+    var parts = [{ t: 'Every call on script.' }, { t: 'Every result counted.', hot: true }];
     h.textContent = '';
     var i = 0;
     parts.forEach(function (part) {
@@ -231,17 +231,26 @@
 
   /* ---------- pricing calculator (rupees per seat per month) ---------- */
   (function pricing() {
-    var PRICE = { seat: { monthly: 399, yearly: 199 }, addon: { monthly: 499, yearly: 299 } };
-    var billing = 'monthly';
+    var PRICE = { seat: { monthly: 499, yearly: 399 }, addon: { monthly: 249, yearly: 199 } };
+    var MAX_VOLUME = 40;
+    var billing = 'yearly';
     var range = $('seatRange'), num = $('seatNum'), addon = $('addon'), total = $('total');
-    var shown = 3990, anim = null;
+    var shown = 0, anim = null;
 
     function inr(n) { return '₹' + Math.round(n).toLocaleString('en-IN'); }
+    function plural(n) { return n + (n === 1 ? ' seat' : ' seats'); }
     function seatCount() {
       var v = parseInt(num.value, 10);
       if (!isFinite(v) || v < 1) v = 1;
       if (v > 200) v = 200;
       return v;
+    }
+    /* Bundles by seat count. Volume: 3 seats 15% off, 5 seats 25% off, then 5% more for each seat after 5, up to 40%. */
+    function bundleName(n) { return n >= 5 ? 'Institute' : n >= 3 ? 'Team' : 'Starter'; }
+    function volumePct(n) {
+      var base = n >= 5 ? 25 : n >= 3 ? 15 : 0;
+      var extra = n > 5 ? (n - 5) * 5 : 0;
+      return Math.min(MAX_VOLUME, base + extra);
     }
     function tween(to) {
       if (anim) cancelAnimationFrame(anim);
@@ -257,16 +266,40 @@
       }
       anim = requestAnimationFrame(tick);
     }
+    function nudgeText(n, vol, yearly) {
+      var s;
+      if (n < 3) s = 'Add ' + (3 - n) + (3 - n === 1 ? ' more seat' : ' more seats') + ' to unlock 15% off every seat.';
+      else if (n < 5) s = 'Add ' + (5 - n) + ' more to unlock 25% off every seat.';
+      else if (vol < MAX_VOLUME) s = 'Each seat after 5 adds 5% off. You are at ' + vol + '% off.';
+      else s = 'You are at the 40% maximum on every seat.';
+      if (!yearly) s += ' Yearly billing saves 20% on every seat.';
+      return s;
+    }
     function render() {
       var n = seatCount();
-      var seatRate = PRICE.seat[billing];
-      var addRate = addon.checked ? PRICE.addon[billing] : 0;
-      var perMonth = n * (seatRate + addRate);
+      var yearly = billing === 'yearly';
+      var vol = volumePct(n);
+      var seatBase = yearly ? PRICE.seat.yearly : PRICE.seat.monthly;
+      var addBase = addon.checked ? (yearly ? PRICE.addon.yearly : PRICE.addon.monthly) : 0;
+      var unit = (seatBase + addBase) * (1 - vol / 100);
+      var perMonth = n * unit;
+
       tween(perMonth);
-      $('rowSeat').textContent = inr(seatRate) + ' × ' + n + (n === 1 ? ' seat' : ' seats');
-      $('rowAddon').textContent = addon.checked ? inr(addRate) + ' × ' + n + (n === 1 ? ' seat' : ' seats') : 'Not included';
-      $('rowYearLabel').textContent = billing === 'yearly' ? 'Billed yearly' : 'Billed monthly';
-      $('rowYear').textContent = billing === 'yearly' ? inr(perMonth * 12) + ' a year' : inr(perMonth) + ' a month';
+      $('nudge').textContent = nudgeText(n, vol, yearly);
+      $('rowBundle').textContent = bundleName(n) + ' bundle';
+      $('rowSeat').textContent = inr(seatBase) + ' × ' + plural(n);
+      $('rowVol').textContent = vol ? '−' + vol + '%' : 'None yet';
+      $('rowAddon').textContent = addon.checked ? inr(addBase) + ' × ' + plural(n) : 'Not included';
+      $('rowYearLabel').textContent = yearly ? 'Billed yearly' : 'Billed monthly';
+      $('rowYear').textContent = yearly ? inr(perMonth * 12) + ' a year' : inr(perMonth) + ' a month';
+      $('rowDay').textContent = 'about ₹' + Math.max(1, Math.round(unit / 30)) + ' a day';
+
+      /* Anchor: the same seats on monthly billing for a year, against yearly billing. */
+      var addM = addon.checked ? PRICE.addon.monthly : 0, addY = addon.checked ? PRICE.addon.yearly : 0;
+      var monthlyYear = n * (PRICE.seat.monthly + addM) * (1 - vol / 100) * 12;
+      var yearlyYear = n * (PRICE.seat.yearly + addY) * (1 - vol / 100) * 12;
+      $('anchorLine').textContent = 'Monthly billing for a year would be ' + inr(monthlyYear) + '. Yearly saves you ' + inr(monthlyYear - yearlyYear) + ' a year.';
+
       document.dispatchEvent(new CustomEvent('vca:seats', { detail: { count: n, addon: addon.checked } }));
     }
     all('[data-billing]').forEach(function (b) {
@@ -467,4 +500,74 @@
   } else {
     all('.reveal').forEach(function (el) { el.classList.add('in'); });
   }
+  /* ---------- how it works: the timeline fills and steps light up as you scroll ---------- */
+  (function timeline() {
+    var tl = $('timeline');
+    if (!tl) return;
+    var steps = all('.tstep', tl);
+    function update() {
+      var r = tl.getBoundingClientRect();
+      var vh = window.innerHeight || 1;
+      var p = Math.min(1, Math.max(0, (vh * 0.8 - r.top) / (r.height + vh * 0.3)));
+      tl.style.setProperty('--p', p.toFixed(3));
+      steps.forEach(function (el, i) {
+        el.classList.toggle('lit', p >= (i + 0.5) / steps.length);
+      });
+    }
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    update();
+  })();
+})();
+
+/* ---------- hero stage: the scroll position picks the chapter; the rail jumps to one ---------- */
+(function heroStage() {
+  var wrap = document.getElementById('hero');
+  var stage = document.getElementById('stage');
+  if (!wrap || !stage) return;
+  var panels = Array.prototype.slice.call(stage.querySelectorAll('.slot .panel'));
+  var btns = Array.prototype.slice.call(stage.querySelectorAll('.rail button'));
+  var n = panels.length, current = -1, queued = false;
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function scrollRange() { return Math.max(1, wrap.offsetHeight - window.innerHeight); }
+
+  function setChapter(i) {
+    if (i === current) return;
+    current = i;
+    panels.forEach(function (p, k) { p.classList.toggle('on', k === i); });
+    btns.forEach(function (b, k) {
+      if (k === i) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
+    });
+    document.dispatchEvent(new CustomEvent('vca:chapter', { detail: { index: i } }));
+  }
+
+  function update() {
+    queued = false;
+    var top = wrap.getBoundingClientRect().top;
+    var p = Math.min(1, Math.max(0, -top / scrollRange()));
+    setChapter(Math.min(n - 1, Math.floor(p * n)));
+  }
+  function schedule() {
+    if (!queued) { queued = true; requestAnimationFrame(update); }
+  }
+
+  btns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      var i = Number(b.getAttribute('data-goto')) || 0;
+      var y = wrap.offsetTop + scrollRange() * ((i + 0.5) / n);
+      window.scrollTo({ top: y, behavior: reduce ? 'auto' : 'smooth' });
+    });
+  });
+
+  window.addEventListener('scroll', schedule, { passive: true });
+  window.addEventListener('resize', schedule);
+  setChapter(0);
+  update();
+})();
+
+/* ---------- analytics example bars: widths come from data-w ---------- */
+(function bars() {
+  var els = document.querySelectorAll('[data-w]');
+  Array.prototype.forEach.call(els, function (el) { el.style.width = el.getAttribute('data-w') + '%'; });
 })();

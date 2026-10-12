@@ -1,6 +1,6 @@
 // Checks on the public home page (web/index.html): no inline script or style attributes (the page's CSP
-// forbids them), every local file it links exists, the supabase-js pin matches the rep page, and the
-// sign-in code uses only the calls the database provides.
+// forbids them), every local file it loads exists, the supabase-js pin matches the rep page, the sign-in code
+// calls only the database functions from the trial migration, and the 3D scripts are pinned.
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -10,6 +10,7 @@ const root = path.join(__dirname, '..', '..');
 const read = (p) => fs.readFileSync(path.join(root, 'web', p), 'utf8');
 const html = read('index.html');
 const js = read(path.join('js', 'home.js'));
+const scene = read(path.join('js', 'scene.js'));
 const app = read('app.html');
 
 test('home page: no inline script blocks and no style attributes', () => {
@@ -19,12 +20,10 @@ test('home page: no inline script blocks and no style attributes', () => {
 });
 
 test('home page: local files it loads exist', () => {
-  const refs = [...html.matchAll(/(?:src|href)="([^"#?:]+)"/g)].map((m) => m[1]).filter((r) => !r.startsWith('data:'));
-  const local = refs.filter((r) => !/^https?:/.test(r) && !r.startsWith('/'));
-  for (const r of local) {
-    assert.ok(fs.existsSync(path.join(root, 'web', r)), 'missing file: ' + r);
-  }
-  assert.ok(local.includes('js/home.js') && local.includes('css/home.css') && local.includes('js/config.js'));
+  const refs = [...html.matchAll(/(?:src|href)="([^"#?:]+)"/g)].map((m) => m[1]);
+  const local = refs.filter((r) => !/^https?:/.test(r) && !r.startsWith('/') && !r.startsWith('data:'));
+  for (const r of local) assert.ok(fs.existsSync(path.join(root, 'web', r)), 'missing file: ' + r);
+  assert.ok(local.includes('js/home.js') && local.includes('css/home.css') && local.includes('js/config.js') && local.includes('js/scene.js'));
 });
 
 test('home page: supabase-js pinned with the same URL and integrity hash as the rep page', () => {
@@ -33,10 +32,9 @@ test('home page: supabase-js pinned with the same URL and integrity hash as the 
   assert.strictEqual(pick(html), pick(app));
 });
 
-test('home page: links to the rep and admin pages point at files that exist', () => {
-  assert.ok(html.includes('app.html') || js.includes('app.html'));
-  assert.ok(js.includes("'admin.html'") && js.includes("'app.html'"));
-  assert.ok(fs.existsSync(path.join(root, 'web', 'admin.html')));
+test('home page: CSP for scripts matches the rep page', () => {
+  const csp = (s) => (s.match(/script-src ([^;]+);/) || [])[1];
+  assert.strictEqual(csp(html), csp(app));
 });
 
 test('home page: sign-in uses the emailed link and only the database calls from the trial migration', () => {
@@ -50,22 +48,24 @@ test('home page: sign-in uses the emailed link and only the database calls from 
   for (const r of rpcs) assert.ok(allowed.includes(r), 'unexpected rpc: ' + r);
 });
 
-test('home page: CSP on the page matches the rep page for scripts', () => {
-  const csp = (s) => (s.match(/script-src ([^;]+);/) || [])[1];
-  assert.strictEqual(csp(html), csp(app));
-});
-
-test('home page: the 3D scene is a module from a pinned three.js release, and sections set its mode', () => {
-  const scene = read(path.join('js', 'scene.js'));
+test('home page: the 3D scripts use an exact three.js release and both canvases exist', () => {
   const m = scene.match(/from 'https:\/\/cdn\.jsdelivr\.net\/npm\/three@(\d+\.\d+\.\d+)\//);
   assert.ok(m, 'three.js import must name an exact version on jsdelivr');
   assert.match(html, /<script type="module" src="js\/scene\.js">/);
-  assert.match(html, /<canvas id="scene"/);
-  for (const mode of ['hero', 'pair', 'seats']) assert.match(scene, new RegExp("\\b" + mode + ":\\s*\\{"));
-  assert.match(html, /data-scene="seats"/);
+  assert.match(html, /<canvas id="heroScene"/);
+  assert.match(html, /<canvas id="seatScene"/);
+  assert.match(html, /<div class="fallback"/, 'static fallback for the hero must stay in the page');
 });
 
-test('home page: the calculator and the scene agree on the event name', () => {
+test('home page: calculator and seat scene share the vca:seats event; seat label exists', () => {
   assert.match(js, /new CustomEvent\('vca:seats'/);
-  assert.match(read(path.join('js', 'scene.js')), /addEventListener\('vca:seats'/);
+  assert.match(scene, /addEventListener\('vca:seats'/);
+  assert.match(html, /id="seatLabel"/);
+});
+
+test('home page: product tabs and timeline wire to elements that exist', () => {
+  for (const id of ['pt-phone', 'pp-phone', 'pt-laptop', 'pp-laptop', 'pt-admin', 'pp-admin', 'timeline']) {
+    assert.match(html, new RegExp('id="' + id + '"'), 'missing id ' + id);
+  }
+  assert.match(js, /getElementById\('timeline'\)|\$\('timeline'\)/);
 });
