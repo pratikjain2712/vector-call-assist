@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Content-Security-Policy: no inline scripts or styles. Scripts come from this site and jsDelivr (SRI on each). -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://*.supabase.co; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="robots" content="noindex">
+<title>Vector scripts</title>
+<link rel="stylesheet" href="script-editor.css">
+</head>
+<body>
+<header class="top">
+  <h1>Call scripts</h1>
+  <div class="who">
+    <span id="who"></span>
+    <button id="signout" type="button">Sign out</button>
+  </div>
+</header>
+
+<main>
+  <section id="off" hidden>
+    <h2>Cloud is not set up</h2>
+    <p>Cloud is not set up for this site, so scripts cannot be edited here.</p>
+  </section>
+
+  <section id="gate" hidden>
+    <h2>Sign in</h2>
+    <p>Use the work email of an institute admin. We send a sign-in link; there is no password.</p>
+    <form id="gate-form" class="row wrap">
+      <label>Work email <input id="gate-email" type="email" autocomplete="username" required></label>
+      <button type="submit">Send sign-in link</button>
+    </form>
+    <p id="gate-msg" class="msg" role="status"></p>
+  </section>
+
+  <section id="notadmin" hidden>
+    <h2>No admin access</h2>
+    <p>This login is not an active admin of an institute. Ask an admin of your institute to check your seat.</p>
+  </section>
+
+  <section id="app" hidden>
+    <div class="layout">
+      <aside class="panel" id="list-panel">
+        <div class="row between">
+          <h2>Scripts</h2>
+          <button id="new-script" type="button">New script</button>
+        </div>
+        <ul id="script-list" class="plain"></ul>
+        <p id="list-empty" class="muted" hidden>No scripts yet. Create one to start.</p>
+        <p id="list-msg" class="msg" role="status"></p>
+      </aside>
+
+      <div class="main-col">
+        <section class="panel" id="editor-panel">
+          <div class="row between">
+            <h2 id="editor-title">New script</h2>
+            <span id="state-line" class="muted"></span>
+          </div>
+
+          <label class="field">Script name
+            <input id="script-name" type="text" maxlength="120" autocomplete="off">
+          </label>
+
+          <div id="problems" class="problems" role="status" hidden>
+            <h3>Fix these</h3>
+            <ul id="problem-list"></ul>
+          </div>
+
+          <div class="row between">
+            <h3>Steps</h3>
+            <button id="add-step" type="button">Add step</button>
+          </div>
+          <div id="steps"></div>
+          <datalist id="step-ids"></datalist>
+
+          <div class="row wrap">
+            <button id="test-toggle" type="button">Test mode</button>
+            <button id="save-draft" type="button">Save as draft</button>
+            <button id="publish-open" type="button">Publish</button>
+          </div>
+
+          <div id="publish-box" class="confirm" hidden>
+            <label class="field">Change note (what changed, 500 characters at most)
+              <textarea id="publish-note" maxlength="500" rows="3"></textarea>
+            </label>
+            <div class="row wrap">
+              <button id="publish-go" type="button">Publish this version</button>
+              <button id="publish-cancel" type="button">Cancel</button>
+            </div>
+          </div>
+
+          <p id="editor-msg" class="msg" role="status"></p>
+        </section>
+
+        <section class="panel" id="test-panel" hidden>
+          <div class="row between">
+            <h2>Test mode</h2>
+            <button id="test-close" type="button">Close test</button>
+          </div>
+          <p class="muted">Walks the script as it is in the editor now. Nothing is saved.</p>
+          <div class="row wrap">
+            <button id="test-back" type="button">Undo last choice</button>
+            <button id="test-restart" type="button">Start over</button>
+          </div>
+          <ol id="test-lines" class="test-lines"></ol>
+          <div id="test-choices" class="row wrap"></div>
+          <p id="test-status" class="msg" role="status"></p>
+        </section>
+
+        <section class="panel" id="history-panel" hidden>
+          <h2>Version history</h2>
+          <div class="scroll">
+            <table>
+              <thead><tr><th>Version</th><th>Status</th><th>Saved</th><th>Change note</th><th>Editor</th></tr></thead>
+              <tbody id="history-body"></tbody>
+            </table>
+          </div>
+          <p id="history-empty" class="muted" hidden>No versions yet.</p>
+
+          <div class="row wrap compare">
+            <label>From version <select id="diff-a"></select></label>
+            <label>To version <select id="diff-b"></select></label>
+            <button id="diff-go" type="button">Compare</button>
+          </div>
+          <div id="diff-out" class="diff" aria-live="polite"></div>
+        </section>
+
+        <section class="panel" id="report-panel" hidden>
+          <h2>Report</h2>
+          <form id="report-form" class="row wrap">
+            <label>Version <select id="report-version"></select></label>
+            <label>From <input id="report-from" type="date" required></label>
+            <label>To <input id="report-to" type="date" required></label>
+            <button type="submit">Run report</button>
+          </form>
+          <p id="report-msg" class="msg" role="status"></p>
+          <div id="report-out"></div>
+        </section>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
+<script src="js/config.js"></script>
+<script src="js/script-model.js"></script>
+<script src="js/script-editor.js"></script>
+</body>
+</html>

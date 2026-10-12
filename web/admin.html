@@ -12,6 +12,7 @@
 <body>
 <header class="top">
   <h1>Vector admin</h1>
+  <nav class="links"><a href="script-editor.html">Scripts</a></nav>
   <div class="who">
     <span id="who"></span>
     <button id="signout" type="button">Sign out</button>
@@ -77,6 +78,85 @@
       <p id="outcome-empty" class="muted" hidden>No outcomes in this range.</p>
     </div>
 
+    <div class="panel" id="weekly">
+      <div class="row between">
+        <h2>Weekly summary</h2>
+        <button type="button" id="week-csv">Download CSV</button>
+      </div>
+      <form id="week-form" class="row">
+        <label>Week starting (Monday) <input id="week-start" type="date" required></label>
+        <button type="submit">Show week</button>
+      </form>
+      <p id="week-msg" class="msg" role="status"></p>
+      <div class="scroll">
+        <table class="stack" id="week-table" hidden>
+          <thead id="week-head"></thead>
+          <tbody id="week-body"></tbody>
+        </table>
+      </div>
+      <p id="week-empty" class="muted" hidden>No activity in this week.</p>
+    </div>
+
+    <div class="panel" id="progress">
+      <h2>Rep progress</h2>
+      <form id="progress-form" class="row">
+        <label>Day <input id="progress-day" type="date" required></label>
+        <button type="submit">Show day</button>
+      </form>
+      <p id="progress-msg" class="msg" role="status"></p>
+      <div class="scroll">
+        <table class="stack">
+          <thead><tr><th>Rep</th><th class="num">Calls</th><th class="num">Connected</th><th class="num">Talk (min)</th></tr></thead>
+          <tbody id="progress-body"></tbody>
+        </table>
+      </div>
+      <p id="progress-empty" class="muted" hidden>No reps yet.</p>
+
+      <h3>Not calling</h3>
+      <p id="idle-text" class="muted"></p>
+      <ul id="idle-list" class="plain"></ul>
+    </div>
+
+    <div class="panel" id="targets">
+      <h2>Daily targets</h2>
+      <p class="muted">Type a number in any box to change that target; blank boxes keep their current target. A target of 0 means no target. Each save asks you to confirm.</p>
+      <div class="scroll">
+        <table class="stack">
+          <thead><tr><th>Rep</th><th>Calls</th><th>Connected calls</th><th>Talk minutes</th><th>Save</th></tr></thead>
+          <tbody id="target-body"></tbody>
+        </table>
+      </div>
+      <p id="target-empty" class="muted" hidden>No active reps yet.</p>
+      <p id="target-msg" class="msg" role="status"></p>
+    </div>
+
+    <div class="panel" id="notes">
+      <h2>Supervisor notes</h2>
+      <form id="notes-form" class="row wrap">
+        <label>Rep <select id="notes-rep"></select></label>
+        <label>Day <input id="notes-day" type="date" required></label>
+        <button type="submit">Show notes</button>
+      </form>
+      <p id="notes-msg" class="msg" role="status"></p>
+      <ul id="notes-list" class="plain"></ul>
+      <p id="notes-empty" class="muted" hidden>No notes for this rep on this day.</p>
+
+      <form id="note-form" class="stackform">
+        <label>Add a note for the rep and day above
+          <textarea id="note-text" rows="3"></textarea></label>
+        <p id="note-count" class="muted small">0 of 1000 characters</p>
+        <div class="row"><button type="submit" id="note-add">Add note</button></div>
+      </form>
+      <p id="note-msg" class="msg" role="status"></p>
+    </div>
+
+    <div class="panel" id="login">
+      <h2>Your password</h2>
+      <p class="muted">Sends a password reset link to your own email address.</p>
+      <div class="row"><button type="button" id="reset-send">Send password reset</button></div>
+      <p id="reset-msg" class="msg" role="status"></p>
+    </div>
+
     <div class="panel">
       <h2>Seats</h2>
       <form id="invite-form" class="row wrap">
@@ -122,5 +202,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
 <script src="js/config.js"></script>
 <script src="js/admin.js"></script>
+<script src="js/admin-team.js"></script>
 </body>
 </html>

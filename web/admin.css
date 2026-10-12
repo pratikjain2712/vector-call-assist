@@ -53,3 +53,34 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   main { padding: 12px; }
   .panel { padding: 10px; }
 }
+
+/* Team tools (js/admin-team.js). */
+.links a { color: var(--accent); font-size: .95rem; }
+input, select, textarea { max-width: 100%; }
+textarea { font: inherit; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--text); width: 100%; box-sizing: border-box; resize: vertical; }
+.small { font-size: .85rem; }
+.plain { list-style: none; margin: 0; padding: 0; }
+.plain li { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.target-input { width: 7.5em; }
+.bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; margin-top: 4px; min-width: 90px; }
+.bar-fill { height: 100%; background: var(--accent); }
+.bar-fill.met { background: var(--ok); }
+.note { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.note-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.count.error, #note-count.error { color: var(--danger); }
+.stackform { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.stackform label { width: 100%; }
+@media (max-width: 699px) {
+  .row > * { flex: 1 1 100%; }
+  label input, label select, label textarea { width: 100%; box-sizing: border-box; }
+  .row > button { width: 100%; }
+  table.stack, table.stack tbody, table.stack tr, table.stack td { display: block; width: 100%; }
+  table.stack thead { display: none; }
+  table.stack tr { border-bottom: 1px solid var(--line); padding: 6px 0; }
+  table.stack td { border: 0; padding: 3px 0; text-align: left; }
+  table.stack td::before { content: attr(data-label); display: block; color: var(--muted); font-size: .8rem; }
+  table.stack td .target-input { width: 100%; }
+  table.stack td .actions button { width: 100%; }
+  .bar { min-width: 0; }
+}

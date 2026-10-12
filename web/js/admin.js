@@ -119,6 +119,7 @@
     let pending = null;     // the action waiting for the in-page confirmation
     let loadSeq = 0;
     let claimedFor = null;  // user id whose invitation was tried this sign-in (cleared on sign-out)
+    let currentEmail = null;
 
     const show = (section) => SECTIONS.forEach((s) => { $(s).hidden = s !== section; });
     const say = (id, text, isError) => {
@@ -144,7 +145,11 @@
 
     async function rpc(name, args) {
       const { data, error } = await client.rpc(name, args);
-      if (error) throw new Error(error.message);
+      if (error) {
+        const err = new Error(error.message);
+        err.code = error.code;   // lets team tools tell a missing function from other failures
+        throw err;
+      }
       return data;
     }
 
@@ -214,7 +219,8 @@
 
     async function onSession(session) {
       mySeat = null;
-      if (!session) { claimedFor = null; show('gate'); return; }
+      if (!session) { claimedFor = null; currentEmail = null; show('gate'); return; }
+      currentEmail = session.user.email || null;
       $('who').textContent = session.user.email || '';
       await claimInvite(session.user.id);
       let data;
@@ -256,6 +262,7 @@
         seats = s || [];
         render();
         say('range-msg', 'Showing ' + $('from').value + ' to ' + $('to').value + ', days in ' + tz + '.');
+        document.dispatchEvent(new CustomEvent('vector-admin:loaded'));
       } catch (err) {
         if (seq === loadSeq) say('range-msg', 'Could not load: ' + err.message, true);
       }
@@ -450,6 +457,16 @@
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
+
+    // Shared with js/admin-team.js: the client, the signed-in admin and the in-page confirmation.
+    window.VectorAdmin = {
+      rpc,
+      client: () => client,
+      session: () => ({ email: currentEmail, instituteId: mySeat ? mySeat.institute_id : null }),
+      seats: () => seats.slice(),
+      confirm: askConfirm,
+    };
+    document.dispatchEvent(new CustomEvent('vector-admin:ready'));
 
     init();
   }
