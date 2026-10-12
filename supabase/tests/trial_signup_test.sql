@@ -28,19 +28,19 @@ begin
     raise notice 'ok: short name refused';
   end;
 
-  -- The first login starts a trial: admin seat, 5 seats, about 14 days.
+  -- The first login starts a trial: admin seat, 5 seats, about 5 days (migration 0011).
   perform set_config('request.jwt.claim.sub', t1::text, true);
   inst := public.start_trial_institute('Bright Coaching');
   st := public.my_trial_status();
   if st is null or st->>'role' <> 'admin' or (st->>'seat_limit')::int <> 5 then
     raise exception 'FAIL: trial admin context wrong: %', st;
   end if;
-  if (st->>'trial_ends_at')::timestamptz < now() + interval '13 days'
-     or (st->>'trial_ends_at')::timestamptz > now() + interval '15 days' then
-    raise exception 'FAIL: trial length is not 14 days';
+  if (st->>'trial_ends_at')::timestamptz < now() + interval '4 days'
+     or (st->>'trial_ends_at')::timestamptz > now() + interval '6 days' then
+    raise exception 'FAIL: trial length is not 5 days';
   end if;
   if (st->>'institute_id')::uuid <> inst then raise exception 'FAIL: status points at another institute'; end if;
-  raise notice 'ok: trial started with an admin seat, 5 seats, 14 days';
+  raise notice 'ok: trial started with an admin seat, 5 seats, 5 days';
 
   -- The same login cannot start a second trial.
   begin
