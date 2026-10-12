@@ -8,6 +8,7 @@
 <meta name="robots" content="noindex">
 <style>html{color-scheme:light}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
 <title>Vector Call Assist</title>
+<link rel="stylesheet" href="css/access.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@500;700&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
 <style>
@@ -287,7 +288,7 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
         <summary><span id="cloud-summary">Synced</span></summary>
         <div class="pill-menu">
           <p class="hint" id="cloud-status"></p>
-          <button class="plain" id="cloud-signout" type="button">Sign out</button>
+          <button class="plain" id="cloud-signout" type="button" data-i18n="btn.signOut">Sign out</button>
         </div>
       </details>
       <details class="pill" id="link-panel">
@@ -295,6 +296,21 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
         <div class="pill-menu">
           <p class="hint" id="link-status"></p>
           <button class="plain" id="link-forget" type="button">Forget phone</button>
+        </div>
+      </details>
+      <button class="plain" id="feedback-open" type="button" data-i18n="feedback.open">Send feedback</button>
+      <details class="pill" id="settings-panel">
+        <summary><span data-i18n="settings.open">Settings</span></summary>
+        <div class="pill-menu">
+          <label class="check"><input id="pref-large" type="checkbox"> <span data-i18n="settings.large">Large text</span></label>
+          <label class="check"><input id="pref-contrast" type="checkbox"> <span data-i18n="settings.contrast">High contrast</span></label>
+          <label class="field"><span class="label" data-i18n="settings.language">Language</span>
+            <select id="pref-lang">
+              <option value="en" data-i18n="settings.lang.en">English</option>
+              <option value="hi" data-i18n="settings.lang.hi">Hindi (draft, needs review)</option>
+            </select>
+          </label>
+          <button class="plain" id="pref-walkthrough" type="button" data-i18n="settings.walkthrough">Show the walkthrough again</button>
         </div>
       </details>
     </div>
@@ -305,6 +321,20 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
       <h2 id="link-banner-title"></h2>
       <p id="link-banner-text"></p>
       <div class="tools" id="link-banner-tools"></div>
+    </section>
+
+    <section class="practice-banner" id="practice-banner" role="status" hidden>
+      <strong data-i18n="practice.banner">Practice: nothing is saved</strong>
+      <button class="plain" id="practice-exit" type="button" data-i18n="practice.exit">Exit practice</button>
+    </section>
+
+    <section class="panel terms-panel" id="terms-panel" aria-labelledby="terms-title" hidden>
+      <h2 id="terms-title" data-i18n="terms.title">Terms of use</h2>
+      <p class="terms-need" data-i18n="terms.needed">Accept the terms before you make calls.</p>
+      <p class="terms-draft" id="terms-draft" data-i18n="terms.draft">Draft: needs legal review before use.</p>
+      <div class="terms-text" id="terms-text" tabindex="0"></div>
+      <div class="tools"><button class="primary" id="terms-accept" type="button" data-i18n="terms.accept">I accept these terms</button></div>
+      <p class="msgline" id="terms-msg" role="status"></p>
     </section>
 
     <div class="work">
@@ -322,8 +352,9 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
       </div>
       <main id="stage" aria-live="polite"></main>
       <div class="cardfoot">
-        <button class="plain" id="back" type="button" title="Back one step (Space)">‹ Back one step</button>
-        <button class="plain" id="restart" type="button">Start a new call</button>
+        <button class="plain" id="back" type="button" title="Back one step (Space)" data-i18n="btn.back">‹ Back one step</button>
+        <button class="plain" id="practice-start" type="button" data-i18n="practice.start">Practice</button>
+        <button class="plain" id="restart" type="button" data-i18n="btn.restart">Start a new call</button>
       </div>
     </article>
     <p class="hint" id="sheet-msg" role="status"></p>
@@ -342,7 +373,7 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
 
     <section class="sheetbar">
       <div id="sheet-load" class="sheetload">
-        <label class="plain filebtn" for="sheet-file">Load a lead sheet</label>
+        <label class="plain filebtn" for="sheet-file" data-i18n="btn.loadSheet">Load a lead sheet</label>
         <input id="sheet-file" class="vh" type="file" accept=".xlsx,.xls,.csv">
         <button class="plain" id="import-v1" type="button" hidden>Import my lead sheet from the old call guide</button>
         <span class="hint">Excel or CSV with a name and a phone column. Results are written to each lead's row; the file stays in this browser.</span>
@@ -371,6 +402,42 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
   </div>
 </div>
 
+<div class="modal-wrap" id="still-there" hidden>
+  <section class="modal" role="alertdialog" aria-modal="true" aria-labelledby="still-title" aria-describedby="still-text">
+    <h2 id="still-title" data-i18n="timeout.title">Still there?</h2>
+    <p id="still-text"></p>
+    <div class="tools"><button class="primary big" id="still-continue" type="button" data-i18n="timeout.continue">Continue</button></div>
+  </section>
+</div>
+
+<div class="modal-wrap" id="feedback-dialog" hidden>
+  <section class="modal" role="dialog" aria-modal="true" aria-labelledby="feedback-title">
+    <h2 id="feedback-title" data-i18n="feedback.title">Send feedback</h2>
+    <p class="hint" data-i18n="feedback.hint">Tell us what would help. Do not include lead names or phone numbers.</p>
+    <label class="field"><span class="label" data-i18n="feedback.label">Your message</span>
+      <textarea id="feedback-text" maxlength="2000" rows="6"></textarea>
+    </label>
+    <p class="count" id="feedback-count" aria-live="polite"></p>
+    <p class="hint" id="feedback-msg" role="status"></p>
+    <div class="tools">
+      <button class="plain" id="feedback-cancel" type="button" data-i18n="feedback.cancel">Cancel</button>
+      <button class="primary" id="feedback-send" type="button" data-i18n="feedback.send">Send</button>
+    </div>
+  </section>
+</div>
+
+<div class="modal-wrap" id="onboard" hidden>
+  <section class="modal" role="dialog" aria-modal="true" aria-labelledby="onb-title">
+    <p class="label" id="onb-count"></p>
+    <h2 id="onb-title"></h2>
+    <p id="onb-body"></p>
+    <div class="tools onb-actions">
+      <button class="plain" id="onb-skip" type="button" data-i18n="onb.skip">Skip</button>
+      <button class="primary" id="onb-next" type="button" data-i18n="onb.next">Next</button>
+    </div>
+  </section>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" integrity="sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
 <script src="js/config.js"></script>
@@ -381,6 +448,15 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
 <script src="js/import-check.js"></script>
 <script src="js/lead-list.js"></script>
 <script src="js/note-templates.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/terms.js"></script>
+<script src="js/modal.js"></script>
+<script src="js/terms-gate.js"></script>
+<script src="js/session-timeout.js"></script>
+<script src="js/feedback.js"></script>
+<script src="js/access-settings.js"></script>
+<script src="js/onboarding.js"></script>
+<script src="js/script-adapter.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

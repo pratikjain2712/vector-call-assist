@@ -2,7 +2,7 @@
 const STAGES = ["Opening", "Discovery", "Pitch", "Timings", "Fee", "Close"];
 const SITE = "https://vector.techsimplus.com/";
 
-const FLOW = {
+let FLOW = {
   open: { stage: 0, say: ["Hi, is this {name}?"], tip: "Smile before you speak. Slow down.",
     opts: [{ k: "yes", hint: "It is them", to: "intro" }, { k: "no", hint: "Wrong person picked up", to: "wrong_person" }, { k: "maybe", hint: "“Who is this?”", to: "intro" }] },
   wrong_person: { stage: 0, say: ["Oh, sorry! Is {name} around, by any chance?"],
@@ -156,14 +156,18 @@ const OBJECTIONS = [
 const WORD = { yes: "Yes", no: "No", maybe: "Maybe", next: "Next" };
 const KEY = { yes: "1", no: "2", maybe: "3", next: "Enter" };
 const LABEL = { open: "Right person", wrong_person: "Lead available", intro: "Has time", intro_maybe: "Okay with questions", frame: "Agreed to talk", ni_soft: "Gen-AI on radar", send_details: "Okay to check back", callback: "Gave callback time", q_work: "Working engineer", fresher: "Python good", q_python: "Comfortable with Python", python_no: "Will do pre-work", q_genai: "Tried Gen-AI", burned: "Past course was recorded", trust: "Open to hear more", q_scale: "Can answer scaling question", experienced: "Done it all in production", q_goal: "Wants Gen-AI role", goal_no: "Projects would help", goal_no2: "Okay to send details", pitch1: "Following the pitch", trust_brand: "Okay to continue", pitch2: "Projects interesting", pitch3: "Is what they want", diff: "Wants timings", pitch_no: "Worry answered", time: "Timings doable", time_no: "Recordings help", time_no2: "Can adjust", fee: "Fine with fee", fee_maybe: "Okay after refund", fee_no: "Would join if fee was no issue", fee_only: "Okay to wait on payment options", close: "Send link now", think: "Ready after worry", followup: "Follow-up agreed" };
+const BUILTIN = { flow: FLOW, start: "open", scriptId: null, version: null };   // the built-in script: the fallback
+let ACTIVE = BUILTIN;   // the script being walked; see useWanted()
 // Every script question that has a real choice, in script order. Each gets its own column in the Calls tab.
 const QUESTIONS = Object.keys(FLOW).filter((k) => LABEL[k]).map((k) => ({ key: k, label: LABEL[k] }));
-const RESULT_COLS = ["Call outcome", "Called at", "Call duration", "Answers", "Objections raised", "Notes", "Callback date"];
-const RESULT_KEYS = ["outcome", "at", "duration", "answers", "objections", "notes", "callback"];
+const RESULT_COLS = ["Call outcome", "Called at", "Call duration", "Answers", "Objections raised", "Notes", "Callback date", "Consent", "Consent date"];
+const RESULT_KEYS = ["outcome", "at", "duration", "answers", "objections", "notes", "callback", "consent", "consentDate"];
 const $ = (id) => document.getElementById(id);
+// Lookup in a table of built-in ids. A step id such as "constructor" must not find Object.prototype.
+const own = (map, key) => (Object.prototype.hasOwnProperty.call(map, key) ? map[key] : undefined);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
-const state = { node: "open", history: [], trail: [], objs: [], objection: null, started: null, elapsed: 0, timer: null, callId: null };
+const state = { node: "open", history: [], trail: [], objs: [], objection: null, started: null, elapsed: 0, timer: null, callId: null, practice: false };
 let sheet = null;
 let phoneCheck = null;   // ImportCheck result for the sheet: flags per lead and counts. Worked out on load, never saved.
 let lastOutcome = null;  // the outcome just saved on the end card, for Undo. Cleared when the lead or call changes.
@@ -210,7 +214,7 @@ function writeResult(s, st, label, when) {
   const r = s.rows[s.idx], c = s.cols;
   r[c.outcome] = label; r[c.at] = when;
   r[c.duration] = String(Math.floor(st.elapsed / 60)).padStart(2, "0") + ":" + String(st.elapsed % 60).padStart(2, "0");
-  r[c.answers] = st.trail.map((t) => (LABEL[t.node] || t.node) + ": " + WORD[t.k]).join("; ");
+  r[c.answers] = st.trail.map((t) => (own(LABEL, t.node) || t.node) + ": " + WORD[t.k]).join("; ");
   r[c.objections] = st.objs.join("; ");
 }
 function exportAoa(s) { return [s.header].concat(s.rows); }
@@ -268,12 +272,13 @@ function go(to, pick) {
   state.node = to; state.objection = null;
   if (FLOW[to].end) {
     stopClock();
+    if (state.practice) { render(); return; }   // practice: the end card shows and nothing is written
     const undo = { rowIndex: sheet ? sheet.idx : -1, sheetName: sheet ? sheet.fileName : "", code: to, row: null, callId: null, prevCall: null, sentBefore: 0 };
     if (sheet) {
       const when = new Date().toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
       undo.row = sheet.rows[sheet.idx].slice();
       writeResult(sheet, state, FLOW[to].end.label, when);
-      if (!CALLBACK_OUTCOMES[to]) sheet.rows[sheet.idx][sheet.cols.callback] = "";
+      if (!own(CALLBACK_OUTCOMES, to)) sheet.rows[sheet.idx][sheet.cols.callback] = "";
       persist();
     }
     const before = state.callId ? CallRecords.get(state.callId) : null;
@@ -291,10 +296,11 @@ function undoOutcome() {
   const u = lastOutcome;
   lastOutcome = null;
   if (!u || !sheet || sheet.fileName !== u.sheetName || sheet.idx !== u.rowIndex || !u.row) { render(); return; }
-  const notesCol = sheet.cols.notes;
-  const notes = sheet.rows[u.rowIndex][notesCol];
+  // Notes, consent and consent date typed or set since the outcome are kept.
+  const keepCols = [sheet.cols.notes, sheet.cols.consent, sheet.cols.consentDate];
+  const kept = keepCols.map((c) => sheet.rows[u.rowIndex][c]);
   sheet.rows[u.rowIndex] = u.row.slice();
-  sheet.rows[u.rowIndex][notesCol] = notes;
+  keepCols.forEach((c, j) => { sheet.rows[u.rowIndex][c] = kept[j]; });
   persist();
   const cur = u.callId ? CallRecords.get(u.callId) : null;
   if (cur) {
@@ -328,9 +334,11 @@ function back() {
   if (state.history.length) startClock();
   render();
 }
-function resetCall() { stopClock(); state.callId = null; state.node = "open"; state.history = []; state.trail = []; state.objs = []; state.objection = null; state.elapsed = 0; tick(); }
+function resetCall() { stopClock(); state.callId = null; state.node = ACTIVE.start; state.history = []; state.trail = []; state.objs = []; state.objection = null; state.elapsed = 0; tick(); }
 function restart() { lastOutcome = null; resetCall(); if (!sheet) $("lead-name").value = ""; render(); }
-function loadLead(i) { lastOutcome = null; sheet.idx = i; $("lead-name").value = leadName(); resetCall(); persist(); render(); window.scrollTo({ top: 0, behavior: "auto" }); }
+function loadLead(i) {
+  if (state.practice) { note(leaveMessage()); return; }
+  lastOutcome = null; sheet.idx = i; $("lead-name").value = leadName(); resetCall(); persist(); render(); window.scrollTo({ top: 0, behavior: "auto" }); }
 
 function copyText(text, btn, target, idle) {
   const done = () => { btn.textContent = "Copied"; setTimeout(() => { btn.textContent = idle; }, 1800); };
@@ -339,6 +347,7 @@ function copyText(text, btn, target, idle) {
 }
 
 async function readSheet(file) {
+  if (state.practice) { note(I18n.t("practice.blocked")); return; }
   const isCsv = /\.csv$/i.test(file.name);
   if (!isCsv && typeof XLSX === "undefined") { note("The spreadsheet reader did not load. Check your internet connection and reload the page."); return; }
   try {
@@ -425,14 +434,14 @@ function renderSheet() {
   bar.appendChild(nx);
 
   const calls = el("div", "calls");
-  if (phone && TOUCH) {
+  if (phone && TOUCH && !state.practice && TermsGate.allowed()) {
     const a = el("a", PhoneLink.isPaired() ? "plain" : "primary", "Call on this device");
     a.href = "tel:" + phone.replace(/[^\d+]/g, ""); a.id = "call-link"; calls.appendChild(a);
   }
-  if (phone && PhoneLink.isPaired()) {
+  if (phone && PhoneLink.isPaired() && !state.practice) {
     const first = name.split(/\s+/)[0];
-    const cb = tool("call-laptop", TOUCH ? "Call via phone link" : (first ? "Call " + first : "Call"), callFromLaptop, "primary");
-    cb.disabled = !(linkHealth === "ok" || linkHealth === "checking");
+    const cb = tool("call-laptop", TOUCH ? I18n.t("btn.callPhone") : (first ? I18n.t("btn.call", { first: first }) : I18n.t("btn.callPlain")), callFromLaptop, "primary");
+    cb.disabled = !(linkHealth === "ok" || linkHealth === "checking") || !TermsGate.allowed();
     cb.title = cb.disabled ? "The phone is not reachable. See the banner at the top of the page." : "Dial this lead on your paired phone (C)";
     if (!TOUCH) cb.appendChild(el("kbd", "btnkey", "C"));
     calls.appendChild(cb);
@@ -449,8 +458,9 @@ function renderSheet() {
   info.appendChild(meter);
   tools.appendChild(info);
   const actions = el("div", "actions");
-  actions.appendChild(tool("sheet-save", "Download results (.xlsx)", downloadSheet, "primary"));
+  actions.appendChild(tool("sheet-save", I18n.t("btn.download"), downloadSheet, "primary"));
   const rm = tool("sheet-remove", "Remove sheet", () => {
+    if (state.practice) { note(I18n.t("practice.blocked")); return; }
     if (rm.dataset.sure) { sheet = null; phoneCheck = null; lastOutcome = null; persist(); note("Sheet removed from this browser."); $("lead-name").value = ""; resetCall(); render(); }
     else { rm.dataset.sure = "1"; rm.textContent = "Tap again to remove"; }
   });
@@ -498,6 +508,8 @@ function finishCall(sessionId, patch, summary) {
 
 async function callFromLaptop() {
   if (!sheet) return;
+  if (state.practice) return;
+  if (!TermsGate.allowed()) { note(I18n.t("call.blockedTerms")); return; }
   if (callView && (callView.phase === "REQUESTED" || callView.phase === "OFFHOOK")) { note("A call is already in progress."); return; }
   const r = sheet.rows[sheet.idx];
   const raw = String(r[sheet.cols.phone]).trim();
@@ -593,6 +605,7 @@ function finishRecord(label, code) {
     stageReached: top < 0 ? "" : STAGES[top], scriptSeconds: state.elapsed,
     objections: state.objs.join("; "), objectionList: state.objs.slice(),
     notes: sheet ? String(sheet.rows[sheet.idx][sheet.cols.notes] || "") : "", saveStatus: "saved",
+    scriptId: ACTIVE.scriptId, scriptVersion: ACTIVE.version,   // the script this call was walked on
   };
   if (state.callId && CallRecords.get(state.callId)) { CallRecords.update(state.callId, patch); cloudSync(state.callId); return; }
   const id = (crypto.randomUUID && crypto.randomUUID()) || ("m-" + Date.now() + "-" + Math.random().toString(16).slice(2));
@@ -607,12 +620,35 @@ function finishRecord(label, code) {
   cloudSync(id);
 }
 
+/* ---- The script in use ----
+   The built-in script is the fallback. A rep's published script (Cloud.publishedScript, adapted by
+   js/script-adapter.js) replaces it only while the page is idle: no call live, no step taken, no objection
+   open. The script in use is ACTIVE, in memory only, never in localStorage. */
+let wanted = BUILTIN;
+let scriptFetch = 0;
+function idleForScript() {
+  const live = callView && (callView.phase === "REQUESTED" || callView.phase === "OFFHOOK");
+  return !live && !state.practice && !state.history.length && state.objection == null && !state.objs.length;
+}
+function useWanted() {
+  if (ACTIVE === wanted || !idleForScript()) return;
+  ACTIVE = wanted; FLOW = ACTIVE.flow; state.node = ACTIVE.start; state.trail = [];
+}
+async function loadPublishedScript() {
+  const mine = ++scriptFetch;
+  const got = await Cloud.publishedScript();   // null: cloud off, signed out, nothing published, or a read error
+  if (mine !== scriptFetch) return;            // a later check has started, and its answer counts
+  const flow = got ? ScriptAdapter.adaptSteps(got.steps) : null;
+  if (got && !flow) note("This published script cannot be shown in the call page, so the built-in script is in use.");
+  wanted = flow ? { flow: flow, start: ScriptAdapter.startStepId(got.steps), scriptId: got.scriptId, version: got.version } : BUILTIN;
+  useWanted();
+  render();
+}
+
 /* ---- Cloud sync (js/cloud.js) ----
    A call is uploaded once it is settled: the outcome is tapped and, for laptop calls, the phone has
    reported the result (or two minutes have passed). A later change to an uploaded call is sent as a
    correction row that points at the earlier one, so the cloud history is never rewritten. */
-const SCRIPT_ID = "vector-2.0-sales";
-const SCRIPT_VERSION = 1;
 const CLOUD_OUTCOME = {
   end_won: "won", end_followup: "interested", end_callback: "callback", end_details: "other",
   end_noanswer: "no_answer", end_lost: "not_interested", end_wrong: "other", end_dnc: "not_interested",
@@ -622,10 +658,11 @@ function cloudRow(r) {
   const objs = r.objectionList || [];
   const dialMs = r.dialWallMs || (r.outcomeAtMs ? r.outcomeAtMs - (r.scriptSeconds || 0) * 1000 : 0);
   return {
-    script_id: SCRIPT_ID, script_version: SCRIPT_VERSION,
+    script_id: r.scriptId == null ? null : String(r.scriptId).slice(0, 80),
+    script_version: r.scriptVersion == null ? null : Number(r.scriptVersion),
     script_step: (r.outcomeCode || "").slice(0, 80) || null,   // the end card reached, e.g. end_details
     objection: objs.length ? String(objs[objs.length - 1]).slice(0, 80) : null,
-    outcome: CLOUD_OUTCOME[r.outcomeCode] || "other",
+    outcome: own(CLOUD_OUTCOME, r.outcomeCode) || "other",
     dialled_at: dialMs ? new Date(dialMs).toISOString() : null,
     connected_seconds: r.connectedSeconds == null ? null : Math.max(0, Math.round(r.connectedSeconds)),
     phone_session_id: r.source === "laptop" ? String(r.sessionId).slice(0, 80) : null,
@@ -641,6 +678,8 @@ function cloudSync(sessionId) {
   const row = cloudRow(r);
   const sig = JSON.stringify(row);
   const sent = (r.cloud && r.cloud.sent) || [];
+  // Saved before the script was recorded and already uploaded: not sent again under a new label.
+  if (r.scriptId === undefined && sent.length) return;
   if (sent.length && sent[sent.length - 1].sig === sig) return;   // nothing new to send
   const id = crypto.randomUUID();
   const full = Object.assign({ id: id, client_record_id: (sent.length ? r.sessionId + "~" + (sent.length + 1) : r.sessionId).slice(0, 80),
@@ -733,6 +772,7 @@ function refreshLinkPanel() {
   renderCloud(c);
   if (paired) { stopScan(); $("cert-box").hidden = true; $("gate-msg").textContent = ""; }
   renderHealth();
+  Onboarding.maybeShow();
 }
 
 /* ---- Phone connection: checked every 15 s while this tab is visible, and on every request ---- */
@@ -931,6 +971,7 @@ function callbackField() {
   cb.addEventListener("change", () => {
     sheet.rows[sheet.idx][sheet.cols.callback] = LeadList.validDate(cb.value);
     persist(); renderSheet(); renderLeads();
+    requestCallbackReminder(LeadList.validDate(cb.value));
   });
   wrap.appendChild(cb);
   wrap.appendChild(el("span", "hint", "Shows at the top of the daily queue on this date."));
@@ -941,10 +982,13 @@ function callbackField() {
 function leaveBlocked() {
   const live = callView && (callView.phase === "REQUESTED" || callView.phase === "OFFHOOK");
   const midScript = state.history.length > 0 && !FLOW[state.node].end;
-  return !!(live || midScript);
+  return !!(live || midScript || state.practice);
+}
+function leaveMessage() {
+  return state.practice ? I18n.t("practice.blocked") : "Finish or restart this call before moving to another lead.";
 }
 function goToLead(i) {
-  if (leaveBlocked()) { note("Finish or restart this call before moving to another lead."); return; }
+  if (leaveBlocked()) { note(leaveMessage()); return; }
   note("");
   loadLead(i);
 }
@@ -979,8 +1023,10 @@ function renderLeads() {
 }
 
 function render() {
+  useWanted();
   const node = FLOW[state.node];
   renderSheet();
+  renderPractice();
   const rail = $("rail"); rail.textContent = "";
   STAGES.forEach((s, i) => { const li = el("li", i < node.stage ? "done" : i === node.stage ? "now" : "", s); if (i === node.stage) li.setAttribute("aria-current", "step"); rail.appendChild(li); });
 
@@ -1017,9 +1063,9 @@ function render() {
       card.appendChild(el("span", "label", "WhatsApp message to send"));
       const text = plain(e.msg);
       const pre = el("pre", "msg", text); card.appendChild(pre);
-      const c = tool("copy-msg", "Copy message", () => copyText(text, c, pre, "Copy message")); row.appendChild(c);
+      const c = tool("copy-msg", I18n.t("btn.copy"), () => copyText(text, c, pre, I18n.t("btn.copy"))); row.appendChild(c);
     }
-    if (sheet) {
+    if (sheet && !state.practice) {
       const r = sheet.rows[sheet.idx], col = sheet.cols.notes;
       const lab = el("label", "notes"); lab.appendChild(el("span", "label", "Notes for this lead, saved to the sheet"));
       const ta = el("textarea"); ta.id = "lead-notes"; ta.rows = 2; ta.value = String(r[col]); ta.placeholder = "Follow-up day and time, the reason they gave, anything to remember";
@@ -1028,13 +1074,14 @@ function render() {
       lab.appendChild(templatePicker(ta, saveNotes));
       lab.appendChild(ta); card.appendChild(lab);
       card.appendChild(callbackField());
+      card.appendChild(consentField());
       card.appendChild(el("p", "hint", "Result written to row " + (sheet.idx + 2) + " of the sheet. Download the updated sheet when you finish calling."));
       const ni = nextOpen(sheet);
-      const nx = tool("lead-next-open", ni < 0 ? "All leads called" : "Next lead", () => loadLead(ni), "primary"); nx.disabled = ni < 0;
+      const nx = tool("lead-next-open", ni < 0 ? "All leads called" : I18n.t("btn.nextLead"), () => loadLead(ni), "primary"); nx.disabled = ni < 0;
       row.appendChild(nx);
     }
-    if (lastOutcome && sheet && lastOutcome.code === state.node && lastOutcome.rowIndex === sheet.idx && lastOutcome.sheetName === sheet.fileName) {
-      const undoBtn = tool("outcome-undo", "Undo this outcome", undoOutcome, "plain");
+    if (lastOutcome && sheet && !state.practice && lastOutcome.code === state.node && lastOutcome.rowIndex === sheet.idx && lastOutcome.sheetName === sheet.fileName) {
+      const undoBtn = tool("outcome-undo", I18n.t("btn.undo"), undoOutcome, "plain");
       undoBtn.title = "Puts this lead back as it was and returns to the last question";
       row.appendChild(undoBtn);
     }
@@ -1054,7 +1101,8 @@ function render() {
   }
   stage.appendChild(card);
   $("back").disabled = !state.history.length && state.objection == null;
-  $("obj-section").hidden = !!node.end;
+  // The objection chips jump to built-in steps, so they are off while a published script is in use.
+  $("obj-section").hidden = !!node.end || ACTIVE !== BUILTIN;
   renderLeads();
 }
 
@@ -1080,6 +1128,7 @@ function restoreSheet() {
 function v1Sheet() { try { const raw = localStorage.getItem("vcg-sheet"); const s = raw && JSON.parse(raw); return s && s.rows && s.cols && s.rows[s.idx] ? s : null; } catch (e) { return null; } }
 function syncImportButton() { $("import-v1").hidden = !!sheet || !v1Sheet(); }
 $("import-v1").addEventListener("click", () => {
+  if (state.practice) { note(I18n.t("practice.blocked")); return; }
   const s = v1Sheet(); if (!s) { syncImportButton(); return; }
   sheet = s;
   ensureResultCols(s); refreshPhoneFlags();
@@ -1091,13 +1140,14 @@ $("import-v1").addEventListener("click", () => {
 });
 
 document.addEventListener("keydown", (ev) => {
-  if ($("app").hidden) return;   // pairing screen: no script shortcuts
+  if ($("app").hidden) return;
+  if (document.querySelector(".modal-wrap:not([hidden])")) return;   // a dialog is open: no script shortcuts   // pairing screen: no script shortcuts
   const tag = ev.target.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA" || ev.metaKey || ev.ctrlKey || ev.altKey) return;
   const k = ev.key.toLowerCase();
   const map = { "1": "yes", "2": "no", "3": "maybe" };
   if ((ev.key === "ArrowLeft" || ev.key === "ArrowRight") && sheet) {
-    if (leaveBlocked()) { note("Finish or restart this call before moving to another lead."); return; }
+    if (leaveBlocked()) { note(leaveMessage()); return; }
     const to = sheet.idx + (ev.key === "ArrowLeft" ? -1 : 1);
     if (to >= 0 && to < sheet.rows.length) { ev.preventDefault(); note(""); loadLead(to); }
     return;
@@ -1108,7 +1158,7 @@ document.addEventListener("keydown", (ev) => {
   else if (k === "c") {
     const b = $("call-laptop");
     if (b && !b.disabled) { ev.preventDefault(); b.click(); }
-    else if (b) note("The phone is not reachable, so the call cannot start. See the banner at the top of the page.");
+    else if (b) note(TermsGate.allowed() ? "The phone is not reachable, so the call cannot start. See the banner at the top of the page." : I18n.t("call.blockedTerms"));
   }
 });
 
@@ -1138,12 +1188,19 @@ Promise.all([Vault.ready, PhoneLink.ready]).then(() => {
   render();
   resumeLastCall();
   checkPhone();
+  loadPublishedScript();
 });
 let cloudStatus = "";
 Cloud.onChange((c) => {
   refreshLinkPanel();
-  if (c.status !== cloudStatus) { cloudStatus = c.status; if (c.status === "ready") cloudSweep(); }   // catch up after signing in
+  if (c.status !== cloudStatus) {
+    cloudStatus = c.status;
+    if (c.status === "ready") cloudSweep();   // catch up after signing in
+    // Signing in or out changes which script the rep gets. Going offline keeps the script in use.
+    if (appReady && (c.status === "ready" || c.status === "signed_out" || c.status === "no_seat")) loadPublishedScript();
+  }
 });
+TermsGate.init();
 Cloud.init();
 setInterval(cloudSweep, 30000);
 $("signin-send").addEventListener("click", sendSigninLink);
@@ -1151,3 +1208,74 @@ $("signin-email").addEventListener("keydown", (ev) => { if (ev.key === "Enter") 
 $("cloud-signout").addEventListener("click", () => { $("cloud-panel").open = false; Cloud.signOut(); });
 setInterval(checkPhone, 15000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) checkPhone(); });
+
+/* ---- Practice, consent, callback reminders, and the page modules (i18n, settings, terms, feedback, timeout, walkthrough) ---- */
+
+/* Practice: walks the same script with nothing written: no outcome, lead or cloud record. */
+function renderPractice() {
+  $("practice-banner").hidden = !state.practice;
+  $("practice-start").hidden = !!state.practice;
+}
+function startPractice() {
+  if (state.practice) return;
+  const live = callView && (callView.phase === "REQUESTED" || callView.phase === "OFFHOOK");
+  if (live || state.history.length || state.objection != null) { note(I18n.t("practice.blockedStart")); return; }
+  note("");
+  state.practice = true;
+  resetCall();
+  render();
+  window.scrollTo({ top: 0, behavior: "auto" });
+}
+function exitPractice() {
+  state.practice = false;
+  resetCall();
+  note("");
+  render();
+}
+
+/* Consent for this lead. Written to the sheet in English (the values the institute reads), with the date.
+   It stays on this laptop: the cloud upload only carries the call outcome and timings. */
+const CONSENT_VALUES = ["Not recorded", "Consent given", "Consent refused"];
+const CONSENT_KEYS = { "Not recorded": "consent.none", "Consent given": "consent.given", "Consent refused": "consent.refused" };
+function consentField() {
+  const wrap = el("label", "field cbfield");
+  wrap.appendChild(el("span", "label", I18n.t("consent.label")));
+  const sel = el("select");
+  sel.id = "lead-consent";
+  CONSENT_VALUES.forEach((v) => sel.appendChild(new Option(I18n.t(CONSENT_KEYS[v]), v)));
+  const cur = String(sheet.rows[sheet.idx][sheet.cols.consent] || "").trim();
+  sel.value = CONSENT_VALUES.includes(cur) ? cur : "Not recorded";
+  const hint = el("span", "hint");
+  const showHint = () => {
+    const d = LeadList.validDate(sheet.rows[sheet.idx][sheet.cols.consentDate]);
+    hint.textContent = I18n.t("consent.hint") + (sel.value !== "Not recorded" && d ? " " + I18n.t("consent.on", { date: d }) : "");
+  };
+  sel.addEventListener("change", () => {
+    const row = sheet.rows[sheet.idx];
+    row[sheet.cols.consent] = sel.value;
+    row[sheet.cols.consentDate] = sel.value === "Not recorded" ? "" : LeadList.todayIso();
+    persist();
+    showHint();
+  });
+  showHint();
+  wrap.appendChild(sel);
+  wrap.appendChild(hint);
+  return wrap;
+}
+
+/* A callback date saved: the phone is asked to remind the rep at 09:00 local time that day. Only the time and
+   the text "Callback due" go to the phone: no name, no number. Failures are ignored. */
+function requestCallbackReminder(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+  if (!m || !PhoneLink.isPaired()) return;
+  const at = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 9, 0, 0, 0).getTime();
+  try { PhoneLink.request("remind", { at: at, text: "Callback due" }).catch(() => {}); } catch (e) {}
+}
+
+$("practice-start").addEventListener("click", startPractice);
+$("practice-exit").addEventListener("click", exitPractice);
+TermsGate.onChange(() => render());
+Feedback.init();
+SessionTimeout.init();
+Onboarding.init();
+AccessSettings.init({ onChange: () => render() });   // before the first render, so the chosen language applies

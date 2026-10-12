@@ -1,0 +1,64 @@
+/* Workspace additions: practice banner, terms panel, feedback and walkthrough dialogs, timeout message,
+   settings menu, and the large-text and high-contrast modes (classes on the body). Loaded by index.html.
+   No inline style attributes anywhere (the page's content security policy). */
+
+/* Header: the new buttons wrap on narrow screens. */
+.topbar-in { flex-wrap: wrap; }
+
+/* Practice mode */
+.practice-banner { border: 2px solid var(--accent); background: var(--surface); border-radius: 10px; padding: 12px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.practice-banner strong { color: var(--accent); flex: 1 1 200px; min-width: 0; }
+
+/* Terms panel (shown only with the cloud on, and until the rep accepts) */
+.terms-panel { border: 2px solid var(--maybe); }
+.terms-need { margin: 0; font-weight: 700; }
+.terms-draft { margin: 0; color: var(--maybe); font-weight: 700; }
+.terms-text { max-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: var(--bg); font-size: 0.95rem; }
+.terms-text p { margin: 0 0 10px; overflow-wrap: anywhere; }
+.terms-text p:last-child { margin-bottom: 0; }
+
+/* Dialogs: feedback, walkthrough, still-there */
+.modal-wrap { position: fixed; inset: 0; background: rgb(0 0 0 / 0.45); display: grid; place-items: center; padding: 16px; z-index: 50; }
+.modal { width: 100%; max-width: 520px; max-height: calc(100vh - 32px); overflow: auto; background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: 14px; padding: 22px 20px; display: flex; flex-direction: column; gap: 14px; }
+.modal h2 { margin: 0; font-size: 1.3rem; line-height: 1.25; }
+.modal p { margin: 0; }
+.modal textarea { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px; width: 100%; resize: vertical; min-height: 140px; }
+.modal .tools { justify-content: flex-end; }
+.modal .field { display: flex; flex-direction: column; gap: 4px; }
+.count { font-family: var(--util); font-size: 0.8rem; color: var(--muted); text-align: right; margin: 0; }
+.onb-actions { margin-top: 4px; }
+
+/* Settings menu */
+.pill-menu .check { display: flex; align-items: center; gap: 10px; font-size: 1rem; cursor: pointer; }
+.pill-menu .check input { width: 20px; height: 20px; margin: 0; }
+.pill-menu select, .cbfield select { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; }
+.pill-menu .field { display: flex; flex-direction: column; gap: 4px; }
+
+/* Large text: the root font size scales every rem-based size; body text gets a larger base. */
+:root:has(body.large-text) { font-size: 120%; }
+body.large-text { font-size: 19px; }
+body.large-text .chip, body.large-text .objcard .chip { font-size: 1rem; }
+body.large-text .ans span { font-size: 1.05rem; }
+
+/* High contrast: solid colours and heavier borders. Light by default, dark when the page is dark. */
+body.high-contrast {
+  --bg: #FFFFFF; --surface: #FFFFFF; --fg: #000000; --muted: #1F1F1F; --line: #000000; --accent: #0021A5;
+  --yes: #00541A; --yes-bg: #FFFFFF; --no: #A00000; --no-bg: #FFFFFF; --maybe: #5C3A00; --maybe-bg: #FFFFFF;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) body.high-contrast {
+    --bg: #000000; --surface: #000000; --fg: #FFFFFF; --muted: #E6E6E6; --line: #FFFFFF; --accent: #9EC7FF;
+    --yes: #7CFF9F; --yes-bg: #000000; --no: #FF9C9C; --no-bg: #000000; --maybe: #FFE066; --maybe-bg: #000000;
+  }
+}
+:root[data-theme="dark"] body.high-contrast {
+  --bg: #000000; --surface: #000000; --fg: #FFFFFF; --muted: #E6E6E6; --line: #FFFFFF; --accent: #9EC7FF;
+  --yes: #7CFF9F; --yes-bg: #000000; --no: #FF9C9C; --no-bg: #000000; --maybe: #FFE066; --maybe-bg: #000000;
+}
+body.high-contrast .card, body.high-contrast .panel, body.high-contrast .callcard, body.high-contrast .objcard,
+body.high-contrast .sheetbar, body.high-contrast .modal, body.high-contrast .ans, body.high-contrast .chip,
+body.high-contrast .plain, body.high-contrast .primary, body.high-contrast .pill summary { border-width: 2px; }
+body.high-contrast :focus-visible { outline-width: 4px; }
+
+/* Hindi: Windows has a Devanagari face (Nirmala UI); the page font has no Devanagari glyphs. */
+:root:lang(hi) { --read: "Nirmala UI", "Segoe UI", system-ui, sans-serif; }

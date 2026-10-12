@@ -32,6 +32,7 @@
       email: session && session.user ? session.user.email : '',
       seatLabel: seat ? seat.label : '',
       role: seat ? seat.role : '',
+      instituteId: seat ? seat.institute_id : '',
     });
   }
   function emit() { listeners.forEach((fn) => { try { fn(info()); } catch (e) {} }); }
@@ -197,12 +198,41 @@
     }
   }
 
+  /* A database function call with the signed-in rep's session. Resolves { data, error }; rejects when not
+     signed in or when the network fails. Used for terms acceptance and feedback. */
+  async function rpc(name, args) {
+    if (!client || !session) throw new Error('Not signed in to the Vector cloud.');
+    const res = await client.rpc(name, args || {});
+    return { data: res.data, error: res.error || null };
+  }
+
+  /* The published script for the signed-in rep's institute: { scriptId, version, steps }, or null when there is
+     none, cloud is off, nobody is signed in, or the read fails. RLS lets a rep read published versions only. */
+  async function publishedScript() {
+    try {
+      if (!client || !session || !seat) return null;
+      const { data, error } = await client
+        .from('scripts')
+        .select('id, script_versions!inner(version, steps, published)')
+        .eq('institute_id', seat.institute_id)
+        .eq('script_versions.published', true)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (error || !Array.isArray(data) || !data[0]) return null;
+      const v = Array.isArray(data[0].script_versions) ? data[0].script_versions[0] : data[0].script_versions;
+      if (!v || !Array.isArray(v.steps)) return null;
+      return { scriptId: data[0].id, version: v.version, steps: v.steps };
+    } catch (e) { return null; }
+  }
+
   window.Cloud = {
     enabled,
     init,
     info,
     sendLink,
     signOut,
+    rpc,
+    publishedScript,
     enqueue,
     cancel,
     flush,
