@@ -520,6 +520,71 @@
     if (error) { say('report-msg', 'Could not load the report: ' + error.message, true); return; }
     say('report-msg', 'Showing v' + v.version + ', ' + $('report-from').value + ' to ' + $('report-to').value + '.');
     renderReport(data || {});
+    loadInsights(v, range);
+  }
+
+  // ---------- insights: why calls are lost, and suggested changes the admin approves ----------
+
+  const REASON_LABEL = {
+    price: 'Price', timing: 'Timing', already_enrolled: 'Already enrolled', no_need: 'No need',
+    wrong_person: 'Wrong person', other: 'Other', not_recorded: 'Not recorded',
+  };
+  const stageLabel = (s) => (s === 'not_recorded' ? '(not recorded)' : s);
+
+  async function loadInsights(v, range) {
+    const out = $('insights-out');
+    out.textContent = '';
+    const { data, error } = await client.rpc('admin_loss_insights', {
+      p_institute: mySeat.institute_id, p_script_version_id: v.id, p_from: range.from, p_to: range.to,
+    });
+    if (error) { out.appendChild(el('p', { className: 'msg', text: 'Could not load insights: ' + error.message })); return; }
+    renderInsights(data || {}, v, range);
+  }
+
+  function renderInsights(d, v, range) {
+    const out = $('insights-out');
+    out.textContent = '';
+    out.appendChild(el('h2', { text: 'What went wrong on lost calls' }));
+    if (!d.calls) { out.appendChild(el('p', { className: 'muted', text: 'No calls for this version in the range.' })); return; }
+    const rate = d.lost_rate == null ? '' : ' (' + pct(d.lost_rate) + ')';
+    let line = d.lost + ' of ' + d.calls + ' calls lost' + rate + ' on v' + d.version + '.';
+    if (d.previous_version != null && d.previous_calls) {
+      line += ' v' + d.previous_version + ' lost ' + pct(d.previous_lost_rate) + ' of ' + d.previous_calls + ' calls.';
+    }
+    out.appendChild(el('p', { text: line }));
+    if (!d.enough_calls) out.appendChild(el('p', { className: 'muted', text: 'Suggestions appear after 10 calls on this version.' }));
+    out.appendChild(reportTable('Lost calls by reason', ['Reason', 'Calls'],
+      (d.reasons || []).map((r) => [REASON_LABEL[r.reason] || r.reason, r.calls])));
+    out.appendChild(reportTable('Where lost calls ended', ['Stage', 'Calls'],
+      (d.stages || []).map((r) => [stageLabel(r.stage), r.calls])));
+    out.appendChild(reportTable('Objections on lost calls', ['Objection', 'Calls'],
+      (d.objections || []).map((r) => [r.objection, r.calls])));
+
+    const block = el('div', { className: 'report-block' }, [el('h3', { text: 'Suggested changes' })]);
+    const sugg = d.suggestions || [];
+    if (!sugg.length) block.appendChild(el('p', { className: 'muted', text: 'No single change stands out yet.' }));
+    sugg.forEach((s) => {
+      const row = el('div', { className: 'suggestion' }, [el('p', { text: s.text })]);
+      if (s.decision) {
+        const when = s.decided_at ? ' on ' + new Date(s.decided_at).toLocaleDateString() : '';
+        row.appendChild(el('p', { className: 'muted', text: pretty(s.decision) + when + '. Change the script in the editor, then publish a new version.' }));
+      }
+      const approve = el('button', { type: 'button', text: s.decision === 'approved' ? 'Approved' : 'Approve' });
+      const reject = el('button', { type: 'button', text: s.decision === 'rejected' ? 'Rejected' : 'Reject' });
+      approve.addEventListener('click', () => decideSuggestion(v, s.key, 'approved', range, s.text));
+      reject.addEventListener('click', () => decideSuggestion(v, s.key, 'rejected', range, s.text));
+      row.appendChild(el('div', { className: 'suggestion-actions' }, [approve, reject]));
+      block.appendChild(row);
+    });
+    out.appendChild(block);
+  }
+
+  async function decideSuggestion(v, key, decision, range, note) {
+    const { error } = await client.rpc('admin_decide_suggestion', {
+      p_institute: mySeat.institute_id, p_script_version_id: v.id, p_target_key: key, p_decision: decision, p_note: note,
+    });
+    if (error) { say('report-msg', 'Could not save the decision: ' + error.message, true); return; }
+    loadInsights(v, range);
   }
 
   function renderReport(d) {

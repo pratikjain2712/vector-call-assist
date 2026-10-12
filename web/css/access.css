@@ -62,3 +62,8 @@ body.high-contrast :focus-visible { outline-width: 4px; }
 
 /* Hindi: Windows has a Devanagari face (Nirmala UI); the page font has no Devanagari glyphs. */
 :root:lang(hi) { --read: "Nirmala UI", "Segoe UI", system-ui, sans-serif; }
+
+/* My results (rep page) */
+.myresults .myr-block h3 { margin: 0 0 .3rem; font-size: .95rem; }
+.myresults .myr-list { margin: 0; padding-left: 1.2rem; }
+.myresults .myr-block p { margin: .2rem 0; }

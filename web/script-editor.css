@@ -74,3 +74,10 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .report-block { margin-top: 14px; }
 .report-block h3 { margin-top: 10px; }
 #report-out { max-width: 100%; }
+
+/* Insights on the script report */
+.insights { margin-top: 1.25rem; }
+.insights h2 { font-size: 1.15rem; margin: 0 0 .5rem; }
+.suggestion { border: 1px solid #d9e0ee; border-radius: 12px; padding: .75rem .9rem; margin: .5rem 0; background: #fff; }
+.suggestion p { margin: 0 0 .4rem; }
+.suggestion-actions { display: flex; gap: .5rem; }

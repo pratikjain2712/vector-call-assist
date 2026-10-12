@@ -371,6 +371,11 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
       </div>
     </section>
 
+    <section class="panel myresults" id="my-results" aria-labelledby="my-results-title" hidden>
+      <h2 id="my-results-title">My results, last 7 days</h2>
+      <div id="my-results-body"></div>
+    </section>
+
     <section class="sheetbar">
       <div id="sheet-load" class="sheetload">
         <label class="plain filebtn" for="sheet-file" data-i18n="btn.loadSheet">Load a lead sheet</label>
@@ -443,6 +448,7 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
 <script src="js/config.js"></script>
 <script src="js/vault.js"></script>
 <script src="js/cloud.js"></script>
+<script src="js/my-results.js"></script>
 <script src="js/phone-link.js"></script>
 <script src="js/call-session.js"></script>
 <script src="js/import-check.js"></script>

@@ -645,6 +645,18 @@ async function loadPublishedScript() {
   render();
 }
 
+/* Loss reasons the rep can pick on a "Not this time" call. The codes match call_outcomes.loss_reason. */
+const LOSS_REASONS = [
+  ["price", "Price"], ["timing", "Timing"], ["already_enrolled", "Already enrolled"],
+  ["no_need", "No need"], ["wrong_person", "Wrong person"], ["other", "Other"],
+];
+function setLossReason(code) {
+  if (!state.callId || !CallRecords.get(state.callId)) return;
+  CallRecords.update(state.callId, { lossReason: code });
+  cloudSync(state.callId);
+  render();
+}
+
 /* ---- Cloud sync (js/cloud.js) ----
    A call is uploaded once it is settled: the outcome is tapped and, for laptop calls, the phone has
    reported the result (or two minutes have passed). A later change to an uploaded call is sent as a
@@ -661,6 +673,8 @@ function cloudRow(r) {
     script_id: r.scriptId == null ? null : String(r.scriptId).slice(0, 80),
     script_version: r.scriptVersion == null ? null : Number(r.scriptVersion),
     script_step: (r.outcomeCode || "").slice(0, 80) || null,   // the end card reached, e.g. end_details
+    stage_reached: r.stageReached ? String(r.stageReached).slice(0, 40) : null,   // the furthest stage, e.g. Pitch
+    loss_reason: r.lossReason || null,
     objection: objs.length ? String(objs[objs.length - 1]).slice(0, 80) : null,
     outcome: own(CLOUD_OUTCOME, r.outcomeCode) || "other",
     dialled_at: dialMs ? new Date(dialMs).toISOString() : null,
@@ -1059,6 +1073,15 @@ function render() {
     card.appendChild(el("span", "outcome " + e.tone, "Call ended: " + e.label));
     card.appendChild(el("p", "heard", e.note));
     const row = el("div", "tools");
+    if (state.node === "end_lost" && state.callId && CallRecords.get(state.callId)) {
+      card.appendChild(el("span", "label", "Why did they say no? Pick one, it helps the next call"));
+      const current = CallRecords.get(state.callId).lossReason;
+      const reasons = el("div", "tools");
+      LOSS_REASONS.forEach(([code, label]) => {
+        reasons.appendChild(tool("loss-" + code, label, () => setLossReason(code), current === code ? "primary" : "plain"));
+      });
+      card.appendChild(reasons);
+    }
     if (e.msg) {
       card.appendChild(el("span", "label", "WhatsApp message to send"));
       const text = plain(e.msg);
