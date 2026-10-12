@@ -292,7 +292,10 @@
       $('rowAddon').textContent = addon.checked ? inr(addBase) + ' × ' + plural(n) : 'Not included';
       $('rowYearLabel').textContent = yearly ? 'Billed yearly' : 'Billed monthly';
       $('rowYear').textContent = yearly ? inr(perMonth * 12) + ' a year' : inr(perMonth) + ' a month';
-      $('rowDay').textContent = 'about ₹' + Math.max(1, Math.round(unit / 30)) + ' a day';
+      // The chai line follows the real number: a cup of chai is about ₹10 to ₹15, so it is only claimed when true.
+      var perDay = Math.max(1, Math.round(unit / 30));
+      $('rowDay').textContent = 'about ₹' + perDay + ' a day' +
+        (perDay <= 10 ? ', less than a cup of chai ☕' : perDay <= 15 ? ', about a cup of chai ☕' : '');
 
       /* Anchor: the same seats on monthly billing for a year, against yearly billing. */
       var addM = addon.checked ? PRICE.addon.monthly : 0, addY = addon.checked ? PRICE.addon.yearly : 0;
@@ -570,4 +573,164 @@
 (function bars() {
   var els = document.querySelectorAll('[data-w]');
   Array.prototype.forEach.call(els, function (el) { el.style.width = el.getAttribute('data-w') + '%'; });
+})();
+
+/* ---------- analytics: an interactive example of the loss report ----------
+   Example data only. Switch the grouping (step, reason, objection) and the script version; tap a bar to see
+   what it means and, for the top causes, approve or reject the suggested change, as an admin does in the
+   script editor. Nothing here is sent anywhere. */
+(function lossExplorer() {
+  var root = document.getElementById('lossExplorer');
+  if (!root) return;
+  var list = document.getElementById('lossBars');
+  var summary = document.getElementById('lossSummary');
+  var detail = document.getElementById('lossDetail');
+
+  // Calls lost per 100 calls, for script v1 and v2. Steps and reasons add up to the lost total (40 and 32);
+  // objections add up to less, because not every lost call has one.
+  var DATA = {
+    step: {
+      unit: 'Calls lost at each step, out of every 100 calls.',
+      rows: [
+        { key: 'Greeting', v: [4, 4] },
+        { key: 'Ask', v: [6, 6] },
+        { key: 'Offer', v: [15, 8], tip: 'Most lost calls end at the offer line. Move the fee and payment options before the long offer details, so the lead hears the price with the reason for it.' },
+        { key: 'Objection', v: [10, 9] },
+        { key: 'Close', v: [5, 5] }
+      ]
+    },
+    reason: {
+      unit: 'Reasons reps picked on lost calls, out of every 100 calls.',
+      rows: [
+        { key: 'Price', v: [14, 8], tip: 'Price is the top recorded reason. Show the fee and the payment options earlier in the call.' },
+        { key: 'Timing', v: [9, 9] },
+        { key: 'No need', v: [7, 6] },
+        { key: 'Already enrolled', v: [6, 6] },
+        { key: 'Wrong person', v: [4, 3] }
+      ]
+    },
+    objection: {
+      unit: 'Objections heard on lost calls, out of every 100 calls.',
+      rows: [
+        { key: '"Too expensive"', v: [12, 6], tip: '"Too expensive" comes up in most lost calls. Give the rep one clear answer: the monthly payment option and what is included.' },
+        { key: '"No time right now"', v: [8, 8] },
+        { key: '"Need to ask family"', v: [7, 6] },
+        { key: '"Is this a scam?"', v: [3, 2] }
+      ]
+    }
+  };
+  var TOTAL = [40, 32];
+  var view = 'step', ver = 0, picked = null;
+  var decisions = {};   // suggestion key -> 'approved' | 'rejected', for this page view only
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  function topKey(rows) {
+    var best = rows[0];
+    rows.forEach(function (r) { if (r.v[ver] > best.v[ver]) best = r; });
+    return best.key;
+  }
+
+  function draw() {
+    var set = DATA[view], rows = set.rows;
+    var max = 0;
+    rows.forEach(function (r) { max = Math.max(max, r.v[0], r.v[1]); });
+    var top = topKey(rows);
+
+    summary.textContent = TOTAL[ver] + ' of every 100 calls are lost on script v' + (ver + 1) +
+      (ver === 1 ? ', down from ' + TOTAL[0] + ' on v1.' : '. Switch to v2 to see the next version.');
+
+    list.textContent = '';
+    rows.forEach(function (r) {
+      var li = el('li', r.key === top ? 'hot' : '');
+      var b = el('button', 'bar-btn');
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(picked === r.key));
+      b.setAttribute('aria-label', r.key + ': ' + r.v[ver] + ' lost calls per 100' + (ver === 1 ? ', ' + r.v[0] + ' on v1' : ''));
+      b.appendChild(el('span', 'bar-label', r.key));
+      var track = el('span', 'track');
+      var fill = el('span', 'fill');
+      fill.style.width = Math.round(r.v[ver] / max * 100) + '%';
+      track.appendChild(fill);
+      b.appendChild(track);
+      var num = el('b', null, String(r.v[ver]));
+      b.appendChild(num);
+      if (ver === 1 && r.v[1] !== r.v[0]) {
+        var d = r.v[1] - r.v[0];
+        num.appendChild(el('small', d < 0 ? 'delta down' : 'delta up', (d < 0 ? '−' : '+') + Math.abs(d)));
+      }
+      b.addEventListener('click', function () { picked = picked === r.key ? null : r.key; draw(); });
+      li.appendChild(b);
+      list.appendChild(li);
+    });
+    drawDetail();
+  }
+
+  function drawDetail() {
+    var set = DATA[view];
+    detail.textContent = '';
+    var row = null;
+    set.rows.forEach(function (r) { if (r.key === picked) row = r; });
+    if (!row) {
+      detail.appendChild(el('p', 'hint', set.unit + ' Tap a bar to see what to change.'));
+      return;
+    }
+    var n = row.v[ver];
+    var share = Math.round(n / TOTAL[ver] * 100);
+    detail.appendChild(el('p', 'loss-head', row.key + ': ' + n + ' of ' + TOTAL[ver] + ' lost calls (' + share + '%) on script v' + (ver + 1) + '.'));
+    // A top cause without a written suggestion gets a general one (e.g. Objection once the offer line is fixed on v2).
+    var tip = row.tip || (row.key === topKey(set.rows)
+      ? 'This is now the biggest cause on script v' + (ver + 1) + '. Review the lines for it next and add a clear answer to the script.'
+      : null);
+    if (!tip) {
+      detail.appendChild(el('p', 'hint', 'Not a top cause on this version. Keep an eye on it as more calls come in.'));
+      return;
+    }
+    var id = view + ':' + row.key + ':v' + (ver + 1);
+    var box = el('div', 'suggest');
+    box.appendChild(el('span', 'suggest-tag', 'Suggested change'));
+    box.appendChild(el('p', null, tip));
+    var state = decisions[id];
+    if (state) {
+      box.appendChild(el('p', 'suggest-done ' + state, state === 'approved'
+        ? 'Approved. Make the change in the script editor and publish it; reps see it on their My results panel.'
+        : 'Rejected. The script stays as it is, and the decision is kept with this version.'));
+      var undo = el('button', 'btn btn-ghost btn-sm', 'Change decision');
+      undo.type = 'button';
+      undo.addEventListener('click', function () { delete decisions[id]; drawDetail(); });
+      box.appendChild(undo);
+    } else {
+      var acts = el('div', 'suggest-actions');
+      [['approved', 'Approve', 'btn btn-primary btn-sm'], ['rejected', 'Reject', 'btn btn-ghost btn-sm']].forEach(function (a) {
+        var btn = el('button', a[2], a[1]);
+        btn.type = 'button';
+        btn.addEventListener('click', function () { decisions[id] = a[0]; drawDetail(); });
+        acts.appendChild(btn);
+      });
+      box.appendChild(acts);
+    }
+    if (ver === 1 && row.v[1] < row.v[0]) {
+      box.appendChild(el('p', 'hint', 'On v2 this fell from ' + row.v[0] + ' to ' + row.v[1] + ' lost calls per 100.'));
+    }
+    detail.appendChild(box);
+  }
+
+  function press(group, attr, value) {
+    Array.prototype.forEach.call(root.querySelectorAll('[' + attr + ']'), function (b) {
+      b.setAttribute('aria-pressed', String(b.getAttribute(attr) === value));
+    });
+  }
+  Array.prototype.forEach.call(root.querySelectorAll('[data-view]'), function (b) {
+    b.addEventListener('click', function () { view = b.getAttribute('data-view'); picked = null; press('view', 'data-view', view); draw(); });
+  });
+  Array.prototype.forEach.call(root.querySelectorAll('[data-ver]'), function (b) {
+    b.addEventListener('click', function () { ver = Number(b.getAttribute('data-ver')) - 1; press('ver', 'data-ver', String(ver + 1)); draw(); });
+  });
+
+  draw();
 })();

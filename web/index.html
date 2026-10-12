@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <!-- Content-Security-Policy: scripts come only from this site and the two CDNs below. The three.js module is pinned to an exact release. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.supabase.co; object-src 'none'; base-uri 'self'; form-action 'none'">
-<meta name="description" content="Vector Call Assist: human calling for sales and admissions teams. Reps call from their own Android phone, with the script on the laptop, callbacks, and results per seat. Start a 14-day free trial.">
+<meta name="description" content="Vector Call Assist: human calling for sales and admissions teams. Reps call from their own Android phone, with the script on the laptop, callbacks, and results per seat. Start a 5-day free trial.">
 <meta name="theme-color" content="#2456e6">
 <meta property="og:title" content="Vector Call Assist">
 <meta property="og:description" content="Every call on script, every result counted. Human calling for sales teams.">
@@ -76,9 +76,9 @@
           <a class="btn btn-primary btn-lg magnetic" href="#account">Start free trial <span class="arrow" aria-hidden="true">→</span></a>
           <a class="btn btn-lg btn-ghost magnetic" href="#demo">Try the live demo</a>
         </div>
-        <p class="micro"><span class="tick" aria-hidden="true">✓</span> 14 days · up to 5 seats · no card needed</p>
+        <p class="micro"><span class="tick" aria-hidden="true">✓</span> 5 days · up to 5 seats · no card needed</p>
         <dl class="stats" aria-label="At a glance">
-          <div><dt>Trial length</dt><dd><span data-count="14">14</span> days</dd></div>
+          <div><dt>Trial length</dt><dd><span data-count="5">5</span> days</dd></div>
           <div><dt>Seats to try</dt><dd><span data-count="5">5</span> free</dd></div>
           <div><dt>Per seat, yearly</dt><dd>₹<span data-count="399">399</span>/mo</dd></div>
           <div><dt>Call recordings</dt><dd><span data-count="0">0</span></dd></div>
@@ -305,16 +305,30 @@
       <p class="lede">A traditional CRM tells you a lead said no. Vector shows where in the call it was lost, why, and what to change. The team sees it the same day, and the script improves with every version.</p>
     </div>
     <div class="insight-grid">
-      <figure class="chart-card reveal">
-        <figcaption><span>Where calls end, by script step</span><span class="tag">Example data</span></figcaption>
-        <ul class="bars">
-          <li><span>Greeting</span><span class="track"><span class="fill" data-w="8"></span></span><b>8%</b></li>
-          <li><span>Ask</span><span class="track"><span class="fill" data-w="12"></span></span><b>12%</b></li>
-          <li class="hot"><span>Offer</span><span class="track"><span class="fill" data-w="31"></span></span><b>31%</b></li>
-          <li><span>Objection</span><span class="track"><span class="fill" data-w="22"></span></span><b>22%</b></li>
-          <li><span>Close</span><span class="track"><span class="fill" data-w="9"></span></span><b>9%</b></li>
+      <figure class="chart-card reveal" id="lossExplorer">
+        <figcaption><span>Where calls are lost</span><span class="tag">Example data</span></figcaption>
+        <div class="loss-controls">
+          <div class="seg" role="group" aria-label="Group lost calls by">
+            <button type="button" data-view="step" aria-pressed="true">By step</button>
+            <button type="button" data-view="reason" aria-pressed="false">By reason</button>
+            <button type="button" data-view="objection" aria-pressed="false">By objection</button>
+          </div>
+          <div class="seg seg-small" role="group" aria-label="Script version">
+            <button type="button" data-ver="1" aria-pressed="true">Script v1</button>
+            <button type="button" data-ver="2" aria-pressed="false">Script v2</button>
+          </div>
+        </div>
+        <p class="loss-summary" id="lossSummary" aria-live="polite">40 of every 100 calls are lost on script v1.</p>
+        <ul class="bars loss-bars" id="lossBars">
+          <li><span>Greeting</span><span class="track"><span class="fill" data-w="27"></span></span><b>4</b></li>
+          <li><span>Ask</span><span class="track"><span class="fill" data-w="40"></span></span><b>6</b></li>
+          <li class="hot"><span>Offer</span><span class="track"><span class="fill" data-w="100"></span></span><b>15</b></li>
+          <li><span>Objection</span><span class="track"><span class="fill" data-w="67"></span></span><b>10</b></li>
+          <li><span>Close</span><span class="track"><span class="fill" data-w="33"></span></span><b>5</b></li>
         </ul>
-        <p class="chart-note">Here the offer line loses the most calls, so that is the line to change. Your own numbers replace these once calls are logged.</p>
+        <div class="loss-detail" id="lossDetail" aria-live="polite">
+          <p class="hint">Calls lost at each step, out of every 100 calls. Tap a bar to see what to change.</p>
+        </div>
       </figure>
       <div class="insight-list reveal">
         <article class="insight-card">
@@ -351,7 +365,7 @@
   <div class="wrap">
     <div class="section-head reveal">
       <span class="eyebrow">Pricing</span>
-      <h2 class="h2">About ₹13 a day per rep on yearly billing. Bundles bring it lower.</h2>
+      <h2 class="h2">About ₹13 a day per rep. That's about a cup of chai.</h2>
       <p class="lede">Prices are per seat per month. Yearly billing saves 20% on every seat. Bundles are set by how many seats you buy: 3 seats save 15%, 5 seats save 25%, and each seat after 5 adds 5%, up to 40%.</p>
     </div>
 
@@ -390,7 +404,7 @@
             <li><span>Per rep</span><b id="rowDay"></b></li>
           </ul>
           <a class="btn btn-primary btn-block magnetic" href="#account">Start free trial <span class="arrow" aria-hidden="true">→</span></a>
-          <p class="micro">14 days free, up to 5 seats. Yearly billing is for a full year.</p>
+          <p class="micro">5 days free, up to 5 seats. Yearly billing is for a full year.</p>
         </div>
       </div>
 
@@ -429,7 +443,7 @@
   <div class="wrap account">
     <div class="account-copy reveal">
       <span class="eyebrow">Get started</span>
-      <h2 class="h2">Start a 14-day trial.</h2>
+      <h2 class="h2">Start a 5-day trial.</h2>
       <p class="lede lede-top">No payment. You become the admin of your company and get up to 5 seats. Sign in with an emailed link; there is no password.</p>
       <ul class="ticks">
         <li>Invite your reps by email when you are ready.</li>
@@ -486,7 +500,7 @@
           <label>Company name
             <input name="institute" type="text" maxlength="120" autocomplete="organization" required>
           </label>
-          <button class="btn btn-primary btn-block" type="submit">Start 14-day trial</button>
+          <button class="btn btn-primary btn-block" type="submit">Start 5-day trial</button>
         </form>
         <p class="msg" id="noSeatMsg" role="status" aria-live="polite"></p>
         <button class="link-btn" type="button" id="signOutBtn1">Sign out</button>
@@ -539,7 +553,7 @@
       </details>
       <details>
         <summary>Do I need a card for the trial?</summary>
-        <p>No. The trial is 14 days with up to 5 seats and needs no payment. Paid plans open later.</p>
+        <p>No. The trial is 5 days with up to 5 seats and needs no payment. Paid plans open later.</p>
       </details>
     </div>
   </div>
