@@ -11,6 +11,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -413,6 +414,35 @@ class MainActivity : Activity() {
             }
             setupCard.addView(r)
         }
+        if (!Reminders.notificationsAllowed(this)) {
+            setupCard.addView(View(this).apply { setBackgroundColor(pal.line) },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(1)).apply { topMargin = px(12) })
+            setupCard.addView(reminderOffRow())
+        }
+    }
+
+    /** Shown only while notifications are off: callback reminders from the laptop cannot be shown. */
+    private fun reminderOffRow(): View {
+        val r = row().apply { setPadding(0, px(12), 0, 0) }
+        r.addView(badge(false, 28))
+        r.addView(label("Callback reminders off: allow notifications", 15f, pal.warn, bold = true),
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                leftMargin = px(12)
+                rightMargin = px(8)
+            })
+        r.addView(button("Fix", Kind.PRIMARY) {
+            if (Build.VERSION.SDK_INT >= 33) {
+                askFor(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
+            } else {
+                startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
+            }
+        }.apply {
+            minHeight = px(38)
+            minimumHeight = px(38)
+            minWidth = px(64)
+            minimumWidth = px(64)
+        })
+        return r
     }
 
     // ---------------------------------------------------------------- ticking

@@ -38,6 +38,8 @@ Open Vector Companion. It asks for access one item at a time. Tap Allow each tim
 3. **Notifications (needed).** Shows a note while the link runs, so Android does not stop it.
 4. **Call log (optional).** Lets the app measure exact talk time. You can skip it.
 
+Notifications are also used for callback reminders set on the Vector page. If a permission was removed, the phone may need you to open Vector Companion once after a restart.
+
 **If you tap Don't allow:** The pairing QR code stays hidden until the needed permissions are allowed. To allow them later:
 
 1. Open the app and tap **Fix** next to the item in the Phone setup card.

@@ -45,6 +45,7 @@ import java.util.concurrent.TimeUnit
  *       {"op":"status","session":"<id>"}              phase and wall-clock times, for a live timer
  *       {"op":"result","session":"<id>"}              connected time from the call log, when available
  *       {"op":"events","after":N}                     event log entries with seq > N
+ *       {"op":"remind","at":<epoch ms>,"text":"…"}    a notification at that time; text up to 60 characters
  *
  * LIMITS STILL OPEN (see docs/phase3-spike.md): the server runs only while the monitor service runs,
  * and the call-log result needs READ_CALL_LOG, which is opt-in.
@@ -473,6 +474,7 @@ object LinkServer {
             EventLog.snapshot().filter { it.seq > after }.takeLast(200).forEach { arr.put(it.toJson()) }
             JSONObject().put("ok", true).put("events", arr)
         }
+        "remind" -> Reminders.schedule(ctx, req)
         else -> JSONObject().put("ok", false).put("error", "unknown op")
     }
 
