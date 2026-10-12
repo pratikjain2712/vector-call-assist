@@ -1,5 +1,5 @@
 /* Workspace additions: practice banner, terms panel, feedback and walkthrough dialogs, timeout message,
-   settings menu, and the large-text and high-contrast modes (classes on the body). Loaded by index.html.
+   settings menu, and the large-text and high-contrast modes (classes on the body). Loaded by app.html.
    No inline style attributes anywhere (the page's content security policy). */
 
 /* Header: the new buttons wrap on narrow screens. */

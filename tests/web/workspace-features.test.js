@@ -204,14 +204,14 @@ test("walkthrough: shows on the first run only, has four steps, and never nags w
 // ---- page checks ----
 
 test("page: no inline scripts and no inline style attributes in the workspace page", () => {
-  const html = read("index.html");
+  const html = read("app.html");
   const inlineScripts = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>/gi)];
   assert.deepEqual(inlineScripts.map((m) => m[0]), []);
   assert.equal(/\sstyle\s*=/.test(html), false);
 });
 
-test("page: the new modules are loaded by index.html and the access stylesheet is linked", () => {
-  const html = read("index.html");
+test("page: the new modules are loaded by app.html and the access stylesheet is linked", () => {
+  const html = read("app.html");
   for (const f of ["i18n", "terms", "modal", "terms-gate", "session-timeout", "feedback", "access-settings", "onboarding", "main"]) {
     assert.ok(html.includes('src="js/' + f + '.js"'), f);
   }

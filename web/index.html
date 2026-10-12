@@ -2,461 +2,391 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- Content-Security-Policy: scripts come only from this site and the two CDNs listed below, each with an integrity hash. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://*.supabase.co https://*:8765; object-src 'none'; base-uri 'self'; form-action 'none'">
-<meta name="robots" content="noindex">
-<style>html{color-scheme:light}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
-<title>Vector Call Assist</title>
-<link rel="stylesheet" href="css/access.css">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@500;700&display=swap">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
-<style>
-/* Layout: a pairing gate first. Once paired, the script is the main column (one line to read, then the
-   answer buttons) and a side column holds objections and the lead sheet. One column on narrow screens. */
-:root {
-  --bg: #F2F4F8; --surface: #FFFFFF; --fg: #111A2E; --muted: #5A657C; --line: #D5DAE5; --accent: #2447C8;
-  --yes: #0F7A3D; --yes-bg: #E2F4E8; --no: #B4232A; --no-bg: #FBE6E6; --maybe: #8A5A00; --maybe-bg: #FBF0D3;
-  --read: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
-  --util: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0E1320; --surface: #171E2E; --fg: #E8ECF4; --muted: #98A2B8; --line: #2A3347; --accent: #8FB4FF;
-    --yes: #5BD68C; --yes-bg: #12301F; --no: #FF8A8A; --no-bg: #3A1719; --maybe: #F5C451; --maybe-bg: #33270C;
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #0E1320; --surface: #171E2E; --fg: #E8ECF4; --muted: #98A2B8; --line: #2A3347; --accent: #8FB4FF;
-  --yes: #5BD68C; --yes-bg: #12301F; --no: #FF8A8A; --no-bg: #3A1719; --maybe: #F5C451; --maybe-bg: #33270C;
-  color-scheme: dark;
-}
-* { box-sizing: border-box; }
-body { background: var(--bg); color: var(--fg); font-family: var(--read); font-size: 16px; line-height: 1.5; }
-.label { font-family: var(--util); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-
-.clock { font-family: var(--util); font-variant-numeric: tabular-nums; font-size: 1rem; }
-.clock small { color: var(--muted); font-size: 0.72rem; margin-left: 8px; }
-
-
-.rail { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0; padding: 0; list-style: none; }
-.rail li { font-family: var(--util); font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding-bottom: 4px; border-bottom: 2px solid transparent; }
-.rail li.done { color: var(--fg); }
-.rail li.now { color: var(--accent); border-bottom-color: var(--accent); font-weight: 700; }
-
-.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 22px 20px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-.say { display: flex; flex-direction: column; gap: 14px; }
-.say p { margin: 0; font-size: clamp(1.3rem, 1rem + 1.6vw, 1.75rem); line-height: 1.42; overflow-wrap: anywhere; }
-.fill { color: var(--accent); font-weight: 700; }
-.fill.blank { font-weight: 400; font-style: italic; border-bottom: 2px dashed var(--accent); }
-.tip { margin: 0; color: var(--muted); font-style: italic; border-top: 1px solid var(--line); padding-top: 12px; }
-.heard { margin: 0; font-size: 1.05rem; color: var(--muted); }
-
-.ask { margin: 0; }
-.answers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.answers.one { grid-template-columns: minmax(0, 1fr); }
-.answers.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-@media (max-width: 540px) { .answers { grid-template-columns: minmax(0, 1fr); } }
-button { font: inherit; color: var(--fg); cursor: pointer; }
-button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-.ans { text-align: left; border: 2px solid var(--line); background: var(--surface); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.ans b { font-size: 1.3rem; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.ans kbd { font-family: var(--util); font-size: 0.72rem; font-weight: 500; opacity: 0.8; }
-.ans span { font-size: 0.92rem; overflow-wrap: anywhere; }
-.ans.yes { border-color: var(--yes); background: var(--yes-bg); } .ans.yes b { color: var(--yes); }
-.ans.no { border-color: var(--no); background: var(--no-bg); } .ans.no b { color: var(--no); }
-.ans.maybe { border-color: var(--maybe); background: var(--maybe-bg); } .ans.maybe b { color: var(--maybe); }
-.ans.next { border-color: var(--accent); } .ans.next b { color: var(--accent); }
-
-.tools { display: flex; flex-wrap: wrap; gap: 10px; }
-.plain { background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; font-size: 0.92rem; }
-.plain:disabled { opacity: 0.45; cursor: default; }
-
-.sheet { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
-.sheet .hint { flex: 1 1 260px; min-width: 0; }
-.hint { margin: 0; color: var(--muted); font-size: 0.92rem; }
-.hint:empty { display: none; }
-.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.filebtn { cursor: pointer; display: inline-block; }
-.filebtn:has(+ input:focus-visible) { outline: 3px solid var(--accent); outline-offset: 2px; }
-.phone { font-family: var(--util); font-variant-numeric: tabular-nums; font-size: 1.05rem; overflow-wrap: anywhere; }
-a.plain { color: var(--fg); text-decoration: none; }
-a.primary { text-decoration: none; text-align: center; }
-.primary { background: var(--accent); color: var(--bg); border: 1px solid var(--accent); border-radius: 6px; padding: 8px 14px; font-weight: 700; }
-.primary:disabled { opacity: 0.5; cursor: default; }
-.notes { display: flex; flex-direction: column; gap: 4px; }
-.notes textarea { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; resize: vertical; }
-textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-.obj { display: flex; flex-direction: column; gap: 10px; }
-.chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.chip { background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 7px 13px; font-size: 0.92rem; }
-.chip:hover, .plain:hover:not(:disabled) { border-color: var(--accent); }
-
-.msg { font-family: var(--read); font-size: 0.98rem; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 12px; margin: 0; }
-.outcome { font-family: var(--util); font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; }
-.outcome.good { color: var(--yes); } .outcome.mid { color: var(--maybe); } .outcome.bad { color: var(--no); }
-
-/* ---- Pairing gate: the only thing on screen until a phone is paired ---- */
-.gate { min-height: 100vh; display: grid; place-items: center; padding: 32px 16px; }
-.gate-card { width: 100%; max-width: 560px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 28px 24px; display: flex; flex-direction: column; gap: 18px; }
-.gate-card h1 { margin: 0; font-size: 1.6rem; line-height: 1.2; }
-.gate-card > p { margin: 0; color: var(--muted); }
-.steps { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 12px; counter-reset: step; }
-.steps li { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; align-items: start; counter-increment: step; }
-.steps li::before { content: counter(step); width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--bg); font-family: var(--util); font-weight: 700; font-size: 0.85rem; }
-.big { font-size: 1.05rem; padding: 12px 18px; }
-.or { display: flex; align-items: center; gap: 12px; color: var(--muted); font-family: var(--util); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; }
-.or::before, .or::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
-.fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 12px; }
-@media (max-width: 540px) { .fields { grid-template-columns: minmax(0, 1fr); } }
-.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.field input, .topbar input { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 9px 10px; width: 100%; }
-#link-code, #link-host { font-family: var(--util); letter-spacing: 0.04em; }
-.subcard { border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: var(--bg); }
-#scan-video { width: 100%; border-radius: 8px; background: #000; display: block; aspect-ratio: 4 / 3; object-fit: cover; }
-.msgline { margin: 0; font-size: 0.92rem; color: var(--no); }
-.msgline:empty { display: none; }
-.fields.one { grid-template-columns: minmax(0, 1fr); }
-.pill[data-sync="wait"] summary::before { background: var(--maybe); }
-.pill[data-sync="off"] summary::before { background: var(--no); }
-
-/* ---- Workspace, once paired ---- */
-.topbar { background: var(--bg); border-bottom: 1px solid var(--line); position: relative; z-index: 20; }
-.topbar-in { max-width: 1200px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
-.brand { margin: 0 auto 0 0; font-size: 1.05rem; font-weight: 700; }
-.brand span { color: var(--muted); font-weight: 400; }
-
-/* The call card: who you are calling on top, what to say below. */
-.callcard { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; min-width: 0; }
-.callhead { display: flex; align-items: center; gap: 12px 16px; padding: 12px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-.callhead .grow { flex: 1 1 220px; }
-.callhead .filebtn { align-self: flex-end; }
-.arrow { width: 40px; height: 40px; padding: 0; border-radius: 50%; font-size: 1.4rem; line-height: 1; display: grid; place-items: center; flex: none; }
-.who { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.who strong { font-size: 1.3rem; line-height: 1.25; overflow-wrap: anywhere; }
-.whosub { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; font-size: 0.92rem; color: var(--muted); }
-.whosub .phone { color: var(--fg); font-size: 0.95rem; }
-.whostate.done { color: var(--yes); font-weight: 700; }
-.calls { display: flex; flex-wrap: wrap; gap: 8px; order: 3; }
-.calls .primary, .calls .plain { padding: 11px 20px; font-size: 1rem; text-decoration: none; display: inline-block; text-align: center; border-radius: 8px; }
-.lead .next { order: 4; margin-left: auto; }
-.callcard .callpanel { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--bg); }
-.railrow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 14px 20px 0; }
-.callcard #stage .card { border: 0; border-radius: 0; background: transparent; padding: 16px 20px; gap: 12px; }
-@media (max-width: 540px) {
-  .callhead.lead { display: grid; grid-template-columns: 40px minmax(0, 1fr) 40px; gap: 12px 10px; }
-  .lead .who { align-items: center; text-align: center; }
-  .lead .whosub { justify-content: center; }
-  .lead .next, .calls { order: 0; margin: 0; }
-  .calls { grid-column: 1 / -1; }
-  .calls > * { flex: 1 1 0; padding: 11px 8px !important; font-size: 0.95rem !important; }
-  .railrow { padding: 14px 16px 0; }
-  .callcard #stage .card { padding: 18px 16px; }
-}
-.pill { position: relative; }
-.pill summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; font-size: 0.85rem; background: var(--surface); }
-.pill summary::-webkit-details-marker { display: none; }
-.pill summary::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--yes); }
-.pill[open] summary { border-color: var(--accent); }
-.pill-menu { position: absolute; z-index: 30; right: 0; top: calc(100% + 6px); width: min(300px, calc(100vw - 32px)); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.12); }
-.shell { max-width: 1200px; margin: 0 auto; padding: 20px 16px 32px; display: flex; flex-direction: column; gap: 16px; }
-.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.panel h2 { margin: 0; font-family: var(--util); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
-/* Wide screens: the call on the left, objections beside it. Narrower: objections under the call. */
-.work, .workmain { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-@media (min-width: 1100px) {
-  .work { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); grid-template-rows: auto 1fr; align-items: start; gap: 16px 20px; }
-  .work .workmain { grid-column: 1; grid-row: 1; }
-  .work .objcard { grid-column: 2; grid-row: 1 / span 2; }
-  .work .sheetbar { grid-column: 1; grid-row: 2; }
-  .work .objcard { grid-template-columns: minmax(0, 1fr); position: sticky; top: 16px; }
-  .callcard .say p { font-size: 2rem; }
-  .callcard .ans { padding: 18px 16px; }
-  .callcard .ans b { font-size: 1.45rem; }
-  .callcard .ans span { font-size: 1rem; }
-  .objcard .chip { font-size: 0.92rem; padding: 7px 13px; }
-}
-.cardfoot { display: flex; flex-wrap: wrap; gap: 10px; padding: 0 20px 18px; }
-.objcard { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); gap: 16px 28px; }
-.objcol { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-.objcol h2, .sheetbar .label { margin: 0; font-family: var(--util); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
-.objcard .chips { gap: 6px; }
-.objcard .chip { font-size: 0.86rem; padding: 5px 11px; }
-.sheetbar { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
-.sheetload { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
-.sheetload .hint { flex: 1 1 240px; }
-.sheettools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
-.sheetinfo { display: flex; flex-direction: column; gap: 6px; flex: 1 1 220px; min-width: 0; }
-.sheetinfo .top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
-.sheetinfo .fname { font-weight: 700; margin: 0; }
-.sheetinfo .progress { width: 100%; }
-.sheettools .actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.me { display: flex; align-items: center; gap: 8px; }
-.me input { font: inherit; font-size: 0.92rem; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; width: 130px; }
-@media (max-width: 700px) { .objcard { grid-template-columns: minmax(0, 1fr); padding: 14px 16px; } }
-.progress { height: 6px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
-.progress > span { display: block; height: 100%; background: var(--accent); }
-.fname { font-size: 0.92rem; overflow-wrap: anywhere; margin: 0; }
-.stackbtns { display: flex; flex-direction: column; gap: 8px; }
-.stackbtns > * { text-align: center; }
-.callpanel { background: var(--surface); border: 2px solid var(--accent); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
-.callpanel p { margin: 0; }
-.pill[data-health="checking"] summary::before { background: var(--muted); }
-.pill[data-health="offline"] summary::before, .pill[data-health="unpaired"] summary::before, .pill[data-health="clock"] summary::before { background: var(--no); }
-.banner { border: 2px solid var(--no); background: var(--no-bg); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
-.banner h2 { margin: 0; font-size: 1.05rem; color: var(--no); }
-.banner p { margin: 0; }
-.banner a.plain, .banner .plain { background: var(--surface); }
-.btnkey { font-family: var(--util); font-size: 0.72rem; font-weight: 500; opacity: 0.8; margin-left: 10px; border: 1px solid currentColor; border-radius: 4px; padding: 0 5px; }
-/* ---- Leads list, callback dates, note templates, undo, phone check, header sync status ---- */
-.pill summary { white-space: normal; text-align: left; }
-.pill[data-sync="local"] summary::before { background: var(--muted); }
-.flag { color: var(--maybe); font-weight: 700; font-size: 0.92rem; }
-.leadspanel { gap: 10px; }
-.leadstools { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; }
-.leadstools .field { flex: 1 1 200px; min-width: 0; }
-.leadstools .field:last-child { flex: 0 1 220px; }
-.leadstools input, .leadstools select, .tpl, .cbfield input { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; }
-.leadlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 360px; overflow: auto; }
-.leadrow { width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; }
-.leadrow strong { overflow-wrap: anywhere; }
-.leadrow .phone { grid-column: 1; font-size: 0.9rem; }
-.leadrow .leadstate { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-family: var(--util); font-size: 0.72rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); text-align: right; }
-.leadrow .leadstate.due { color: var(--maybe); font-weight: 700; }
-.leadrow.current { border-color: var(--accent); }
-.leadlist .hint { padding: 4px 2px; }
-.tplrow { display: flex; }
-.tpl { width: auto; max-width: 100%; }
-.cbfield { display: flex; flex-direction: column; gap: 4px; max-width: 280px; }
-</style>
-
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Content-Security-Policy: scripts come only from this site and the two CDNs below, each with an integrity hash. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.supabase.co; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="description" content="Vector Call Assist: human calling for coaching institutes. Reps dial from their own Android phone, driven from a laptop, with scripts, objections, callbacks and team results per seat.">
+<meta name="theme-color" content="#1a41d8">
+<meta property="og:title" content="Vector Call Assist">
+<meta property="og:description" content="Human calling for coaching institutes: calls from each rep's own SIM, scripts on screen, and results per seat.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231a41d8'/%3E%3Cpath d='M14 18h9l9 24 9-24h9L32 48z' fill='%23fff'/%3E%3C/svg%3E">
+<title>Vector Call Assist · Human calling for coaching institutes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=STIX+Two+Text:ital,wght@0,400..700;1,400..700&display=swap">
+<link rel="stylesheet" href="css/home.css">
 </head>
 <body>
-<!-- Step 0: sign in (only when a Supabase project is set up in js/config.js). -->
-<section class="gate" id="signin" hidden>
-  <div class="gate-card">
-    <span class="label">Vector 2.0 call guide</span>
-    <h1 id="signin-title">Sign in</h1>
-    <p id="signin-text">Use the work email your institute invited. We'll email you a sign-in link; no password needed.</p>
-    <div id="signin-form" class="fields one">
-      <label class="field"><span class="label">Work email</span><input id="signin-email" type="email" autocomplete="email" inputmode="email" placeholder="you@institute.com"></label>
-      <button class="primary big" id="signin-send" type="button">Email me a sign-in link</button>
+
+<header class="top">
+  <div class="wrap">
+    <a class="mark" href="#top">Vector<i> Call Assist</i></a>
+    <nav aria-label="Main">
+      <a href="#product">Product</a>
+      <a href="#how">How it works</a>
+      <a href="#seats">Seats</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#questions">Questions</a>
+      <a class="btn small" href="#account">Sign in</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+<section class="hero">
+  <div class="wrap">
+    <div class="hero-grid">
+      <div>
+        <p class="label">Human calling · Android phone · laptop workspace</p>
+        <h1>Every call your team makes, kept on track.</h1>
+        <p class="lede">Reps dial from their own Android phone and their own SIM. The laptop shows the script, the objection help and the next lead. Admins see results per seat. Lead names and phone numbers stay on the rep's device.</p>
+        <div class="cta-row">
+          <a class="btn primary" href="#account">Start free trial</a>
+          <a class="btn" href="#pricing">See pricing</a>
+        </div>
+      </div>
+
+      <div class="demo" aria-label="Example of a call card">
+        <div class="demo-top"><span>Seat 3 · Rep 3</span><b id="demoLead">Lead 14 of 60</b></div>
+        <div class="demo-body">
+          <div class="demo-line">
+            <span class="label">Say this first</span>
+            <p>Hi, this is Anita from the institute. Is this a good time for two minutes about the batch you asked about?</p>
+          </div>
+          <div>
+            <p class="label outcome-label">Outcome</p>
+            <div class="demo-outcomes" role="group" aria-label="Outcome of this call">
+              <button type="button" data-outcome="answered" aria-pressed="false">Answered</button>
+              <button type="button" data-outcome="no_answer" aria-pressed="false">No answer</button>
+              <button type="button" data-outcome="callback" aria-pressed="false">Callback</button>
+              <button type="button" data-outcome="interested" aria-pressed="false">Interested</button>
+              <button type="button" data-outcome="won" aria-pressed="false">Won</button>
+            </div>
+          </div>
+          <div class="demo-counts" aria-live="polite">
+            <div><span>Calls today</span><strong id="cntCalls">0</strong></div>
+            <div><span>Connected</span><strong id="cntConnected">0</strong></div>
+            <div><span>Callbacks</span><strong id="cntCallbacks">0</strong></div>
+          </div>
+          <p class="demo-note">A demo. Tap an outcome to see the counts move. Nothing here is saved.</p>
+        </div>
+      </div>
     </div>
-    <div class="tools" id="signin-actions"></div>
-    <p class="msgline" id="signin-msg" role="status"></p>
+
+    <div class="ticker" aria-hidden="true">
+      <ul>
+        <li>Calls from the rep's own SIM</li>
+        <li>Script on screen</li>
+        <li>Objection help</li>
+        <li>Callback reminders</li>
+        <li>Results per seat</li>
+        <li>Team targets</li>
+        <li>Calls from the rep's own SIM</li>
+        <li>Script on screen</li>
+        <li>Objection help</li>
+        <li>Callback reminders</li>
+        <li>Results per seat</li>
+        <li>Team targets</li>
+      </ul>
+    </div>
   </div>
 </section>
 
-<!-- Step 1: pair a phone. Nothing else is shown until this browser is paired. -->
-<section class="gate" id="gate" hidden>
-  <div class="gate-card">
-    <span class="label">Vector 2.0 call guide · first-time setup</span>
-    <h1>Connect your phone</h1>
-    <p>Calls go out from your phone's SIM, and the phone reports when each call connects and ends. Pair once; this browser remembers the phone.</p>
-    <ol class="steps">
-      <li><span>On the phone, open <b>Vector Companion</b> and open the pairing screen and show the pairing QR code (tap <b>Pair a different laptop</b> if no code is showing). Phone and laptop must be on the same Wi-Fi.</span></li>
-      <li><span>Here, scan the QR code with the laptop camera, or type in the address and code shown under it.</span></li>
-    </ol>
-    <button class="primary big" id="link-scan" type="button">Scan pairing QR</button>
-    <div class="subcard" id="scan-box" hidden>
-      <video id="scan-video" playsinline muted></video>
-      <p class="hint">Hold the phone's QR code up to the camera. It pairs as soon as it reads the code.</p>
-      <div class="tools"><button class="plain" id="scan-cancel" type="button">Cancel</button></div>
+<section class="section" id="product">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="label">The product</p>
+      <h2 class="h2">Built for people who make calls all day.</h2>
+      <p class="lede">The phone does the dialling. The laptop does the thinking. The cloud gets only what the admin needs to run the team: outcomes, timings and targets.</p>
     </div>
-    <div class="subcard" id="cert-box" hidden>
-      <p class="hint" id="cert-hint"></p>
-      <div class="tools"><a class="plain" id="cert-open" href="#" target="_blank" rel="noopener">1. Open phone certificate page</a><button class="primary" id="cert-retry" type="button">2. Pair again</button></div>
+    <div class="cards">
+      <article class="card reveal k-cobalt">
+        <span class="tag">Phone</span>
+        <h3>Calls from the rep's own SIM</h3>
+        <p>The Android app dials on the phone's own line. Each rep keeps their number. You do not need a shared calling service.</p>
+      </article>
+      <article class="card reveal k-data">
+        <span class="tag">Laptop</span>
+        <h3>The script, one line at a time</h3>
+        <p>The laptop shows the published script for the current step, with the next line ready. Admins publish a new version; reps get it on their next sign-in.</p>
+      </article>
+      <article class="card reveal k-struct">
+        <span class="tag">Help</span>
+        <h3>Objection answers in reach</h3>
+        <p>Common objections sit next to the script, so the rep is never stuck on a question they have heard a hundred times.</p>
+      </article>
+      <article class="card reveal k-refs">
+        <span class="tag">Reminders</span>
+        <h3>Callbacks that ring back</h3>
+        <p>Set a callback on the laptop and the phone reminds the rep at the time they chose, with the lead's name on the screen.</p>
+      </article>
+      <article class="card reveal k-figs">
+        <span class="tag">Sync</span>
+        <h3>Outcomes that never go missing</h3>
+        <p>Each outcome is saved on the phone first and sent when the connection returns. Each one is stored once, however many retries it takes.</p>
+      </article>
+      <article class="card reveal k-lang">
+        <span class="tag">Admin</span>
+        <h3>The team on one page</h3>
+        <p>Team activity, results by outcome, per-rep targets, weekly summary and supervisor notes, all from the admin page.</p>
+      </article>
     </div>
-    <div class="or">or enter by hand</div>
-    <div class="fields">
-      <label class="field"><span class="label">Phone address</span><input id="link-host" type="text" autocomplete="off" inputmode="decimal" placeholder="192.168.1.20:8765"></label>
-      <label class="field"><span class="label">Pairing code</span><input id="link-code" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="19" placeholder="XXXX-XXXX-XXXX-XXXX"></label>
-    </div>
-    <button class="plain" id="link-pair" type="button">Pair with phone</button>
-    <p class="msgline" id="gate-msg" role="status"></p>
   </div>
 </section>
 
-<!-- Step 2: the calling workspace, one column: the call card, the objections right under it, the sheet at the bottom. -->
-<div id="app" hidden>
-  <header class="topbar">
-    <div class="topbar-in">
-      <h1 class="brand">Vector <span>call guide</span></h1>
-      <label class="me"><span class="label">You</span><input id="me-name" type="text" autocomplete="off" value="Pratik" title="Your name, used in the script"></label>
-      <details class="pill" id="cloud-panel">
-        <summary><span id="cloud-summary">Synced</span></summary>
-        <div class="pill-menu">
-          <p class="hint" id="cloud-status"></p>
-          <button class="plain" id="cloud-signout" type="button" data-i18n="btn.signOut">Sign out</button>
-        </div>
-      </details>
-      <details class="pill" id="link-panel">
-        <summary><span id="link-summary">Phone connected</span></summary>
-        <div class="pill-menu">
-          <p class="hint" id="link-status"></p>
-          <button class="plain" id="link-forget" type="button">Forget phone</button>
-        </div>
-      </details>
-      <button class="plain" id="feedback-open" type="button" data-i18n="feedback.open">Send feedback</button>
-      <details class="pill" id="settings-panel">
-        <summary><span data-i18n="settings.open">Settings</span></summary>
-        <div class="pill-menu">
-          <label class="check"><input id="pref-large" type="checkbox"> <span data-i18n="settings.large">Large text</span></label>
-          <label class="check"><input id="pref-contrast" type="checkbox"> <span data-i18n="settings.contrast">High contrast</span></label>
-          <label class="field"><span class="label" data-i18n="settings.language">Language</span>
-            <select id="pref-lang">
-              <option value="en" data-i18n="settings.lang.en">English</option>
-              <option value="hi" data-i18n="settings.lang.hi">Hindi (draft, needs review)</option>
-            </select>
-          </label>
-          <button class="plain" id="pref-walkthrough" type="button" data-i18n="settings.walkthrough">Show the walkthrough again</button>
-        </div>
-      </details>
+<section class="section dark" id="how">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="label">How it works</p>
+      <h2 class="h2">From invite to first call in four steps.</h2>
     </div>
-  </header>
-
-  <div class="shell">
-    <section class="banner" id="link-banner" role="alert" hidden>
-      <h2 id="link-banner-title"></h2>
-      <p id="link-banner-text"></p>
-      <div class="tools" id="link-banner-tools"></div>
-    </section>
-
-    <section class="practice-banner" id="practice-banner" role="status" hidden>
-      <strong data-i18n="practice.banner">Practice: nothing is saved</strong>
-      <button class="plain" id="practice-exit" type="button" data-i18n="practice.exit">Exit practice</button>
-    </section>
-
-    <section class="panel terms-panel" id="terms-panel" aria-labelledby="terms-title" hidden>
-      <h2 id="terms-title" data-i18n="terms.title">Terms of use</h2>
-      <p class="terms-need" data-i18n="terms.needed">Accept the terms before you make calls.</p>
-      <p class="terms-draft" id="terms-draft" data-i18n="terms.draft">Draft: needs legal review before use.</p>
-      <div class="terms-text" id="terms-text" tabindex="0"></div>
-      <div class="tools"><button class="primary" id="terms-accept" type="button" data-i18n="terms.accept">I accept these terms</button></div>
-      <p class="msgline" id="terms-msg" role="status"></p>
-    </section>
-
-    <div class="work">
-    <div class="workmain">
-    <article class="callcard">
-      <div class="callhead lead" id="sheet-bar" hidden></div>
-      <div class="callhead" id="sheet-empty">
-        <label class="field grow"><span class="label">Calling</span><input id="lead-name" type="text" autocomplete="off" placeholder="Lead's name"></label>
-        <label class="plain filebtn" for="sheet-file">Load lead sheet</label>
+    <div class="tabs">
+      <div class="tablist" role="tablist" aria-label="Setup steps" data-tabs>
+        <button type="button" role="tab" id="step-1" aria-controls="panel-1" aria-selected="true" tabindex="0"><b>1 · Invite</b><small>Add each rep by email</small></button>
+        <button type="button" role="tab" id="step-2" aria-controls="panel-2" aria-selected="false" tabindex="-1"><b>2 · Pair</b><small>Phone and laptop, one seat</small></button>
+        <button type="button" role="tab" id="step-3" aria-controls="panel-3" aria-selected="false" tabindex="-1"><b>3 · Work the list</b><small>Script, objections, next lead</small></button>
+        <button type="button" role="tab" id="step-4" aria-controls="panel-4" aria-selected="false" tabindex="-1"><b>4 · Results</b><small>Outcomes sync per seat</small></button>
       </div>
-      <section class="callpanel" id="call-panel" hidden></section>
-      <div class="railrow">
-        <ol class="rail" id="rail" aria-label="Call stages"></ol>
-        <div class="clock" aria-label="Call time"><span id="clock">00:00</span><small>aim 10 to 12 min</small></div>
+      <div class="tabpanel" role="tabpanel" id="panel-1" aria-labelledby="step-1" data-panel>
+        <p class="who">Admin</p>
+        <h3>Invite each rep by email.</h3>
+        <p>Every invite takes one seat. The rep signs in with an emailed link and the seat is attached to their login. Nobody can join without an invite.</p>
       </div>
-      <main id="stage" aria-live="polite"></main>
-      <div class="cardfoot">
-        <button class="plain" id="back" type="button" title="Back one step (Space)" data-i18n="btn.back">‹ Back one step</button>
-        <button class="plain" id="practice-start" type="button" data-i18n="practice.start">Practice</button>
-        <button class="plain" id="restart" type="button" data-i18n="btn.restart">Start a new call</button>
+      <div class="tabpanel" role="tabpanel" id="panel-2" aria-labelledby="step-2" data-panel hidden>
+        <p class="who">Rep, once</p>
+        <h3>Scan the code. Pair once.</h3>
+        <p>Open the Android app and scan the code on the laptop. The phone and laptop pair to that seat over your local Wi-Fi, and only the seat's own phone and laptop can use it.</p>
       </div>
-    </article>
-    <p class="hint" id="sheet-msg" role="status"></p>
+      <div class="tabpanel" role="tabpanel" id="panel-3" aria-labelledby="step-3" data-panel hidden>
+        <p class="who">Rep, every day</p>
+        <h3>Work the list from the laptop.</h3>
+        <p>The lead sheet opens on the rep's device. The phone dials the number on the current row. The laptop shows the script for each step and the objection answers close by.</p>
+      </div>
+      <div class="tabpanel" role="tabpanel" id="panel-4" aria-labelledby="step-4" data-panel hidden>
+        <p class="who">Admin, live</p>
+        <h3>Results arrive as the calls happen.</h3>
+        <p>Each outcome is saved on the phone, then sent to the cloud. If the Wi-Fi drops mid-day, the queue waits and uploads when the connection is back. Admins see every seat's progress.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="seats">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="label">Seats</p>
+      <h2 class="h2">One seat is one person.</h2>
+      <p class="lede">You buy seats, not devices or sites. A seat is one person, one phone and one laptop. It can change hands when someone leaves.</p>
+    </div>
+    <div class="seat-grid">
+      <div class="reveal"><b>1</b><strong>person per seat</strong><p>The seat is tied to one login and one rep's work.</p></div>
+      <div class="reveal"><b>1</b><strong>phone per seat</strong><p>One Android phone is paired to the seat at a time.</p></div>
+      <div class="reveal"><b>1</b><strong>laptop per seat</strong><p>One laptop is paired to the seat. A second laptop needs its own seat.</p></div>
+      <div class="reveal"><b>↺</b><strong>seat can move</strong><p>An admin reassigns a seat to someone new. The old person's access ends at their next sign-in.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section dark" id="pricing">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="label">Pricing</p>
+      <h2 class="h2">Pay per seat. Change the number and see the total.</h2>
+      <p class="lede">Prices are in rupees per seat per month. Yearly billing brings the rate down. Custom work is quoted per institute.</p>
     </div>
 
-    <section class="objcard" id="obj-section">
-      <div class="objcol">
-        <h2>Pushback: tap what they said</h2>
-        <div class="chips" id="chips-push"></div>
-      </div>
-      <div class="objcol">
-        <h2>Worries and questions</h2>
-        <div class="chips" id="chips-worry"></div>
-      </div>
-    </section>
+    <div class="billing" role="radiogroup" aria-label="Billing period">
+      <button type="button" role="radio" aria-checked="true" data-billing="monthly">Monthly</button>
+      <button type="button" role="radio" aria-checked="false" data-billing="yearly">Yearly <small>billed yearly</small></button>
+    </div>
 
-    <section class="sheetbar">
-      <div id="sheet-load" class="sheetload">
-        <label class="plain filebtn" for="sheet-file" data-i18n="btn.loadSheet">Load a lead sheet</label>
-        <input id="sheet-file" class="vh" type="file" accept=".xlsx,.xls,.csv">
-        <button class="plain" id="import-v1" type="button" hidden>Import my lead sheet from the old call guide</button>
-        <span class="hint">Excel or CSV with a name and a phone column. Results are written to each lead's row; the file stays in this browser.</span>
-      </div>
-      <div id="sheet-tools" class="sheettools" hidden></div>
-    </section>
-
-    <section class="panel leadspanel" id="leads-panel" hidden>
-      <div class="leadstools">
-        <label class="field grow"><span class="label">Search name or number</span><input id="lead-search" type="search" autocomplete="off" placeholder="Name or number"></label>
-        <label class="field"><span class="label">Show</span>
-          <select id="lead-filter">
-            <option value="queue">Today's queue</option>
-            <option value="all">All leads</option>
-            <option value="not_called">Not called</option>
-            <option value="called">Called</option>
-            <option value="due">Callback due</option>
-          </select>
+    <div class="calc calc-top">
+      <fieldset>
+        <legend>How many seats?</legend>
+        <div class="seat-input">
+          <div class="row">
+            <input type="range" id="seatRange" min="1" max="200" value="10" aria-label="Seats">
+            <input type="number" id="seatNum" min="1" max="200" value="10" aria-label="Seats, number">
+          </div>
+          <p class="demo-note">1 to 200 seats. Each seat is one person, one phone and one laptop.</p>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="addon">
+          <span>Add the script add-on
+            <small>The script editor, published script versions and script reports for the admin.</small>
+          </span>
         </label>
+      </fieldset>
+
+      <div class="quote" aria-live="polite">
+        <p class="label">Your estimate</p>
+        <p class="total"><span id="total">₹3,990</span> <small>a month</small></p>
+        <ul>
+          <li><span>Seat rate</span><b id="rowSeat">₹399 × 10</b></li>
+          <li><span>Script add-on</span><b id="rowAddon">Not included</b></li>
+          <li><span id="rowYearLabel">Billed</span><b id="rowYear">Monthly</b></li>
+        </ul>
+        <p class="demo-note">Estimate only. Payments open later; the trial needs no payment.</p>
       </div>
-      <p class="hint" id="leads-count" role="status"></p>
-      <ol class="leadlist" id="leads-list"></ol>
-    </section>
     </div>
 
+    <div class="plans">
+      <div>
+        <b>Team</b>
+        <p class="price" id="planTeam">₹399 <small>per seat / month</small></p>
+        <p>Seats, phone and laptop pairing, scripts on screen, outcomes and callbacks. Yearly: ₹199 per seat per month.</p>
+      </div>
+      <div>
+        <b>Script add-on</b>
+        <p class="price" id="planAddon">₹499 <small>per seat / month</small></p>
+        <p>The script editor and version history. Yearly: ₹299 per seat per month.</p>
+      </div>
+      <div>
+        <b>Custom work</b>
+        <p class="price">Quoted <small>per institute</small></p>
+        <p>Your own call flows, integrations or onboarding. Start a trial and tell us what you need.</p>
+      </div>
+    </div>
   </div>
-</div>
+</section>
 
-<div class="modal-wrap" id="still-there" hidden>
-  <section class="modal" role="alertdialog" aria-modal="true" aria-labelledby="still-title" aria-describedby="still-text">
-    <h2 id="still-title" data-i18n="timeout.title">Still there?</h2>
-    <p id="still-text"></p>
-    <div class="tools"><button class="primary big" id="still-continue" type="button" data-i18n="timeout.continue">Continue</button></div>
-  </section>
-</div>
-
-<div class="modal-wrap" id="feedback-dialog" hidden>
-  <section class="modal" role="dialog" aria-modal="true" aria-labelledby="feedback-title">
-    <h2 id="feedback-title" data-i18n="feedback.title">Send feedback</h2>
-    <p class="hint" data-i18n="feedback.hint">Tell us what would help. Do not include lead names or phone numbers.</p>
-    <label class="field"><span class="label" data-i18n="feedback.label">Your message</span>
-      <textarea id="feedback-text" maxlength="2000" rows="6"></textarea>
-    </label>
-    <p class="count" id="feedback-count" aria-live="polite"></p>
-    <p class="hint" id="feedback-msg" role="status"></p>
-    <div class="tools">
-      <button class="plain" id="feedback-cancel" type="button" data-i18n="feedback.cancel">Cancel</button>
-      <button class="primary" id="feedback-send" type="button" data-i18n="feedback.send">Send</button>
+<section class="section" id="account">
+  <div class="wrap account">
+    <div class="account-copy">
+      <p class="label">Get started</p>
+      <h2 class="h2">Start a 14-day trial.</h2>
+      <p class="lede lede-top">No payment. You become the admin of your institute and get up to 5 seats. Sign in with an emailed link; there is no password.</p>
+      <ul>
+        <li>Invite your reps by email when you are ready.</li>
+        <li>Pair each rep's Android phone and laptop once.</li>
+        <li>Publish your script and watch results per seat.</li>
+      </ul>
     </div>
-  </section>
-</div>
 
-<div class="modal-wrap" id="onboard" hidden>
-  <section class="modal" role="dialog" aria-modal="true" aria-labelledby="onb-title">
-    <p class="label" id="onb-count"></p>
-    <h2 id="onb-title"></h2>
-    <p id="onb-body"></p>
-    <div class="tools onb-actions">
-      <button class="plain" id="onb-skip" type="button" data-i18n="onb.skip">Skip</button>
-      <button class="primary" id="onb-next" type="button" data-i18n="onb.next">Next</button>
+    <div class="panel" id="authPanel">
+      <!-- Signed-out view: sign in or start a trial -->
+      <div id="stateSignedOut">
+        <div class="tab-row" role="tablist" aria-label="Account" data-tabs>
+          <button type="button" role="tab" id="acc-trial" aria-controls="form-trial" aria-selected="true" tabindex="0">Start free trial</button>
+          <button type="button" role="tab" id="acc-signin" aria-controls="form-signin" aria-selected="false" tabindex="-1">Sign in</button>
+        </div>
+
+        <form class="form" id="form-trial" role="tabpanel" aria-labelledby="acc-trial" data-panel novalidate>
+          <label>Institute name
+            <input name="institute" type="text" maxlength="120" autocomplete="organization" required>
+          </label>
+          <label>Your work email
+            <input name="email" type="email" maxlength="254" autocomplete="email" required>
+            <span class="hint">We email you a sign-in link. You become the admin.</span>
+          </label>
+          <button class="btn primary" type="submit">Email me a sign-in link</button>
+        </form>
+
+        <form class="form" id="form-signin" role="tabpanel" aria-labelledby="acc-signin" data-panel hidden novalidate>
+          <label>Email
+            <input name="email" type="email" maxlength="254" autocomplete="email" required>
+            <span class="hint">Use the email your admin invited, or the one you started a trial with.</span>
+          </label>
+          <button class="btn primary" type="submit">Email me a sign-in link</button>
+        </form>
+
+        <p class="msg" id="authMsg" role="status" aria-live="polite"></p>
+      </div>
+
+      <!-- Link sent -->
+      <div class="state" id="stateSent" hidden>
+        <strong>Check your email.</strong>
+        <p>We sent a sign-in link to <span class="signed" id="sentTo"></span>. Open it on this device. The link works once.</p>
+        <button class="link-btn" type="button" id="againBtn">Use a different email</button>
+      </div>
+
+      <!-- Signed in, checking the seat -->
+      <div class="state" id="stateChecking" hidden>
+        <strong>Signing you in…</strong>
+        <p>Checking your seat.</p>
+      </div>
+
+      <!-- Signed in, no seat yet: start a trial with the institute name -->
+      <div class="state" id="stateNoSeat" hidden>
+        <strong>No seat on this login yet.</strong>
+        <p>If your admin invited you, open the link they sent. To start a free trial for your institute, name it below.</p>
+        <form class="form" id="form-name" novalidate>
+          <label>Institute name
+            <input name="institute" type="text" maxlength="120" autocomplete="organization" required>
+          </label>
+          <button class="btn primary" type="submit">Start 14-day trial</button>
+        </form>
+        <p class="msg" id="noSeatMsg" role="status" aria-live="polite"></p>
+        <button class="link-btn" type="button" id="signOutBtn1">Sign out</button>
+      </div>
+
+      <!-- Signed in with a seat -->
+      <div class="state" id="stateReady" hidden>
+        <strong>You're signed in.</strong>
+        <p class="signed" id="whoami"></p>
+        <p id="readyText"></p>
+        <a class="btn primary" id="openLink" href="app.html">Open your workspace</a>
+        <button class="link-btn" type="button" id="signOutBtn2">Sign out</button>
+      </div>
+
+      <!-- Something went wrong -->
+      <div class="state" id="stateError" hidden>
+        <strong>Sign-in is not available right now.</strong>
+        <p class="msg" id="errorMsg" data-kind="error" role="alert"></p>
+        <button class="link-btn" type="button" id="retryBtn">Try again</button>
+      </div>
     </div>
-  </section>
-</div>
+  </div>
+</section>
 
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" integrity="sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx" crossorigin="anonymous"></script>
+<section class="section" id="questions">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="label">Questions</p>
+      <h2 class="h2">Straight answers.</h2>
+    </div>
+    <div class="faq">
+      <details>
+        <summary>Is this AI calling?</summary>
+        <p>No. Vector is for human callers. A person dials, talks and chooses the outcome. Vector puts the script, the objection answers and the callbacks in front of them.</p>
+      </details>
+      <details>
+        <summary>Can reps use an iPhone?</summary>
+        <p>Not yet. The phone app runs on Android. Laptops use any modern browser.</p>
+      </details>
+      <details>
+        <summary>Do you record calls?</summary>
+        <p>No. Vector does not record call audio.</p>
+      </details>
+      <details>
+        <summary>What leaves the rep's device?</summary>
+        <p>Call outcomes, timings and seat details, so the admin can see results. Lead names and phone numbers stay on the rep's device.</p>
+      </details>
+      <details>
+        <summary>Can one person use two laptops?</summary>
+        <p>No. A seat is paired with one phone and one laptop. A second laptop needs its own seat.</p>
+      </details>
+      <details>
+        <summary>Do I need a card for the trial?</summary>
+        <p>No. The trial is 14 days with up to 5 seats and needs no payment. Paid plans open later.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Vector Call Assist · Human calling for coaching institutes</span>
+    <span>Terms and privacy notice are in draft.</span>
+  </div>
+</footer>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
 <script src="js/config.js"></script>
-<script src="js/vault.js"></script>
-<script src="js/cloud.js"></script>
-<script src="js/phone-link.js"></script>
-<script src="js/call-session.js"></script>
-<script src="js/import-check.js"></script>
-<script src="js/lead-list.js"></script>
-<script src="js/note-templates.js"></script>
-<script src="js/i18n.js"></script>
-<script src="js/terms.js"></script>
-<script src="js/modal.js"></script>
-<script src="js/terms-gate.js"></script>
-<script src="js/session-timeout.js"></script>
-<script src="js/feedback.js"></script>
-<script src="js/access-settings.js"></script>
-<script src="js/onboarding.js"></script>
-<script src="js/script-adapter.js"></script>
-<script src="js/main.js"></script>
+<script src="js/home.js"></script>
 </body>
 </html>

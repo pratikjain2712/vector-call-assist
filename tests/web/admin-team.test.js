@@ -1,7 +1,7 @@
 'use strict';
 /* Tests for the pure helpers in web/js/admin-team.js: bar widths, the CSV formula guard (checked against
    the one in web/js/admin.js), week start on Monday, note length and target parsing. Also a few static
-   checks on the admin page files (no inline script or style, no HTML strings, same supabase-js pin as index.html).
+   checks on the admin page files (no inline script or style, no HTML strings, same supabase-js pin as app.html).
    No network and no DOM.
    Run: node --test tests/web/admin-team.test.js
    Prints "admin-team.test: N passed, M failed" and exits 1 on any failure. */
@@ -171,7 +171,7 @@ test('talk seconds show as minutes with one decimal', () => {
 // ----- static checks on the page files -----
 const adminHtml = fs.readFileSync(path.join(root, 'web', 'admin.html'), 'utf8');
 const adminTeamJs = fs.readFileSync(path.join(root, 'web', 'js', 'admin-team.js'), 'utf8');
-const indexHtml = fs.readFileSync(path.join(root, 'web', 'index.html'), 'utf8');
+const indexHtml = fs.readFileSync(path.join(root, 'web', 'app.html'), 'utf8');
 test('admin page has no inline script or style attributes', () => {
   assert.ok(!/<script(?![^>]*\ssrc=)[^>]*>/i.test(adminHtml), 'inline script tag');
   assert.ok(!/\sstyle\s*=/i.test(adminHtml), 'style attribute');
@@ -179,7 +179,7 @@ test('admin page has no inline script or style attributes', () => {
 test('admin-team.js builds the page without HTML strings', () => {
   assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(/.test(adminTeamJs));
 });
-test('supabase-js on the admin page uses the same URL and hash as index.html', () => {
+test('supabase-js on the admin page uses the same URL and hash as app.html', () => {
   const tag = (src) => (/<script src="(https:\/\/cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js[^"]*)" integrity="([^"]+)"/.exec(src) || []).slice(1).join(' ');
   assert.ok(tag(adminHtml) !== '', 'admin page has no pinned supabase-js');
   assert.strictEqual(tag(adminHtml), tag(indexHtml));

@@ -36,7 +36,7 @@ import org.json.JSONObject
  *  - Main card: allow access, then the pairing QR (with the address and code as text), then
  *    "Ready for calls" once a laptop is paired. It switches to "Ready" by itself when the laptop pairs.
  *  - Phone setup card: each thing the app needs, with a tick or a Fix button.
- * Built in code with framework views only; colours match the website (web/index.html).
+ * Built in code with framework views only; colours match the website (web/app.html).
  */
 class MainActivity : Activity() {
 
