@@ -387,8 +387,12 @@ function initHero(canvas) {
     const k = reduce ? 1 : 0.08;
     const narrow = window.innerWidth < 960;
     // Desktop: the devices sit on the right, the text on the left. Phone: devices sit above the text.
-    const xs = narrow ? 0 : 2.4, xk = narrow ? 0.6 : 1, yo = narrow ? 1.5 : 0;
-    cam.position.z = narrow ? 15 : 13;
+    // On a narrow (portrait) screen the camera pulls back far enough for both devices to fit the width,
+    // and the devices are raised into the space above the text panel.
+    const halfTan = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
+    const camZ = narrow ? Math.min(26, Math.max(15, 2.85 / (halfTan * cam.aspect))) : 13;
+    const xs = narrow ? 0 : 2.4, xk = narrow ? 0.6 : 1, yo = narrow ? halfTan * camZ * 0.36 : 0;
+    cam.position.z = camZ;
 
     ease(cur.phone, goal.phone, k); ease(cur.phoneR, goal.phoneR, k); ease(cur.phoneS, goal.phoneS, k);
     ease(cur.laptop, goal.laptop, k); ease(cur.laptopR, goal.laptopR, k); ease(cur.lid, goal.lid, k);
