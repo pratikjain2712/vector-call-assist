@@ -129,14 +129,14 @@
   /* ---------- call console demo ---------- */
   (function console() {
     var leads = [
-      { name: 'Riya S.', batch: 'Batch A', status: null },
-      { name: 'Arjun M.', batch: 'Batch B', status: null },
-      { name: 'Neha K.', batch: 'Batch A', status: null },
-      { name: 'Vikram P.', batch: 'Batch C', status: null }
+      { name: 'Riya S.', batch: 'List A', status: null },
+      { name: 'Arjun M.', batch: 'List B', status: null },
+      { name: 'Neha K.', batch: 'List A', status: null },
+      { name: 'Vikram P.', batch: 'List C', status: null }
     ];
     var LINES = [
-      { text: 'Hi, this is Anita from the institute. Is this a good time for two minutes about the batch you asked about?', note: 'Say who you are and why you are calling, in one breath.' },
-      { text: 'Which batch were you looking at, and what would you like to prepare for first?', note: 'Ask one open question, then wait.' },
+      { text: 'Hi, this is Anita from the team. Is this a good time for two minutes about the offer you asked about?', note: 'Say who you are and why you are calling, in one breath.' },
+      { text: 'Which offer were you looking at, and what would you like to know first?', note: 'Ask one open question, then wait.' },
       { text: 'We have a free demo class on Saturday. Shall I reserve a seat for you?', note: 'Make one clear offer. Do not stack three.' },
       { text: 'Thank you for your time. I will note this down and you will hear from us.', note: 'Close warmly. Log the outcome on the right.' }
     ];
@@ -246,7 +246,7 @@
       return v;
     }
     /* Bundles by seat count. Volume: 3 seats 15% off, 5 seats 25% off, then 5% more for each seat after 5, up to 40%. */
-    function bundleName(n) { return n >= 5 ? 'Institute' : n >= 3 ? 'Team' : 'Starter'; }
+    function bundleName(n) { return n >= 5 ? 'Business' : n >= 3 ? 'Team' : 'Starter'; }
     function volumePct(n) {
       var base = n >= 5 ? 25 : n >= 3 ? 15 : 0;
       var extra = n > 5 ? (n - 5) * 5 : 0;
@@ -336,7 +336,7 @@
     var m = (err && err.message) || '';
     if (!client) return 'Sign-in is not set up on this site yet.';
     if (/signup|not allowed|not found/i.test(m)) {
-      return 'No Vector account for this email. Ask your institute admin to invite you, or start a free trial.';
+      return 'No Vector account for this email. Ask your admin to invite you, or start a free trial.';
     }
     if (/rate|too many|seconds/i.test(m)) return 'Too many emails were sent. Wait a minute and try again.';
     return m || 'Something went wrong. Please try again.';
@@ -358,7 +358,7 @@
       var msg = $('authMsg');
       var email = form.elements.email.value.trim();
       var name = withName ? form.elements.institute.value.trim() : '';
-      if (withName && !nameOk(name)) return setMsg(msg, 'Institute name must be 2 to 120 characters.', 'error');
+      if (withName && !nameOk(name)) return setMsg(msg, 'Company name must be 2 to 120 characters.', 'error');
       if (!emailOk(email)) return setMsg(msg, 'Enter a valid email address.', 'error');
       if (!client) return setMsg(msg, friendly(null), 'error');
       busy = true;
@@ -415,7 +415,7 @@
     $('openLink').setAttribute('href', target);
     $('whoami').textContent = session.user.email + ' · ' + st.institute_name;
     $('readyText').textContent = (st.role === 'admin'
-      ? 'You are the admin of this institute.'
+      ? 'You are the admin of this account.'
       : 'You have a rep seat on this login.') + trialText(st);
     show('stateReady');
   }
@@ -443,7 +443,7 @@
     var form = e.currentTarget;
     var name = form.elements.institute.value.trim();
     var msg = $('noSeatMsg');
-    if (!nameOk(name)) return setMsg(msg, 'Institute name must be 2 to 120 characters.', 'error');
+    if (!nameOk(name)) return setMsg(msg, 'Company name must be 2 to 120 characters.', 'error');
     busy = true;
     setBusy(form, true);
     rpc('start_trial_institute', { p_name: name }).then(function () {

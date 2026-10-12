@@ -2,7 +2,10 @@
    - heroScene: a phone and a laptop that float and follow the pointer.
    - seatScene: a grid of seats; the number lit follows the seat count in the pricing calculator.
    If WebGL or the module fails, nothing is added to the page and the static fallback stays visible. */
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+/* three.js is loaded only on wide screens (961px and up). Phones and small tablets never download it and see the
+   static page instead. The URL is pinned to r160. */
+const WIDE = window.matchMedia('(min-width: 961px)').matches;
+const THREE = WIDE ? await import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js') : null;
 
 const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const C = { ink: 0x0e1628, blue: 0x2456e6, amber: 0xf5a524, mint: 0x0b8f6a, idle: 0xd3dbea, bodyDark: 0x1b2437 };
@@ -98,7 +101,7 @@ const PHONE_DRAW = [
     rr(g, 16, 398, 354, 128, 26, '#ffffff');
     tx(g, 'Next call from laptop', 36, 440, '16px sans-serif', MUTED);
     tx(g, 'Ananya Rao', 36, 478, 'bold 26px sans-serif', INK);
-    tx(g, 'Batch: September JEE', 36, 506, '16px sans-serif', MUTED);
+    tx(g, 'Offer: September intake', 36, 506, '16px sans-serif', MUTED);
     rr(g, 16, 548, 354, 74, 37, BLUE); tx(g, 'Waiting for the laptop', PHONE_W / 2, 596, 'bold 20px sans-serif', '#ffffff', 'center');
     tx(g, 'Lead details stay on the laptop', PHONE_W / 2, 670, '16px sans-serif', MUTED, 'center');
   },
@@ -134,7 +137,7 @@ const PHONE_DRAW = [
       dot(g, 56, y + 55, 18, st === 'done' ? MINT_HEX : st === 'now' ? BLUE : '#c9d3e6');
       tx(g, steps[i][0], 92, y + 64, 'bold 24px sans-serif', st === 'next' ? MUTED : INK);
     }
-    tx(g, 'Next line: "The batch starts on the 14th."', 24, 760, '17px sans-serif', INK);
+    tx(g, 'Next line: "The offer closes on the 14th."', 24, 760, '17px sans-serif', INK);
   },
   // 4: log the outcome
   function (g) {
@@ -192,7 +195,7 @@ const LAPTOP_DRAW = [
     rr(g, 176, 56, 84, 8, 4, BLUE); rr(g, 266, 56, 84, 8, 4, BLUE); rr(g, 356, 56, 84, 8, 4, PALE); rr(g, 446, 56, 84, 8, 4, PALE);
     rr(g, 176, 92, 440, 176, 18, '#f3f6fc');
     tx(g, '"Is this a good time for two', 200, 146, 'bold 25px sans-serif', INK);
-    tx(g, 'minutes about the batch you', 200, 182, 'bold 25px sans-serif', INK);
+    tx(g, 'minutes about the offer you', 200, 182, 'bold 25px sans-serif', INK);
     tx(g, 'asked about?"', 200, 218, 'bold 25px sans-serif', INK);
     rr(g, 176, 290, 170, 46, 23, BLUE); tx(g, 'Next line', 261, 320, 'bold 17px sans-serif', '#ffffff', 'center');
     tx(g, 'Ananya Rao · +91 98•••• 210', 176, 388, '15px sans-serif', MUTED);
@@ -227,7 +230,7 @@ const LAPTOP_DRAW = [
       rr(g, 176, y, 440, 38, 10, on ? BLUE : '#eef2fb');
       tx(g, steps[i], 194, y + 25, 'bold 17px sans-serif', on ? '#ffffff' : INK);
     }
-    tx(g, 'Say: "The batch starts on the 14th."', 176, 270, 'bold 20px sans-serif', INK);
+    tx(g, 'Say: "The offer closes on the 14th."', 176, 270, 'bold 20px sans-serif', INK);
     rr(g, 176, 296, 210, 36, 18, '#fff4dc'); tx(g, 'Too expensive', 281, 320, 'bold 15px sans-serif', INK, 'center');
     rr(g, 398, 296, 218, 36, 18, '#fff4dc'); tx(g, 'Need to ask parents', 507, 320, 'bold 15px sans-serif', INK, 'center');
   },
@@ -493,6 +496,7 @@ function initSeats(canvas) {
 }
 
 function start() {
+  if (!THREE) return;
   const hero = document.getElementById('heroScene');
   const seats = document.getElementById('seatScene');
   if (hero && initHero(hero)) document.documentElement.classList.add('has-3d');

@@ -522,3 +522,9 @@ legend { font-family: var(--mono); font-size: .8rem; font-weight: 600; letter-sp
 @media (max-width: 960px) and (max-height: 720px) {
   .slot .panel .lede { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
 }
+
+/* Phones and small tablets: no 3D. The static fallback and the seat canvas are hidden. */
+@media (max-width: 960px) {
+  .stage .fallback { display: none; }
+  #seatScene { display: none; }
+}

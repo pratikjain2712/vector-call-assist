@@ -49,8 +49,9 @@ test('home page: sign-in uses the emailed link and only the database calls from 
 });
 
 test('home page: the 3D scripts use an exact three.js release and both canvases exist', () => {
-  const m = scene.match(/from 'https:\/\/cdn\.jsdelivr\.net\/npm\/three@(\d+\.\d+\.\d+)\//);
+  const m = scene.match(/cdn\.jsdelivr\.net\/npm\/three@(\d+\.\d+\.\d+)\//);
   assert.ok(m, 'three.js import must name an exact version on jsdelivr');
+  assert.match(scene, /WIDE \? await import\(/, 'three.js loads only on wide screens');
   assert.match(html, /<script type="module" src="js\/scene\.js">/);
   assert.match(html, /<canvas id="heroScene"/);
   assert.match(html, /<canvas id="seatScene"/);

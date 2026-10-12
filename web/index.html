@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <!-- Content-Security-Policy: scripts come only from this site and the two CDNs below. The three.js module is pinned to an exact release. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.supabase.co; object-src 'none'; base-uri 'self'; form-action 'none'">
-<meta name="description" content="Vector Call Assist: human calling for coaching institutes. Reps call from their own Android phone, with the script on the laptop, callbacks, and results per seat. Start a 14-day free trial.">
+<meta name="description" content="Vector Call Assist: human calling for sales and admissions teams. Reps call from their own Android phone, with the script on the laptop, callbacks, and results per seat. Start a 14-day free trial.">
 <meta name="theme-color" content="#2456e6">
 <meta property="og:title" content="Vector Call Assist">
-<meta property="og:description" content="Every call on script, every result counted. Human calling for coaching institutes.">
+<meta property="og:description" content="Every call on script, every result counted. Human calling for sales teams.">
 <meta property="og:type" content="website">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%232456e6'/%3E%3Cpath d='M14 18l12 28 8-17 8 17 12-28h-7l-5 12-8-17-8 17-5-12z' fill='%23fff'/%3E%3C/svg%3E">
-<title>Vector Call Assist · Human calling for coaching institutes</title>
+<title>Vector Call Assist · Human calling for sales teams</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap">
@@ -52,7 +52,7 @@
       <div class="mock-laptop">
         <div class="lid"><div class="screen">
           <span class="kick">Step 2 of 4 · Ask</span>
-          <p>"Is this a good time for two minutes about the batch you asked about?"</p>
+          <p>"Is this a good time for two minutes about the offer you asked about?"</p>
           <span class="next">Next line →</span>
         </div></div>
         <div class="base"></div>
@@ -69,7 +69,7 @@
 
     <div class="slot">
       <article class="panel on" data-ch="0">
-        <span class="eyebrow">Human calling for coaching institutes</span>
+        <span class="eyebrow">Human calling for sales teams</span>
         <h1 id="heroTitle">Every call on script. <span class="hot">Every result counted.</span></h1>
         <p class="lede">The laptop runs every call: the script, the objection answers, the next lead and the outcome. The rep's Android phone places each call on its own SIM. Lead names and numbers stay on the laptop.</p>
         <div class="cta-row">
@@ -209,7 +209,7 @@
         <ul class="pview-list">
           <li><b>Team activity on one page</b><span>Results by outcome, per seat and per day.</span></li>
           <li><b>Targets and supervisor notes</b><span>Set daily targets per rep and leave notes against a call.</span></li>
-          <li><b>Weekly summary</b><span>A CSV for the week, ready to share with the institute.</span></li>
+          <li><b>Weekly summary</b><span>A CSV for the week, ready to share with your admin.</span></li>
         </ul>
       </div>
     </div>
@@ -228,10 +228,10 @@
     <div class="console reveal" id="console">
       <div class="leads">
         <h4>Today's leads</h4>
-        <button type="button" class="lead" data-lead="0" aria-pressed="true"><b>Riya S.</b><small>Batch A · not called</small></button>
-        <button type="button" class="lead" data-lead="1" aria-pressed="false"><b>Arjun M.</b><small>Batch B · not called</small></button>
-        <button type="button" class="lead" data-lead="2" aria-pressed="false"><b>Neha K.</b><small>Batch A · not called</small></button>
-        <button type="button" class="lead" data-lead="3" aria-pressed="false"><b>Vikram P.</b><small>Batch C · not called</small></button>
+        <button type="button" class="lead" data-lead="0" aria-pressed="true"><b>Riya S.</b><small>List A · not called</small></button>
+        <button type="button" class="lead" data-lead="1" aria-pressed="false"><b>Arjun M.</b><small>List B · not called</small></button>
+        <button type="button" class="lead" data-lead="2" aria-pressed="false"><b>Neha K.</b><small>List A · not called</small></button>
+        <button type="button" class="lead" data-lead="3" aria-pressed="false"><b>Vikram P.</b><small>List C · not called</small></button>
       </div>
 
       <div class="script">
@@ -239,7 +239,7 @@
           <span class="on">1 · Open</span><span>2 · Ask</span><span>3 · Offer</span><span>4 · Close</span>
         </div>
         <div class="line-card">
-          <p id="scriptLine">Hi, this is Anita from the institute. Is this a good time for two minutes about the batch you asked about?</p>
+          <p id="scriptLine">Hi, this is Anita from the team. Is this a good time for two minutes about the offer you asked about?</p>
           <p class="note" id="scriptNote" aria-live="polite"></p>
         </div>
         <div class="row-btns">
@@ -302,7 +302,7 @@
     <div class="section-head reveal">
       <span class="eyebrow">Analytics</span>
       <h2 class="h2" id="insightsTitle">A CRM records the result. Vector shows where the call was lost.</h2>
-      <p class="lede">A traditional CRM tells you a lead said no. The admin view goes into the call: which script step lost it, which objection came up, and which answer worked. You see it the same day, not at the end of the month.</p>
+      <p class="lede">A traditional CRM tells you a lead said no. Vector shows where in the call it was lost, why, and what to change. The team sees it the same day, and the script improves with every version.</p>
     </div>
     <div class="insight-grid">
       <figure class="chart-card reveal">
@@ -328,6 +328,14 @@
         <article class="insight-card">
           <h3>Who is calling, and how it goes</h3>
           <p>Calls per rep per day, connect rate and talk time, from the same admin page.</p>
+        </article>
+        <article class="insight-card">
+          <h3>Why the call was lost</h3>
+          <p>A rep taps one reason on a lost call: price, timing, already enrolled, no need or wrong person. It takes a second and it sharpens the next call.</p>
+        </article>
+        <article class="insight-card">
+          <h3>The script gets better with each version</h3>
+          <p>Each version is compared with the one before. The system suggests what to change, the admin approves it, and the team sees what changed.</p>
         </article>
         <article class="insight-card">
           <h3>Calls that failed for the network</h3>
@@ -401,7 +409,7 @@
             <p>3 to 4 seats. ₹424 a month, or ₹339 a seat on yearly.</p>
           </div>
           <div class="plan">
-            <b>Institute</b>
+            <b>Business</b>
             <p class="price">25% off <small>every seat</small></p>
             <p>5 seats or more: ₹374 a seat a month, ₹299 on yearly. 5% more for each seat after 5, up to 40%.</p>
           </div>
@@ -422,7 +430,7 @@
     <div class="account-copy reveal">
       <span class="eyebrow">Get started</span>
       <h2 class="h2">Start a 14-day trial.</h2>
-      <p class="lede lede-top">No payment. You become the admin of your institute and get up to 5 seats. Sign in with an emailed link; there is no password.</p>
+      <p class="lede lede-top">No payment. You become the admin of your company and get up to 5 seats. Sign in with an emailed link; there is no password.</p>
       <ul class="ticks">
         <li>Invite your reps by email when you are ready.</li>
         <li>Pair each rep's Android phone and laptop once.</li>
@@ -438,7 +446,7 @@
         </div>
 
         <form class="form" id="form-trial" role="tabpanel" aria-labelledby="acc-trial" data-panel novalidate>
-          <label>Institute name
+          <label>Company name
             <input name="institute" type="text" maxlength="120" autocomplete="organization" required>
           </label>
           <label>Your work email
@@ -473,9 +481,9 @@
 
       <div class="state" id="stateNoSeat" hidden>
         <strong>No seat on this login yet.</strong>
-        <p>If your admin invited you, open the link they sent. To start a free trial for your institute, name it below.</p>
+        <p>If your admin invited you, open the link they sent. To start a free trial for your company, name it below.</p>
         <form class="form" id="form-name" novalidate>
-          <label>Institute name
+          <label>Company name
             <input name="institute" type="text" maxlength="120" autocomplete="organization" required>
           </label>
           <button class="btn btn-primary btn-block" type="submit">Start 14-day trial</button>
@@ -543,7 +551,7 @@
   <div class="wrap foot-row">
     <div>
       <span class="brand-foot">Vector Call Assist</span>
-      <p>Human calling for coaching institutes.</p>
+      <p>Human calling for sales teams.</p>
     </div>
     <div class="foot-links">
       <a href="#product">Product</a>
