@@ -3,29 +3,34 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<!-- Content-Security-Policy: scripts come only from this site and the two CDNs below, each with an integrity hash. -->
+<!-- Content-Security-Policy: scripts come only from this site and the two CDNs below. The three.js module is pinned to an exact release. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.supabase.co; object-src 'none'; base-uri 'self'; form-action 'none'">
 <meta name="description" content="Vector Call Assist: human calling for coaching institutes. Reps dial from their own Android phone, driven from a laptop, with scripts, objections, callbacks and team results per seat.">
-<meta name="theme-color" content="#1a41d8">
+<meta name="theme-color" content="#07080b">
 <meta property="og:title" content="Vector Call Assist">
 <meta property="og:description" content="Human calling for coaching institutes: calls from each rep's own SIM, scripts on screen, and results per seat.">
 <meta property="og:type" content="website">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231a41d8'/%3E%3Cpath d='M14 18h9l9 24 9-24h9L32 48z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2307080b'/%3E%3Cpath d='M12 18l13 28 7-15 7 15 13-28h-7L32 39l-5-11-5 11-8-21z' fill='%23ff6a3d'/%3E%3C/svg%3E">
 <title>Vector Call Assist · Human calling for coaching institutes</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=STIX+Two+Text:ital,wght@0,400..700;1,400..700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@500;700;800&family=Manrope:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap">
 <link rel="stylesheet" href="css/home.css">
 </head>
 <body>
 
-<header class="top">
+<canvas id="scene" aria-hidden="true"></canvas>
+
+<header class="top" id="top">
   <div class="wrap">
-    <a class="mark" href="#top">Vector<i> Call Assist</i></a>
+    <a class="mark" href="#hero" aria-label="Vector Call Assist, home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#ff6a3d"/><path d="M7 9l9 16 9-16h-4.2L16 19.5 11.2 9z" fill="#07080b"/></svg>
+      <span>Vector<i> Call Assist</i></span>
+    </a>
     <nav aria-label="Main">
       <a href="#product">Product</a>
+      <a href="#sim">Try it</a>
       <a href="#how">How it works</a>
-      <a href="#seats">Seats</a>
       <a href="#pricing">Pricing</a>
       <a href="#questions">Questions</a>
       <a class="btn small" href="#account">Sign in</a>
@@ -33,136 +38,185 @@
   </div>
 </header>
 
-<main id="top">
+<main>
 
-<section class="hero">
+<section class="hero section-hero" id="hero" data-scene="hero">
   <div class="wrap">
-    <div class="hero-grid">
-      <div>
-        <p class="label">Human calling · Android phone · laptop workspace</p>
-        <h1>Every call your team makes, kept on track.</h1>
-        <p class="lede">Reps dial from their own Android phone and their own SIM. The laptop shows the script, the objection help and the next lead. Admins see results per seat. Lead names and phone numbers stay on the rep's device.</p>
-        <div class="cta-row">
-          <a class="btn primary" href="#account">Start free trial</a>
-          <a class="btn" href="#pricing">See pricing</a>
-        </div>
+    <div class="hero-copy">
+      <span class="eyebrow">Human calling · Android phone · laptop</span>
+      <h1 id="heroTitle">Every call, <span class="hot">on script</span> and counted.</h1>
+      <p class="lede">Reps dial from their own Android phone and SIM. The laptop carries the script, the objection answers and the next lead. Admins see results per seat. Lead names and phone numbers stay on the rep's device.</p>
+      <div class="cta-row">
+        <a class="btn primary magnetic" href="#account">Start free trial <span class="arrow" aria-hidden="true">→</span></a>
+        <a class="btn magnetic" href="#sim">Try the call console</a>
       </div>
-
-      <div class="demo" aria-label="Example of a call card">
-        <div class="demo-top"><span>Seat 3 · Rep 3</span><b id="demoLead">Lead 14 of 60</b></div>
-        <div class="demo-body">
-          <div class="demo-line">
-            <span class="label">Say this first</span>
-            <p>Hi, this is Anita from the institute. Is this a good time for two minutes about the batch you asked about?</p>
-          </div>
-          <div>
-            <p class="label outcome-label">Outcome</p>
-            <div class="demo-outcomes" role="group" aria-label="Outcome of this call">
-              <button type="button" data-outcome="answered" aria-pressed="false">Answered</button>
-              <button type="button" data-outcome="no_answer" aria-pressed="false">No answer</button>
-              <button type="button" data-outcome="callback" aria-pressed="false">Callback</button>
-              <button type="button" data-outcome="interested" aria-pressed="false">Interested</button>
-              <button type="button" data-outcome="won" aria-pressed="false">Won</button>
-            </div>
-          </div>
-          <div class="demo-counts" aria-live="polite">
-            <div><span>Calls today</span><strong id="cntCalls">0</strong></div>
-            <div><span>Connected</span><strong id="cntConnected">0</strong></div>
-            <div><span>Callbacks</span><strong id="cntCallbacks">0</strong></div>
-          </div>
-          <p class="demo-note">A demo. Tap an outcome to see the counts move. Nothing here is saved.</p>
-        </div>
+      <div class="stats" aria-label="At a glance">
+        <div class="stat"><strong data-count="14">0</strong><span>day trial</span></div>
+        <div class="stat"><strong data-count="5">0</strong><span>seats free to try</span></div>
+        <div class="stat"><strong data-count="399">0</strong><span>₹ per seat / month</span></div>
+        <div class="stat"><strong data-count="0">0</strong><span>call recordings</span></div>
       </div>
-    </div>
-
-    <div class="ticker" aria-hidden="true">
-      <ul>
-        <li>Calls from the rep's own SIM</li>
-        <li>Script on screen</li>
-        <li>Objection help</li>
-        <li>Callback reminders</li>
-        <li>Results per seat</li>
-        <li>Team targets</li>
-        <li>Calls from the rep's own SIM</li>
-        <li>Script on screen</li>
-        <li>Objection help</li>
-        <li>Callback reminders</li>
-        <li>Results per seat</li>
-        <li>Team targets</li>
-      </ul>
     </div>
   </div>
+  <div class="scroll-cue" aria-hidden="true">Scroll to pair</div>
 </section>
 
-<section class="section" id="product">
+<div class="ticker" aria-hidden="true">
+  <ul>
+    <li>Calls from the rep's own SIM</li>
+    <li>Script on screen</li>
+    <li>Objection answers</li>
+    <li>Callbacks that ring back</li>
+    <li>Results per seat</li>
+    <li>Team targets</li>
+    <li>Calls from the rep's own SIM</li>
+    <li>Script on screen</li>
+    <li>Objection answers</li>
+    <li>Callbacks that ring back</li>
+    <li>Results per seat</li>
+    <li>Team targets</li>
+  </ul>
+</div>
+
+<section class="section" id="product" data-scene="hero">
   <div class="wrap">
-    <div class="section-head">
-      <p class="label">The product</p>
-      <h2 class="h2">Built for people who make calls all day.</h2>
-      <p class="lede">The phone does the dialling. The laptop does the thinking. The cloud gets only what the admin needs to run the team: outcomes, timings and targets.</p>
+    <div class="section-head reveal">
+      <span class="eyebrow">The product</span>
+      <h2 class="h2">The phone dials. The laptop thinks.</h2>
+      <p class="lede">The cloud gets only what an admin needs to run the team: outcomes, timings and targets. Move your pointer over a card to see it tilt.</p>
     </div>
     <div class="cards">
-      <article class="card reveal k-cobalt">
-        <span class="tag">Phone</span>
+      <article class="tilt k-mint reveal" data-tilt>
+        <span class="glint" aria-hidden="true"></span>
+        <span class="idx">01 · PHONE</span>
         <h3>Calls from the rep's own SIM</h3>
-        <p>The Android app dials on the phone's own line. Each rep keeps their number. You do not need a shared calling service.</p>
+        <p>The Android app dials on the phone's own line. Each rep keeps their number. Nothing routes through a shared calling service.</p>
       </article>
-      <article class="card reveal k-data">
-        <span class="tag">Laptop</span>
+      <article class="tilt k-ember reveal" data-tilt>
+        <span class="glint" aria-hidden="true"></span>
+        <span class="idx">02 · LAPTOP</span>
         <h3>The script, one line at a time</h3>
-        <p>The laptop shows the published script for the current step, with the next line ready. Admins publish a new version; reps get it on their next sign-in.</p>
+        <p>The laptop shows the published script for the current step, with the next line ready. Admins publish a new version and reps get it on their next sign-in.</p>
       </article>
-      <article class="card reveal k-struct">
-        <span class="tag">Help</span>
+      <article class="tilt k-peri reveal" data-tilt>
+        <span class="glint" aria-hidden="true"></span>
+        <span class="idx">03 · HELP</span>
         <h3>Objection answers in reach</h3>
         <p>Common objections sit next to the script, so the rep is never stuck on a question they have heard a hundred times.</p>
       </article>
-      <article class="card reveal k-refs">
-        <span class="tag">Reminders</span>
+      <article class="tilt k-mint reveal" data-tilt>
+        <span class="glint" aria-hidden="true"></span>
+        <span class="idx">04 · REMINDERS</span>
         <h3>Callbacks that ring back</h3>
-        <p>Set a callback on the laptop and the phone reminds the rep at the time they chose, with the lead's name on the screen.</p>
+        <p>Set a callback on the laptop and the phone reminds the rep at the time they chose, with the lead's name on screen.</p>
       </article>
-      <article class="card reveal k-figs">
-        <span class="tag">Sync</span>
+      <article class="tilt k-ember reveal" data-tilt>
+        <span class="glint" aria-hidden="true"></span>
+        <span class="idx">05 · SYNC</span>
         <h3>Outcomes that never go missing</h3>
         <p>Each outcome is saved on the phone first and sent when the connection returns. Each one is stored once, however many retries it takes.</p>
       </article>
-      <article class="card reveal k-lang">
-        <span class="tag">Admin</span>
+      <article class="tilt k-peri reveal" data-tilt>
+        <span class="glint" aria-hidden="true"></span>
+        <span class="idx">06 · ADMIN</span>
         <h3>The team on one page</h3>
-        <p>Team activity, results by outcome, per-rep targets, weekly summary and supervisor notes, all from the admin page.</p>
+        <p>Team activity, results by outcome, per-rep targets, the weekly summary and supervisor notes, all from the admin page.</p>
       </article>
     </div>
   </div>
 </section>
 
-<section class="section dark" id="how">
+<section class="section" id="sim" data-scene="pair">
   <div class="wrap">
-    <div class="section-head">
-      <p class="label">How it works</p>
+    <div class="section-head reveal">
+      <span class="eyebrow">Try it</span>
+      <h2 class="h2">Work a lead. Watch the numbers move.</h2>
+      <p class="lede">This is a demo with made-up leads. Pick a lead, step through the script, answer an objection, dial, then log the outcome.</p>
+    </div>
+
+    <div class="console reveal" id="console">
+      <div class="leads">
+        <h4>Today's leads</h4>
+        <button type="button" class="lead" data-lead="0" aria-pressed="true"><b>Riya S.</b><small>Batch A · not called</small></button>
+        <button type="button" class="lead" data-lead="1" aria-pressed="false"><b>Arjun M.</b><small>Batch B · not called</small></button>
+        <button type="button" class="lead" data-lead="2" aria-pressed="false"><b>Neha K.</b><small>Batch A · not called</small></button>
+        <button type="button" class="lead" data-lead="3" aria-pressed="false"><b>Vikram P.</b><small>Batch C · not called</small></button>
+      </div>
+
+      <div class="script">
+        <div class="steps" id="steps" aria-label="Script steps">
+          <span class="on">1 · Open</span><span>2 · Ask</span><span>3 · Offer</span><span>4 · Close</span>
+        </div>
+        <div class="line-card">
+          <p id="scriptLine">Hi, this is Anita from the institute. Is this a good time for two minutes about the batch you asked about?</p>
+          <p class="note" id="scriptNote" aria-live="polite"></p>
+        </div>
+        <div class="row-btns">
+          <button type="button" class="btn small" id="prevLine">← Back</button>
+          <button type="button" class="btn small primary" id="nextLine">Next line →</button>
+        </div>
+        <div>
+          <p class="demo-tag">If they say…</p>
+          <div class="chips" role="group" aria-label="Objections" id="objections">
+            <button type="button" class="chip" data-obj="price" aria-pressed="false">Too expensive</button>
+            <button type="button" class="chip" data-obj="later" aria-pressed="false">Call me later</button>
+            <button type="button" class="chip" data-obj="joined" aria-pressed="false">Already joined</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="results">
+        <div class="timer" id="timer" aria-live="off">00:00</div>
+        <div class="row-btns">
+          <button type="button" class="btn small primary" id="dialBtn">Dial</button>
+          <button type="button" class="btn small" id="hangBtn" disabled>Hang up</button>
+        </div>
+        <div>
+          <p class="panel-h">Log the outcome</p>
+          <div class="row-btns" role="group" aria-label="Outcome">
+            <button type="button" class="chip" data-outcome="answered">Answered</button>
+            <button type="button" class="chip" data-outcome="no_answer">No answer</button>
+            <button type="button" class="chip" data-outcome="callback">Callback</button>
+            <button type="button" class="chip" data-outcome="won">Won</button>
+          </div>
+        </div>
+        <div class="bar"><div><span>Connected</span><span id="pctConn">0%</span></div><i id="barConn"></i></div>
+        <div class="bar"><div><span>Callbacks</span><span id="cntCb">0</span></div><i id="barCb"></i></div>
+        <div class="bar"><div><span>Won</span><span id="cntWon">0</span></div><i id="barWon"></i></div>
+        <ul class="log" id="log" aria-live="polite"></ul>
+      </div>
+    </div>
+    <p class="demo-tag">Demo only. Nothing here is saved or sent anywhere.</p>
+  </div>
+</section>
+
+<section class="section" id="how" data-scene="pair">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">How it works</span>
       <h2 class="h2">From invite to first call in four steps.</h2>
     </div>
-    <div class="tabs">
+    <div class="tabs reveal">
       <div class="tablist" role="tablist" aria-label="Setup steps" data-tabs>
         <button type="button" role="tab" id="step-1" aria-controls="panel-1" aria-selected="true" tabindex="0"><b>1 · Invite</b><small>Add each rep by email</small></button>
-        <button type="button" role="tab" id="step-2" aria-controls="panel-2" aria-selected="false" tabindex="-1"><b>2 · Pair</b><small>Phone and laptop, one seat</small></button>
+        <button type="button" role="tab" id="step-2" aria-controls="panel-2" aria-selected="false" tabindex="-1"><b>2 · Pair</b><small>One phone, one laptop, one seat</small></button>
         <button type="button" role="tab" id="step-3" aria-controls="panel-3" aria-selected="false" tabindex="-1"><b>3 · Work the list</b><small>Script, objections, next lead</small></button>
         <button type="button" role="tab" id="step-4" aria-controls="panel-4" aria-selected="false" tabindex="-1"><b>4 · Results</b><small>Outcomes sync per seat</small></button>
       </div>
       <div class="tabpanel" role="tabpanel" id="panel-1" aria-labelledby="step-1" data-panel>
         <p class="who">Admin</p>
         <h3>Invite each rep by email.</h3>
-        <p>Every invite takes one seat. The rep signs in with an emailed link and the seat is attached to their login. Nobody can join without an invite.</p>
+        <p>Every invite takes one seat. The rep signs in with an emailed link and the seat is attached to their login. Nobody joins without an invite.</p>
       </div>
       <div class="tabpanel" role="tabpanel" id="panel-2" aria-labelledby="step-2" data-panel hidden>
         <p class="who">Rep, once</p>
         <h3>Scan the code. Pair once.</h3>
-        <p>Open the Android app and scan the code on the laptop. The phone and laptop pair to that seat over your local Wi-Fi, and only the seat's own phone and laptop can use it.</p>
+        <p>Open the Android app and scan the code on the laptop. The phone and laptop pair to that seat over your local Wi-Fi, and only that seat's phone and laptop can use it.</p>
       </div>
       <div class="tabpanel" role="tabpanel" id="panel-3" aria-labelledby="step-3" data-panel hidden>
         <p class="who">Rep, every day</p>
         <h3>Work the list from the laptop.</h3>
-        <p>The lead sheet opens on the rep's device. The phone dials the number on the current row. The laptop shows the script for each step and the objection answers close by.</p>
+        <p>The lead sheet opens on the rep's device. The phone dials the number on the current row. The laptop shows the script for each step, with the objection answers close by.</p>
       </div>
       <div class="tabpanel" role="tabpanel" id="panel-4" aria-labelledby="step-4" data-panel hidden>
         <p class="who">Admin, live</p>
@@ -173,89 +227,79 @@
   </div>
 </section>
 
-<section class="section" id="seats">
+<section class="section" id="pricing" data-scene="seats">
   <div class="wrap">
-    <div class="section-head">
-      <p class="label">Seats</p>
-      <h2 class="h2">One seat is one person.</h2>
-      <p class="lede">You buy seats, not devices or sites. A seat is one person, one phone and one laptop. It can change hands when someone leaves.</p>
-    </div>
-    <div class="seat-grid">
-      <div class="reveal"><b>1</b><strong>person per seat</strong><p>The seat is tied to one login and one rep's work.</p></div>
-      <div class="reveal"><b>1</b><strong>phone per seat</strong><p>One Android phone is paired to the seat at a time.</p></div>
-      <div class="reveal"><b>1</b><strong>laptop per seat</strong><p>One laptop is paired to the seat. A second laptop needs its own seat.</p></div>
-      <div class="reveal"><b>↺</b><strong>seat can move</strong><p>An admin reassigns a seat to someone new. The old person's access ends at their next sign-in.</p></div>
-    </div>
-  </div>
-</section>
-
-<section class="section dark" id="pricing">
-  <div class="wrap">
-    <div class="section-head">
-      <p class="label">Pricing</p>
-      <h2 class="h2">Pay per seat. Change the number and see the total.</h2>
-      <p class="lede">Prices are in rupees per seat per month. Yearly billing brings the rate down. Custom work is quoted per institute.</p>
+    <div class="section-head reveal">
+      <span class="eyebrow">Pricing</span>
+      <h2 class="h2">Pay per seat. Move the slider and watch the seats light up.</h2>
+      <p class="lede">A seat is one person, one phone and one laptop. Prices are in rupees per seat per month. Yearly billing brings the rate down. Custom work is quoted per institute.</p>
     </div>
 
-    <div class="billing" role="radiogroup" aria-label="Billing period">
-      <button type="button" role="radio" aria-checked="true" data-billing="monthly">Monthly</button>
-      <button type="button" role="radio" aria-checked="false" data-billing="yearly">Yearly <small>billed yearly</small></button>
+    <div class="seat-facts reveal">
+      <div><b>1</b><p>person per seat</p></div>
+      <div><b>1</b><p>phone per seat</p></div>
+      <div><b>1</b><p>laptop per seat</p></div>
+      <div><b>↺</b><p>seat can move to someone new</p></div>
     </div>
 
-    <div class="calc calc-top">
-      <fieldset>
-        <legend>How many seats?</legend>
-        <div class="seat-input">
-          <div class="row">
+    <div class="price-grid reveal">
+      <div class="calc">
+        <div class="billing" id="billing" role="radiogroup" aria-label="Billing period">
+          <span class="thumb" aria-hidden="true"></span>
+          <button type="button" role="radio" aria-checked="true" data-billing="monthly">Monthly</button>
+          <button type="button" role="radio" aria-checked="false" data-billing="yearly">Yearly<small>cheaper</small></button>
+        </div>
+
+        <fieldset>
+          <legend>How many seats?</legend>
+          <div class="seat-row">
             <input type="range" id="seatRange" min="1" max="200" value="10" aria-label="Seats">
             <input type="number" id="seatNum" min="1" max="200" value="10" aria-label="Seats, number">
           </div>
-          <p class="demo-note">1 to 200 seats. Each seat is one person, one phone and one laptop.</p>
+          <label class="switch">
+            <input type="checkbox" id="addon">
+            <span class="track" aria-hidden="true"></span>
+            <span>Script add-on
+              <small>The script editor, published versions and script reports for the admin.</small>
+            </span>
+          </label>
+        </fieldset>
+
+        <div class="total-wrap" aria-live="polite">
+          <p class="total"><span id="total">₹3,990</span> <small>a month</small></p>
+          <ul class="breakdown">
+            <li><span>Seat rate</span><b id="rowSeat">₹399 × 10 seats</b></li>
+            <li><span>Script add-on</span><b id="rowAddon">Not included</b></li>
+            <li><span id="rowYearLabel">Billed monthly</span><b id="rowYear">₹3,990 a month</b></li>
+          </ul>
         </div>
-        <label class="toggle">
-          <input type="checkbox" id="addon">
-          <span>Add the script add-on
-            <small>The script editor, published script versions and script reports for the admin.</small>
-          </span>
-        </label>
-      </fieldset>
+      </div>
 
-      <div class="quote" aria-live="polite">
-        <p class="label">Your estimate</p>
-        <p class="total"><span id="total">₹3,990</span> <small>a month</small></p>
-        <ul>
-          <li><span>Seat rate</span><b id="rowSeat">₹399 × 10</b></li>
-          <li><span>Script add-on</span><b id="rowAddon">Not included</b></li>
-          <li><span id="rowYearLabel">Billed</span><b id="rowYear">Monthly</b></li>
-        </ul>
-        <p class="demo-note">Estimate only. Payments open later; the trial needs no payment.</p>
-      </div>
-    </div>
-
-    <div class="plans">
-      <div>
-        <b>Team</b>
-        <p class="price" id="planTeam">₹399 <small>per seat / month</small></p>
-        <p>Seats, phone and laptop pairing, scripts on screen, outcomes and callbacks. Yearly: ₹199 per seat per month.</p>
-      </div>
-      <div>
-        <b>Script add-on</b>
-        <p class="price" id="planAddon">₹499 <small>per seat / month</small></p>
-        <p>The script editor and version history. Yearly: ₹299 per seat per month.</p>
-      </div>
-      <div>
-        <b>Custom work</b>
-        <p class="price">Quoted <small>per institute</small></p>
-        <p>Your own call flows, integrations or onboarding. Start a trial and tell us what you need.</p>
+      <div class="plan-stack">
+        <div class="plan featured">
+          <b>Team</b>
+          <p class="price">₹399 <small>per seat / month</small></p>
+          <p>Seats, phone and laptop pairing, scripts on screen, outcomes and callbacks. Yearly: ₹199 per seat per month.</p>
+        </div>
+        <div class="plan">
+          <b>Script add-on</b>
+          <p class="price">₹499 <small>per seat / month</small></p>
+          <p>The script editor and version history. Yearly: ₹299 per seat per month.</p>
+        </div>
+        <div class="plan">
+          <b>Custom work</b>
+          <p class="price">Quoted <small>per institute</small></p>
+          <p>Your own call flows, integrations or onboarding. Start a trial and tell us what you need.</p>
+        </div>
       </div>
     </div>
   </div>
 </section>
 
-<section class="section" id="account">
+<section class="section" id="account" data-scene="hero">
   <div class="wrap account">
-    <div class="account-copy">
-      <p class="label">Get started</p>
+    <div class="account-copy reveal">
+      <span class="eyebrow">Get started</span>
       <h2 class="h2">Start a 14-day trial.</h2>
       <p class="lede lede-top">No payment. You become the admin of your institute and get up to 5 seats. Sign in with an emailed link; there is no password.</p>
       <ul>
@@ -265,8 +309,7 @@
       </ul>
     </div>
 
-    <div class="panel" id="authPanel">
-      <!-- Signed-out view: sign in or start a trial -->
+    <div class="panel reveal" id="authPanel">
       <div id="stateSignedOut">
         <div class="tab-row" role="tablist" aria-label="Account" data-tabs>
           <button type="button" role="tab" id="acc-trial" aria-controls="form-trial" aria-selected="true" tabindex="0">Start free trial</button>
@@ -281,7 +324,7 @@
             <input name="email" type="email" maxlength="254" autocomplete="email" required>
             <span class="hint">We email you a sign-in link. You become the admin.</span>
           </label>
-          <button class="btn primary" type="submit">Email me a sign-in link</button>
+          <button class="btn primary magnetic" type="submit">Email me a sign-in link</button>
         </form>
 
         <form class="form" id="form-signin" role="tabpanel" aria-labelledby="acc-signin" data-panel hidden novalidate>
@@ -289,26 +332,24 @@
             <input name="email" type="email" maxlength="254" autocomplete="email" required>
             <span class="hint">Use the email your admin invited, or the one you started a trial with.</span>
           </label>
-          <button class="btn primary" type="submit">Email me a sign-in link</button>
+          <button class="btn primary magnetic" type="submit">Email me a sign-in link</button>
         </form>
 
         <p class="msg" id="authMsg" role="status" aria-live="polite"></p>
       </div>
 
-      <!-- Link sent -->
       <div class="state" id="stateSent" hidden>
         <strong>Check your email.</strong>
         <p>We sent a sign-in link to <span class="signed" id="sentTo"></span>. Open it on this device. The link works once.</p>
         <button class="link-btn" type="button" id="againBtn">Use a different email</button>
       </div>
 
-      <!-- Signed in, checking the seat -->
       <div class="state" id="stateChecking" hidden>
+        <div class="spinner" aria-hidden="true"></div>
         <strong>Signing you in…</strong>
         <p>Checking your seat.</p>
       </div>
 
-      <!-- Signed in, no seat yet: start a trial with the institute name -->
       <div class="state" id="stateNoSeat" hidden>
         <strong>No seat on this login yet.</strong>
         <p>If your admin invited you, open the link they sent. To start a free trial for your institute, name it below.</p>
@@ -316,22 +357,20 @@
           <label>Institute name
             <input name="institute" type="text" maxlength="120" autocomplete="organization" required>
           </label>
-          <button class="btn primary" type="submit">Start 14-day trial</button>
+          <button class="btn primary magnetic" type="submit">Start 14-day trial</button>
         </form>
         <p class="msg" id="noSeatMsg" role="status" aria-live="polite"></p>
         <button class="link-btn" type="button" id="signOutBtn1">Sign out</button>
       </div>
 
-      <!-- Signed in with a seat -->
       <div class="state" id="stateReady" hidden>
         <strong>You're signed in.</strong>
         <p class="signed" id="whoami"></p>
         <p id="readyText"></p>
-        <a class="btn primary" id="openLink" href="app.html">Open your workspace</a>
+        <a class="btn primary magnetic" id="openLink" href="app.html">Open your workspace <span class="arrow" aria-hidden="true">→</span></a>
         <button class="link-btn" type="button" id="signOutBtn2">Sign out</button>
       </div>
 
-      <!-- Something went wrong -->
       <div class="state" id="stateError" hidden>
         <strong>Sign-in is not available right now.</strong>
         <p class="msg" id="errorMsg" data-kind="error" role="alert"></p>
@@ -341,13 +380,13 @@
   </div>
 </section>
 
-<section class="section" id="questions">
+<section class="section" id="questions" data-scene="hero">
   <div class="wrap">
-    <div class="section-head">
-      <p class="label">Questions</p>
+    <div class="section-head reveal">
+      <span class="eyebrow">Questions</span>
       <h2 class="h2">Straight answers.</h2>
     </div>
-    <div class="faq">
+    <div class="faq reveal">
       <details>
         <summary>Is this AI calling?</summary>
         <p>No. Vector is for human callers. A person dials, talks and chooses the outcome. Vector puts the script, the objection answers and the callbacks in front of them.</p>
@@ -388,5 +427,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
 <script src="js/config.js"></script>
 <script src="js/home.js"></script>
+<script type="module" src="js/scene.js"></script>
 </body>
 </html>

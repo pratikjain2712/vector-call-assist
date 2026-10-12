@@ -54,3 +54,18 @@ test('home page: CSP on the page matches the rep page for scripts', () => {
   const csp = (s) => (s.match(/script-src ([^;]+);/) || [])[1];
   assert.strictEqual(csp(html), csp(app));
 });
+
+test('home page: the 3D scene is a module from a pinned three.js release, and sections set its mode', () => {
+  const scene = read(path.join('js', 'scene.js'));
+  const m = scene.match(/from 'https:\/\/cdn\.jsdelivr\.net\/npm\/three@(\d+\.\d+\.\d+)\//);
+  assert.ok(m, 'three.js import must name an exact version on jsdelivr');
+  assert.match(html, /<script type="module" src="js\/scene\.js">/);
+  assert.match(html, /<canvas id="scene"/);
+  for (const mode of ['hero', 'pair', 'seats']) assert.match(scene, new RegExp("\\b" + mode + ":\\s*\\{"));
+  assert.match(html, /data-scene="seats"/);
+});
+
+test('home page: the calculator and the scene agree on the event name', () => {
+  assert.match(js, /new CustomEvent\('vca:seats'/);
+  assert.match(read(path.join('js', 'scene.js')), /addEventListener\('vca:seats'/);
+});
