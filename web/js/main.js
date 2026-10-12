@@ -758,17 +758,24 @@ function renderSignin(c) {
     actions.appendChild(tool("signin-out", "Sign out", () => Cloud.signOut(), "plain"));
   } else if (c.status === "error") {
     $("signin-title").textContent = "Sign in";
-    $("signin-text").textContent = "Use the work email your institute invited. We'll email you a sign-in link; no password needed.";
+    $("signin-text").textContent = "Use the work email your institute invited. Sign in with your password, or leave it empty and we'll email you a sign-in link.";
     msg.textContent = "Could not reach the Vector cloud: " + c.lastError;
     actions.appendChild(tool("signin-retry", "Try again", () => Cloud.retry(), "plain"));
-  } else { $("signin-title").textContent = "Sign in"; $("signin-text").textContent = "Use the work email your institute invited. We'll email you a sign-in link; no password needed."; }
+  } else { $("signin-title").textContent = "Sign in"; $("signin-text").textContent = "Use the work email your institute invited. Sign in with your password, or leave it empty and we'll email you a sign-in link."; }
 }
 
+/* One button: with a password it signs in at once; with the password empty it emails a sign-in link. */
+function syncSigninButton() {
+  $("signin-send").textContent = $("signin-password").value ? "Sign in" : "Email me a sign-in link";
+}
 async function sendSigninLink() {
-  const btn = $("signin-send");
+  const btn = $("signin-send"), pw = $("signin-password");
   btn.disabled = true;
   $("signin-msg").textContent = "";
-  try { await Cloud.sendLink($("signin-email").value); }
+  try {
+    if (pw.value) { await Cloud.signInPassword($("signin-email").value, pw.value); pw.value = ""; syncSigninButton(); }
+    else await Cloud.sendLink($("signin-email").value);
+  }
   catch (e) { $("signin-msg").textContent = e.message; }
   finally { btn.disabled = false; }
 }
@@ -1228,6 +1235,8 @@ Cloud.init();
 setInterval(cloudSweep, 30000);
 $("signin-send").addEventListener("click", sendSigninLink);
 $("signin-email").addEventListener("keydown", (ev) => { if (ev.key === "Enter") sendSigninLink(); });
+$("signin-password").addEventListener("keydown", (ev) => { if (ev.key === "Enter") sendSigninLink(); });
+$("signin-password").addEventListener("input", syncSigninButton);
 $("cloud-signout").addEventListener("click", () => { $("cloud-panel").open = false; Cloud.signOut(); });
 setInterval(checkPhone, 15000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) checkPhone(); });

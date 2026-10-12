@@ -86,19 +86,40 @@
     claimedFor = userId;
   }
 
-  async function sendLink(email) {
-    if (!client) throw new Error('Cloud sign-in is not set up on this site.');
+  /* Supabase's auth messages, in words a rep can act on. */
+  function authMessage(error) {
+    const m = (error && error.message) || '';
+    if (/invalid login credentials/i.test(m)) return 'Wrong email or password.';
+    if (/email not confirmed/i.test(m)) return 'This account is not confirmed yet. Ask your admin to confirm it, or use a sign-in link.';
+    if (/signup|not allowed|not found/i.test(m)) return 'This email has no Vector account. Ask your institute admin to invite you.';
+    if (/rate limit|too many|security purposes/i.test(m)) return 'Too many attempts or sign-in emails. Wait a few minutes and try again.';
+    return m || 'Sign-in failed. Try again.';
+  }
+  function cleanEmail(email) {
     const clean = String(email || '').trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) throw new Error('Enter your work email address.');
+    return clean;
+  }
+
+  async function sendLink(email) {
+    if (!client) throw new Error('Cloud sign-in is not set up on this site.');
+    const clean = cleanEmail(email);
     const { error } = await client.auth.signInWithOtp({
       email: clean,
       options: { shouldCreateUser: false, emailRedirectTo: location.origin + location.pathname },
     });
-    if (error) {
-      if (/signup|not allowed|not found/i.test(error.message)) throw new Error('This email has no Vector account. Ask your institute admin to invite you.');
-      throw new Error(error.message);
-    }
+    if (error) throw new Error(authMessage(error));
     set({ status: 'link_sent', lastError: '' });
+  }
+
+  /* Email and password, for accounts an admin created with a password (no email is sent). The session then
+     arrives through onAuthStateChange, the same way as after a sign-in link. */
+  async function signInPassword(email, password) {
+    if (!client) throw new Error('Cloud sign-in is not set up on this site.');
+    const clean = cleanEmail(email);
+    if (!password) throw new Error('Enter your password.');
+    const { error } = await client.auth.signInWithPassword({ email: clean, password: String(password) });
+    if (error) throw new Error(authMessage(error));
   }
 
   async function signOut() {
@@ -230,6 +251,7 @@
     init,
     info,
     sendLink,
+    signInPassword,
     signOut,
     rpc,
     publishedScript,

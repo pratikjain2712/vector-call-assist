@@ -341,7 +341,9 @@
     if (/signup|not allowed|not found/i.test(m)) {
       return 'No Vector account for this email. Ask your admin to invite you, or start a free trial.';
     }
-    if (/rate|too many|seconds/i.test(m)) return 'Too many emails were sent. Wait a minute and try again.';
+    if (/invalid login credentials/i.test(m)) return 'Wrong email or password.';
+    if (/email not confirmed/i.test(m)) return 'This account is not confirmed yet. Ask your admin, or leave the password empty for a sign-in link.';
+    if (/rate|too many|seconds/i.test(m)) return 'Too many attempts or emails. Wait a few minutes and try again.';
     return m || 'Something went wrong. Please try again.';
   }
   function readName() {
@@ -367,6 +369,21 @@
       busy = true;
       setBusy(form, true);
       setMsg(msg, '', '');
+      // Sign-in tab with a password: sign in at once, no email. The session handler then routes by role.
+      var password = form.elements.password ? form.elements.password.value : '';
+      if (!create && password) {
+        client.auth.signInWithPassword({ email: email, password: password }).then(function (res) {
+          if (res.error) throw res.error;
+          form.elements.password.value = '';
+        }).catch(function (err) {
+          setMsg(msg, friendly(err), 'error');
+        }).then(function () {
+          busy = false;
+          setBusy(form, false);
+          labelSignIn(form);
+        });
+        return;
+      }
       client.auth.signInWithOtp({
         email: email,
         options: { shouldCreateUser: create, emailRedirectTo: location.origin + location.pathname }
@@ -383,8 +400,17 @@
       });
     });
   }
+  // The sign-in button says "Sign in" when a password is typed, otherwise "Email me a sign-in link".
+  function labelSignIn(form) {
+    var btn = form.querySelector('[data-label-password]');
+    if (!btn || !form.elements.password) return;
+    btn.textContent = form.elements.password.value ? btn.getAttribute('data-label-password') : btn.getAttribute('data-label-link');
+  }
   bindSignIn($('form-trial'), true, true);
   bindSignIn($('form-signin'), false, false);
+  if ($('form-signin').elements.password) {
+    $('form-signin').elements.password.addEventListener('input', function () { labelSignIn($('form-signin')); });
+  }
 
   function trialText(st) {
     if (!st.trial_ends_at) return '';

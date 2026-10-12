@@ -191,6 +191,7 @@
       // Supabase advises against calling the client inside this callback, so the work runs just after it.
       client.auth.onAuthStateChange((_event, session) => { setTimeout(() => onSession(session), 0); });
       $('gate-form').addEventListener('submit', sendLink);
+    $('gate-password').addEventListener('input', syncGateButton);
       $('signout').addEventListener('click', () => { client.auth.signOut(); });
       $('range-form').addEventListener('submit', (e) => { e.preventDefault(); load(); });
       $('range-last7').addEventListener('click', () => {
@@ -206,15 +207,36 @@
       show('gate');
     }
 
+    function gateMessage(error) {
+      const m = (error && error.message) || '';
+      if (/invalid login credentials/i.test(m)) return 'Wrong email or password.';
+      if (/email not confirmed/i.test(m)) return 'This account is not confirmed yet. Confirm it in Supabase, or use a sign-in link.';
+      if (/signup|not allowed|not found/i.test(m)) return 'This email has no Vector account.';
+      if (/rate limit|too many|security purposes/i.test(m)) return 'Too many attempts or sign-in emails. Wait a few minutes and try again.';
+      return m || 'Sign-in failed. Try again.';
+    }
+    function syncGateButton() {
+      $('gate-submit').textContent = $('gate-password').value ? 'Sign in' : 'Send sign-in link';
+    }
+
     async function sendLink(e) {
       e.preventDefault();
       const email = $('gate-email').value.trim();
       if (!H.EMAIL.test(email)) { say('gate-msg', 'Enter your work email address.', true); return; }
+      // With a password: sign in at once (no email). Without: email a sign-in link.
+      const password = $('gate-password').value;
+      if (password) {
+        const { error } = await client.auth.signInWithPassword({ email, password });
+        $('gate-password').value = '';
+        syncGateButton();
+        if (error) say('gate-msg', gateMessage(error), true);
+        return;
+      }
       const { error } = await client.auth.signInWithOtp({
         email,
         options: { shouldCreateUser: false, emailRedirectTo: location.origin + location.pathname },
       });
-      say('gate-msg', error ? error.message : 'Check your email for the sign-in link.', !!error);
+      say('gate-msg', error ? gateMessage(error) : 'Check your email for the sign-in link.', !!error);
     }
 
     async function onSession(session) {

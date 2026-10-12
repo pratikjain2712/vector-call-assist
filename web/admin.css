@@ -84,3 +84,12 @@ textarea { font: inherit; padding: 7px 10px; border-radius: 6px; border: 1px sol
   table.stack td .actions button { width: 100%; }
   .bar { min-width: 0; }
 }
+
+/* reset.html */
+main.narrow { max-width: 560px; }
+.stack { display: grid; gap: 10px; }
+.stack input { width: 100%; box-sizing: border-box; }
+.small { font-size: .85rem; margin: 0; }
+.button-link { display: inline-block; padding: 7px 12px; border-radius: 6px; border: 1px solid var(--accent); color: var(--accent); text-decoration: none; }
+.button-link:hover { background: var(--accent); color: #fff; }
+.forgot { margin: 8px 0 0; font-size: .9rem; }

@@ -238,11 +238,13 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
   <div class="gate-card">
     <span class="label">Vector 2.0 call guide</span>
     <h1 id="signin-title">Sign in</h1>
-    <p id="signin-text">Use the work email your institute invited. We'll email you a sign-in link; no password needed.</p>
+    <p id="signin-text">Use the work email your institute invited. Sign in with your password, or leave it empty and we'll email you a sign-in link.</p>
     <div id="signin-form" class="fields one">
-      <label class="field"><span class="label">Work email</span><input id="signin-email" type="email" autocomplete="email" inputmode="email" placeholder="you@institute.com"></label>
+      <label class="field"><span class="label">Work email</span><input id="signin-email" type="email" autocomplete="username" inputmode="email" placeholder="you@institute.com"></label>
+      <label class="field"><span class="label">Password <small>(leave empty for an email link)</small></span><input id="signin-password" type="password" autocomplete="current-password"></label>
       <button class="primary big" id="signin-send" type="button">Email me a sign-in link</button>
     </div>
+    <p class="hint"><a href="reset.html">Forgot your password?</a></p>
     <div class="tools" id="signin-actions"></div>
     <p class="msgline" id="signin-msg" role="status"></p>
   </div>

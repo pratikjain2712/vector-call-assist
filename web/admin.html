@@ -27,11 +27,13 @@
 
   <section id="gate" hidden>
     <h2>Sign in</h2>
-    <p>Use the work email your institute admin invited. We send a sign-in link; there is no password.</p>
+    <p>Use the work email your institute admin invited. Sign in with your password, or leave it empty and we send a sign-in link.</p>
     <form id="gate-form" class="row">
       <label>Work email <input id="gate-email" type="email" autocomplete="username" required></label>
-      <button type="submit">Send sign-in link</button>
+      <label>Password <input id="gate-password" type="password" autocomplete="current-password" placeholder="leave empty for an email link"></label>
+      <button type="submit" id="gate-submit">Send sign-in link</button>
     </form>
+    <p class="forgot"><a href="reset.html">Forgot your password?</a></p>
     <p id="gate-msg" class="msg" role="status"></p>
   </section>
 
@@ -152,8 +154,8 @@
 
     <div class="panel" id="login">
       <h2>Your password</h2>
-      <p class="muted">Sends a password reset link to your own email address.</p>
-      <div class="row"><button type="button" id="reset-send">Send password reset</button></div>
+      <p class="muted">Change it now while you are signed in, or email yourself a reset link.</p>
+      <div class="row"><a class="button-link" href="reset.html">Change your password</a> <button type="button" id="reset-send">Email me a reset link</button></div>
       <p id="reset-msg" class="msg" role="status"></p>
     </div>
 

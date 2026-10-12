@@ -26,11 +26,13 @@
 
   <section id="gate" hidden>
     <h2>Sign in</h2>
-    <p>Use the work email of an institute admin. We send a sign-in link; there is no password.</p>
+    <p>Use the work email of an institute admin. Sign in with your password, or leave it empty and we send a sign-in link.</p>
     <form id="gate-form" class="row wrap">
       <label>Work email <input id="gate-email" type="email" autocomplete="username" required></label>
-      <button type="submit">Send sign-in link</button>
+      <label>Password <input id="gate-password" type="password" autocomplete="current-password" placeholder="leave empty for an email link"></label>
+      <button type="submit" id="gate-submit">Send sign-in link</button>
     </form>
+    <p class="forgot"><a href="reset.html">Forgot your password?</a></p>
     <p id="gate-msg" class="msg" role="status"></p>
   </section>
 

@@ -472,10 +472,14 @@
 
         <form class="form" id="form-signin" role="tabpanel" aria-labelledby="acc-signin" data-panel hidden novalidate>
           <label>Email
-            <input name="email" type="email" maxlength="254" autocomplete="email" required>
+            <input name="email" type="email" maxlength="254" autocomplete="username" required>
             <span class="hint">Use the email your admin invited, or the one you started a trial with.</span>
           </label>
-          <button class="btn btn-primary btn-block" type="submit">Email me a sign-in link</button>
+          <label>Password
+            <input name="password" type="password" maxlength="200" autocomplete="current-password">
+            <span class="hint">Leave empty and we email you a sign-in link instead. <a href="reset.html">Forgot your password?</a></span>
+          </label>
+          <button class="btn btn-primary btn-block" type="submit" data-label-link="Email me a sign-in link" data-label-password="Sign in">Email me a sign-in link</button>
         </form>
 
         <p class="msg" id="authMsg" role="status" aria-live="polite"></p>

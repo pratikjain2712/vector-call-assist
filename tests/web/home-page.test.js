@@ -37,11 +37,13 @@ test('home page: CSP for scripts matches the rep page', () => {
   assert.strictEqual(csp(html), csp(app));
 });
 
-test('home page: sign-in uses the emailed link and only the database calls from the trial migration', () => {
+test('home page: trial uses the emailed link; password sign-in is for existing accounts only', () => {
   assert.match(js, /signInWithOtp/);
   assert.match(js, /shouldCreateUser: create/);
   const code = js.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-  assert.doesNotMatch(code, /password/i, 'no password sign-in on the home page');
+  assert.match(code, /signInWithPassword/, 'existing accounts can sign in with a password');
+  assert.match(code, /if \(!create && password\)/, 'the password path never runs for the trial form');
+  assert.doesNotMatch(code, /auth\.signUp/, 'the home page never creates an account with a password');
   const rpcs = [...js.matchAll(/rpc\('([a-z_]+)'/g)].map((m) => m[1]);
   const allowed = ['my_trial_status', 'claim_my_invite', 'start_trial_institute'];
   assert.ok(rpcs.length > 0);

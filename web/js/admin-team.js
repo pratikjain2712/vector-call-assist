@@ -472,7 +472,7 @@
       btn.disabled = true;
       try {
         const { error } = await A.client().auth.resetPasswordForEmail(email, {
-          redirectTo: location.origin + location.pathname,
+          redirectTo: new URL('reset.html', location.href).href,   // reset.html asks for the new password
         });
         if (error) throw error;
         say('reset-msg', 'Reset link requested for ' + email + '. Check that inbox for the link.');
