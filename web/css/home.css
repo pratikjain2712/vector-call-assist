@@ -380,9 +380,9 @@ legend { font-family: var(--mono); font-size: .8rem; font-weight: 600; letter-sp
 @media (prefers-reduced-motion: reduce) { .js .reveal, .hero h1 .w { opacity: 1; transform: none; } .fallback .float-chip { animation: none; } }
 
 /* ---------- hero stage: a pinned, scroll-driven scene. Scroll picks the chapter. ---------- */
-.stage-wrap { position: relative; height: 520vh; height: 520svh; }
+.stage-wrap { position: relative; }
 .stage {
-  position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; color: #fff;
+  position: relative; height: 100vh; height: 100svh; min-height: 640px; max-height: 1000px; overflow: hidden; color: #fff;
   background: radial-gradient(120% 90% at 72% 18%, #4a74f2 0%, #2456e6 38%, #1a42b8 70%, #0b1f66 100%);
 }
 .stage::after {
@@ -425,40 +425,44 @@ legend { font-family: var(--mono); font-size: .8rem; font-weight: 600; letter-sp
 .slot .panel .btn-ghost { background: #fff; border: 1.5px solid var(--line-strong); color: var(--ink); }
 .slot .panel .btn-ghost:hover { border-color: var(--blue); color: var(--blue); }
 
-.rail {
-  position: absolute; z-index: 3; left: var(--gutter); bottom: clamp(1.4rem, 4vh, 2.4rem);
-  display: flex; flex-wrap: wrap; gap: .4rem 1.1rem;
+/* Explorer under the 3D devices: a hint, the feature dock and a one-line caption. */
+.explore { position: absolute; z-index: 3; bottom: clamp(1.2rem, 4vh, 2.2rem); left: var(--gutter); right: var(--gutter); display: grid; justify-items: center; gap: .55rem; text-align: center; pointer-events: none; }
+.explore > * { pointer-events: auto; }
+.explore-hint { margin: 0; font-family: var(--mono); font-size: .72rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: rgba(255, 255, 255, .72); }
+.explore-hint span { display: inline-block; margin-right: .3em; }
+.dock {
+  display: inline-flex; flex-wrap: wrap; justify-content: center; gap: .2rem; padding: .3rem; border-radius: 999px;
+  background: rgba(255, 255, 255, .12); border: 1px solid rgba(255, 255, 255, .24);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
 }
-.rail button {
-  display: inline-flex; align-items: center; gap: .5rem; background: none; border: 0; padding: .3rem 0; cursor: pointer;
-  font-family: var(--mono); font-size: .74rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
-  color: rgba(255, 255, 255, .72);
+.dock button {
+  position: relative; overflow: hidden; border: 0; border-radius: 999px; padding: .5em 1em; cursor: pointer;
+  background: none; color: rgba(255, 255, 255, .86); font: inherit; font-size: .88rem; font-weight: 600; transition: background .25s, color .25s;
 }
-.rail button::before { content: ""; width: 22px; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, .4); transition: width .35s var(--ease), background .35s; }
-.rail button:hover { color: #fff; }
-.rail button[aria-current="step"] { color: #fff; }
-.rail button[aria-current="step"]::before { width: 48px; background: var(--amber); }
-.stage .rail button:focus-visible { outline-color: #fff; }
-
-@media (max-width: 960px) {
-  .slot { top: auto; bottom: 4.6rem; right: var(--gutter); left: var(--gutter); transform: none; width: auto; }
-  .slot .panel { max-height: 58svh; overflow: auto; }
-  .slot .panel h1 { font-size: clamp(1.9rem, 6vw, 2.5rem); }
-  .slot .panel h2 { font-size: clamp(1.5rem, 5vw, 1.9rem); }
-  .slot .panel .stats { display: none; }
-  .rail { bottom: 1.1rem; gap: .3rem .8rem; }
-  .rail button { font-size: .66rem; }
-  .rail button::before { width: 14px; }
-  .rail button[aria-current="step"]::before { width: 28px; }
+.dock button:hover { background: rgba(255, 255, 255, .16); color: #fff; }
+.dock button[aria-pressed="true"] { background: #fff; color: var(--ink); }
+.dock button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+/* While the dock plays on its own, the pressed button fills up until the next feature. */
+.dock.auto button[aria-pressed="true"]::after {
+  content: ""; position: absolute; left: 14%; right: 14%; bottom: .22rem; height: 2px; border-radius: 2px; background: var(--amber);
+  transform-origin: left; animation: dockfill 5.2s linear forwards;
 }
-@media (max-width: 560px) {
-  .slot .panel { padding: 1.1rem; border-radius: 20px; }
-  .slot .panel .chips { display: none; }
-  .rail button:nth-child(n+5) { display: none; }
-}
+@keyframes dockfill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.explore-cap { margin: 0; max-width: 30rem; min-height: 2.9em; font-size: .98rem; line-height: 1.45; color: #fff; text-shadow: 0 1px 12px rgba(11, 31, 102, .5); }
+#heroScene { touch-action: pan-y; }
 @media (prefers-reduced-motion: reduce) {
   .slot .panel { transition: none; }
+  .dock.auto button[aria-pressed="true"]::after { animation: none; }
 }
+
+/* ---------- live demo: the 3D phone beside the console ---------- */
+.demo-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 320px); gap: 2rem; align-items: end; margin-bottom: clamp(1.6rem, 3vw, 2.4rem); }
+.demo-head .section-head { margin-bottom: 0; }
+.demo-phone { margin: 0; display: none; }
+.has-demo-3d .demo-phone { display: grid; justify-items: center; gap: .3rem; }
+#demoScene { display: block; width: 100%; height: 330px; touch-action: pan-y; }
+.demo-phone figcaption { font-size: .85rem; color: var(--muted); text-align: center; max-width: 18rem; }
+@media (max-width: 960px) { .demo-head { grid-template-columns: minmax(0, 1fr); } }
 
 /* ---------- pricing nudges, analytics ---------- */
 .billing button small { display: inline-block; margin-left: .35em; font-size: .68rem; font-weight: 700; background: var(--amber); color: var(--ink); border-radius: 999px; padding: .08em .5em; }
@@ -505,20 +509,21 @@ legend { font-family: var(--mono); font-size: .8rem; font-weight: 600; letter-sp
   .slot .panel .stats { display: none; }
 }
 
-/* Text on the left, the 3D devices on the right (desktop). The card and the chapter rail line up with the
+/* Text on the left, the 3D devices on the right (desktop). The card and the explorer line up with the
    header's 1200px container instead of the screen edge. */
 @media (min-width: 961px) {
   .stage { --edge: max(var(--gutter), calc((100% - var(--measure)) / 2 + var(--gutter))); }
   .slot { left: var(--edge); right: auto; }
-  .rail { left: var(--edge); }
+  .explore { left: calc(var(--edge) + min(540px, 42vw) + 1.5rem); right: var(--gutter); }
 }
 
 /* Phone and tablet: no pinned scroll stage. The chapters are ordinary cards, one below the other, on the
    blue background, so nothing appears or disappears as you scroll and there is no empty scrolling. */
 @media (max-width: 960px) {
   .stage-wrap { height: auto; }
-  .stage { position: relative; top: auto; height: auto; overflow: visible; padding: 5.6rem var(--gutter) 2.2rem; }
-  #heroScene, .rail { display: none; }
+  .stage { position: relative; top: auto; height: auto; min-height: 0; max-height: none; overflow: visible; padding: 5.6rem var(--gutter) 2.2rem; }
+  #heroScene, .explore { display: none; }
+  .slot .panel .stats { display: none; }
   .slot { position: static; inset: auto; transform: none; width: auto; display: flex; flex-direction: column; gap: .9rem; }
   .slot .panel {
     opacity: 1; visibility: visible; transform: none; pointer-events: auto; transition: none;

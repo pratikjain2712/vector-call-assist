@@ -148,6 +148,13 @@
     var li = 0, sel = 0, calls = 0, connected = 0, callbacks = 0, won = 0;
     var timerId = null, secs = 0;
     var line = $('scriptLine'), note = $('scriptNote');
+    var liveId = null;
+    // Tell the 3D phone beside the console (scene.js) what is happening on the call.
+    function phone(state, extra) {
+      var d = { state: state, name: leads[sel].name, secs: secs };
+      if (extra) for (var k in extra) d[k] = extra[k];
+      document.dispatchEvent(new CustomEvent('vca:demo', { detail: d }));
+    }
     var stepEls = all('#steps span');
 
     function paintLeads() {
@@ -175,7 +182,7 @@
     note.textContent = LINES[0].note;
 
     all('.lead').forEach(function (b, i) {
-      b.addEventListener('click', function () { sel = i; paintLeads(); });
+      b.addEventListener('click', function () { sel = i; paintLeads(); if (!timerId) phone('idle'); });
     });
 
     all('#objections .chip').forEach(function (c) {
@@ -193,10 +200,19 @@
       $('timer').textContent = '00:00';
       $('dialBtn').disabled = true;
       $('hangBtn').disabled = false;
-      timerId = setInterval(function () { secs += 1; $('timer').textContent = fmt(secs); }, 1000);
+      phone('ringing');
+      liveId = setTimeout(function () { liveId = null; if (timerId) phone('live'); }, reduce ? 0 : 1800);
+      timerId = setInterval(function () {
+        secs += 1;
+        $('timer').textContent = fmt(secs);
+        if (!liveId) phone('live');
+      }, 1000);
     });
     $('hangBtn').addEventListener('click', function () {
       clearInterval(timerId);
+      timerId = null;
+      if (liveId) { clearTimeout(liveId); liveId = null; }
+      phone('ended');
       $('hangBtn').disabled = true;
       $('dialBtn').disabled = false;
     });
@@ -224,9 +240,12 @@
         $('log').insertBefore(item, $('log').firstChild);
         while ($('log').children.length > 4) $('log').removeChild($('log').lastChild);
         if (timerId) { clearInterval(timerId); timerId = null; $('hangBtn').disabled = true; $('dialBtn').disabled = false; }
+        if (liveId) { clearTimeout(liveId); liveId = null; }
+        phone('logged', { outcome: LABEL[o] });
       });
     });
     paintLeads();
+    phone('idle');
   })();
 
   /* ---------- pricing calculator (rupees per seat per month) ---------- */
@@ -549,50 +568,64 @@
   })();
 })();
 
-/* ---------- hero stage: the scroll position picks the chapter; the rail jumps to one ---------- */
-(function heroStage() {
-  var wrap = document.getElementById('hero');
-  var stage = document.getElementById('stage');
-  if (!wrap || !stage) return;
-  var panels = Array.prototype.slice.call(stage.querySelectorAll('.slot .panel'));
-  var btns = Array.prototype.slice.call(stage.querySelectorAll('.rail button'));
-  var n = panels.length, current = -1, queued = false;
+/* ---------- hero explorer: the dock picks the feature the 3D devices show ----------
+   Plays through the features on its own until the visitor clicks the dock, drags the devices or clicks one
+   (scene.js sends 'vca:pick' and 'vca:grab'). Each change sends 'vca:chapter' to scene.js. */
+(function heroExplorer() {
+  var dock = document.getElementById('dock');
+  var cap = document.getElementById('exploreCap');
+  var hero = document.getElementById('hero');
+  if (!dock || !cap) return;
+  var btns = Array.prototype.slice.call(dock.querySelectorAll('button'));
+  var CAPS = [
+    "The rep's phone and laptop, paired. Pick a step to see it.",
+    "Scan once. The phone and laptop stay paired to that rep's seat.",
+    "Press Dial on the laptop. The call rings out on the rep's own SIM.",
+    'One line at a time, with the answer to each objection one tap away.',
+    'One tap logs the result. It is saved even when the internet drops.',
+    'Calls, connect rate and talk time for every rep, on one page.'
+  ];
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  function scrollRange() { return Math.max(1, wrap.offsetHeight - window.innerHeight); }
+  var current = 0, timer = null, inView = true, AUTO_MS = 5200;
 
   function setChapter(i) {
-    if (i === current) return;
     current = i;
-    panels.forEach(function (p, k) { p.classList.toggle('on', k === i); });
-    btns.forEach(function (b, k) {
-      if (k === i) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
-    });
+    btns.forEach(function (b, k) { b.setAttribute('aria-pressed', k === i ? 'true' : 'false'); });
+    cap.textContent = CAPS[i];
     document.dispatchEvent(new CustomEvent('vca:chapter', { detail: { index: i } }));
   }
-
-  function update() {
-    queued = false;
-    var top = wrap.getBoundingClientRect().top;
-    var p = Math.min(1, Math.max(0, -top / scrollRange()));
-    setChapter(Math.min(n - 1, Math.floor(p * n)));
+  function stopAuto() {
+    if (timer) { clearInterval(timer); timer = null; }
+    dock.classList.remove('auto');
   }
-  function schedule() {
-    if (!queued) { queued = true; requestAnimationFrame(update); }
+  function startAuto() {
+    if (reduce || timer) return;
+    dock.classList.add('auto');
+    timer = setInterval(function () {
+      if (!inView || document.hidden) return;
+      setChapter((current + 1) % btns.length);
+      // restart the progress bar on the newly pressed button
+      dock.classList.remove('auto'); void dock.offsetWidth; dock.classList.add('auto');
+    }, AUTO_MS);
   }
 
   btns.forEach(function (b) {
-    b.addEventListener('click', function () {
-      var i = Number(b.getAttribute('data-goto')) || 0;
-      var y = wrap.offsetTop + scrollRange() * ((i + 0.5) / n);
-      window.scrollTo({ top: y, behavior: reduce ? 'auto' : 'smooth' });
-    });
+    b.addEventListener('click', function () { stopAuto(); setChapter(Number(b.getAttribute('data-goto')) || 0); });
   });
+  document.addEventListener('vca:pick', function (e) {
+    var i = e.detail && e.detail.index;
+    if (typeof i !== 'number' || !btns[i]) return;
+    stopAuto();
+    setChapter(i);
+  });
+  document.addEventListener('vca:grab', stopAuto);
 
-  window.addEventListener('scroll', schedule, { passive: true });
-  window.addEventListener('resize', schedule);
+  if (hero && 'IntersectionObserver' in window) {
+    new IntersectionObserver(function (en) { inView = en[0].isIntersecting; }).observe(hero);
+  }
   setChapter(0);
-  update();
+  // The devices exist only on wide screens with WebGL; on phones the dock is hidden and nothing plays.
+  if (window.matchMedia('(min-width: 961px)').matches) startAuto();
 })();
 
 /* ---------- analytics example bars: widths come from data-w ---------- */

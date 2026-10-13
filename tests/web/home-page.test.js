@@ -57,6 +57,7 @@ test('home page: the 3D scripts use an exact three.js release and both canvases 
   assert.match(html, /<script type="module" src="js\/scene\.js">/);
   assert.match(html, /<canvas id="heroScene"/);
   assert.match(html, /<canvas id="seatScene"/);
+  assert.match(html, /<canvas id="demoScene"/);
   assert.match(html, /<div class="fallback"/, 'static fallback for the hero must stay in the page');
 });
 
@@ -66,9 +67,18 @@ test('home page: calculator and seat scene share the vca:seats event; seat label
   assert.match(html, /id="seatLabel"/);
 });
 
-test('home page: product tabs and timeline wire to elements that exist', () => {
-  for (const id of ['pt-phone', 'pp-phone', 'pt-laptop', 'pp-laptop', 'pt-admin', 'pp-admin', 'timeline']) {
+test('home page: hero dock, demo phone and timeline wire to elements that exist', () => {
+  for (const id of ['dock', 'exploreCap', 'demoScene', 'dialBtn', 'hangBtn', 'timeline']) {
     assert.match(html, new RegExp('id="' + id + '"'), 'missing id ' + id);
   }
   assert.match(js, /getElementById\('timeline'\)|\$\('timeline'\)/);
+  // The dock and the 3D scenes talk through these events; both sides must use the same names.
+  for (const ev of ['vca:chapter', 'vca:demo']) {
+    assert.match(js, new RegExp("CustomEvent\\('" + ev + "'"), 'home.js never sends ' + ev);
+    assert.match(scene, new RegExp("addEventListener\\('" + ev + "'"), 'scene.js never listens for ' + ev);
+  }
+  for (const ev of ['vca:pick', 'vca:grab']) {
+    assert.match(scene, new RegExp("CustomEvent\\('" + ev + "'"), 'scene.js never sends ' + ev);
+    assert.match(js, new RegExp("addEventListener\\('" + ev + "'"), 'home.js never listens for ' + ev);
+  }
 });
