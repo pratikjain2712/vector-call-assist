@@ -67,3 +67,14 @@ body.high-contrast :focus-visible { outline-width: 4px; }
 .myresults .myr-block h3 { margin: 0 0 .3rem; font-size: .95rem; }
 .myresults .myr-list { margin: 0; padding-left: 1.2rem; }
 .myresults .myr-block p { margin: .2rem 0; }
+.myresults .myr-block + .myr-block { margin-top: .8rem; }
+.myresults .myr-tip { border: 1px solid var(--line); border-radius: 10px; padding: .5rem .7rem; margin: .4rem 0; }
+.myresults .myr-tip.unread { border-color: var(--accent); border-width: 2px; }
+.myresults .myr-ack { margin-left: .4rem; padding: .15rem .6rem; font: inherit; border-radius: 999px; border: 1px solid var(--accent); background: var(--accent); color: var(--surface); cursor: pointer; }
+.myresults .myr-ack:disabled { opacity: .6; cursor: default; }
+.myresults .myr-rank { margin: 0; padding: 0; list-style: none; }
+.myresults .myr-rank li { display: grid; grid-template-columns: 2.4rem minmax(0, 1fr) auto; gap: .5rem; padding: .25rem 0; border-bottom: 1px solid var(--line); }
+.myresults .myr-rank li.me { font-weight: 700; }
+.myresults .myr-pos { color: var(--muted); }
+.myresults .myr-who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.myresults .myr-num { color: var(--muted); font-variant-numeric: tabular-nums; }

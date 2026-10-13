@@ -80,6 +80,39 @@
       <p id="outcome-empty" class="muted" hidden>No outcomes in this range.</p>
     </div>
 
+    <div class="panel" id="coaching">
+      <h2>Coaching</h2>
+      <p class="muted">Each rep compared with the whole team for the dates above. A suggestion appears only when a rep is clearly behind and has enough calls for it to be fair. Send it to the rep as a tip: it shows on their screen, and the table below shows whether it helped.</p>
+      <p id="coach-msg" class="msg" role="status"></p>
+      <ul id="coach-list" class="plain coach-list"></ul>
+      <p id="coach-empty" class="muted" hidden>No suggestions for these dates. No rep is clearly behind the team, or there are not enough calls yet.</p>
+
+      <h3>Tips sent</h3>
+      <div class="scroll">
+        <table class="stack">
+          <thead><tr><th>Rep</th><th>Tip</th><th>Sent</th><th>Read</th><th class="num">Before</th><th class="num">Since</th><th>Result</th></tr></thead>
+          <tbody id="tips-body"></tbody>
+        </table>
+      </div>
+      <p id="tips-empty" class="muted" hidden>No tips sent yet.</p>
+    </div>
+
+    <div class="panel" id="board">
+      <div class="row between">
+        <h2>Leaderboard</h2>
+        <label class="check"><input type="checkbox" id="board-reps"> Reps can see it</label>
+      </div>
+      <div class="seg" id="board-metric" role="group" aria-label="Rank by">
+        <button type="button" data-metric="won" aria-pressed="true">Won</button>
+        <button type="button" data-metric="connected" aria-pressed="false">Connected</button>
+        <button type="button" data-metric="calls" aria-pressed="false">Calls</button>
+        <button type="button" data-metric="talk_minutes" aria-pressed="false">Talk time</button>
+      </div>
+      <p id="board-msg" class="msg" role="status"></p>
+      <ol id="board-list" class="plain board"></ol>
+      <p id="board-empty" class="muted" hidden>No active reps yet.</p>
+    </div>
+
     <div class="panel" id="weekly">
       <div class="row between">
         <h2>Weekly summary</h2>
@@ -205,5 +238,6 @@
 <script src="js/config.js"></script>
 <script src="js/admin.js"></script>
 <script src="js/admin-team.js"></script>
+<script src="js/admin-coach.js"></script>
 </body>
 </html>
