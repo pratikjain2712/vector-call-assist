@@ -14,7 +14,7 @@
 <title>Vector Call Assist · Close more calls</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@1&family=Plus+Jakarta+Sans:wght@600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap">
 <link rel="stylesheet" href="css/home.css">
 </head>
 <body>
@@ -123,7 +123,7 @@
     <div class="demo-head">
       <div class="section-head reveal">
         <span class="eyebrow">Live demo</span>
-        <h2 class="h2">Work a lead. Watch the numbers move.</h2>
+        <h2 class="h2">Work a lead. <em>Watch the numbers move.</em></h2>
         <p class="lede">A made-up lead list. Pick a lead, step through the script, answer an objection, press Dial, then log the outcome. Nothing here is saved.</p>
       </div>
       <figure class="demo-phone" id="demoPhone">
@@ -193,7 +193,7 @@
   <div class="wrap">
     <div class="section-head reveal">
       <span class="eyebrow">Who it's for</span>
-      <h2 class="h2">Built for teams that call leads all day.</h2>
+      <h2 class="h2">Built for teams that <em>call leads all day.</em></h2>
       <p class="lede">If your reps call enquiries from a list and you can't tell why most of them say no, Vector is for you.</p>
     </div>
     <div class="who-grid reveal">
@@ -221,7 +221,7 @@
   <div class="wrap">
     <div class="section-head reveal">
       <span class="eyebrow">Analytics</span>
-      <h2 class="h2" id="insightsTitle">A CRM records the result. Vector shows where the call was lost.</h2>
+      <h2 class="h2" id="insightsTitle">A CRM records the result. Vector shows <em>where the call was lost.</em></h2>
       <p class="lede">A traditional CRM tells you a lead said no. Vector shows where in the call it was lost, why, and what to change. The team sees it the same day, and the script improves with every version.</p>
     </div>
     <div class="insight-grid">
@@ -239,6 +239,7 @@
           </div>
         </div>
         <p class="loss-summary" id="lossSummary" aria-live="polite">40 of every 100 calls are lost on script v1.</p>
+        <div class="blueprint" id="lossBlueprint" hidden></div>
         <ul class="bars loss-bars" id="lossBars">
           <li><span>Greeting</span><span class="track"><span class="fill" data-w="27"></span></span><b>4</b></li>
           <li><span>Ask</span><span class="track"><span class="fill" data-w="40"></span></span><b>6</b></li>
@@ -274,7 +275,7 @@
   <div class="wrap">
     <div class="section-head reveal">
       <span class="eyebrow">How it works</span>
-      <h2 class="h2">From invite to first call in four steps.</h2>
+      <h2 class="h2">From invite to <em>first call</em> in four steps.</h2>
     </div>
     <ol class="timeline" id="timeline">
       <li class="tstep reveal"><span class="num">1</span><h3>Invite</h3><p>Add each rep by email. Every invite takes one seat, and the rep signs in with an emailed link.</p></li>
@@ -290,7 +291,7 @@
   <div class="wrap">
     <div class="section-head reveal">
       <span class="eyebrow">Pricing</span>
-      <h2 class="h2">About ₹13 a day per rep. That's about a cup of chai.</h2>
+      <h2 class="h2">About ₹13 a day per rep. That's about <em>a cup of chai.</em></h2>
       <p class="lede">₹499 a seat a month. The more seats you add, the less each one costs, down to 40% off, and yearly billing saves another 20%. Move the slider to see your price.</p>
     </div>
 
@@ -334,20 +335,20 @@
       </div>
 
       <div class="seatbox reveal">
-        <div class="seatbox-head"><span class="cap">Seats in use</span><b id="seatLabel">10 of 10</b></div>
+        <div class="seatbox-head"><span class="cap">Your team</span><b id="seatLabel" aria-live="polite">5 seats · Business</b></div>
         <canvas id="seatScene" aria-hidden="true"></canvas>
         <div class="plans">
-          <div class="plan">
+          <div class="plan" data-bundle="Starter">
             <b>Starter</b>
             <p class="price">₹499 <small>per seat / month</small></p>
             <p>1 to 2 seats. Yearly: ₹399 a seat.</p>
           </div>
-          <div class="plan featured">
+          <div class="plan" data-bundle="Team">
             <b>Team</b>
             <p class="price">15% off <small>every seat</small></p>
             <p>3 to 4 seats. ₹424 a month, or ₹339 a seat on yearly.</p>
           </div>
-          <div class="plan">
+          <div class="plan featured" data-bundle="Business">
             <b>Business</b>
             <p class="price">25% off <small>every seat</small></p>
             <p>5 seats or more: ₹374 a seat a month, ₹299 on yearly. 5% more for each seat after 5, up to 40%.</p>
@@ -368,7 +369,7 @@
   <div class="wrap account">
     <div class="account-copy reveal">
       <span class="eyebrow">Get started</span>
-      <h2 class="h2">Start a 5-day trial.</h2>
+      <h2 class="h2">Start a <em>5-day trial.</em></h2>
       <p class="lede lede-top">No payment and no card. You become the admin of your company and get up to 5 seats. We email you a sign-in link; you can set a password later.</p>
       <ul class="ticks">
         <li>Invite your reps by email when you are ready.</li>
@@ -457,7 +458,7 @@
   <div class="wrap">
     <div class="section-head reveal">
       <span class="eyebrow">Questions</span>
-      <h2 class="h2">Straight answers.</h2>
+      <h2 class="h2"><em>Straight</em> answers.</h2>
     </div>
     <div class="faq reveal">
       <details>

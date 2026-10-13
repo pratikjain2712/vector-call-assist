@@ -23,6 +23,7 @@
   --mint: #0b8f6a;         /* success text, 4.7:1 on white */
   --night: #0b1224;        /* footer and the 3D pricing band */
   --display: "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif;
+  --serif: "Instrument Serif", Georgia, "Times New Roman", serif;   /* italic accents in headings */
   --body: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
   --gutter: clamp(18px, 4.5vw, 64px);
@@ -221,7 +222,6 @@ html:not(.has-3d) .said { border-right: 0; }
   .said { padding: 1.2rem 1rem; }
   .answer { min-height: 0; }
 }
-@media (max-width: 960px) { #seatScene { display: none; } }
 
 /* Live console */
 .console {
@@ -323,7 +323,11 @@ legend { font-family: var(--mono); font-size: .8rem; font-weight: 600; letter-sp
 .seatbox-head { display: flex; justify-content: space-between; align-items: baseline; padding: 1.3rem 1.5rem 0; }
 .seatbox-head .cap { color: #9fb0d6; margin: 0; }
 .seatbox-head b { font-family: var(--display); font-size: 1.3rem; font-weight: 800; }
-#seatScene { width: 100%; height: 260px; display: block; }
+/* The seat grid is 3D only: without it (phones, no WebGL) the box is the label and the plans. */
+#seatScene { width: 100%; height: 260px; display: none; }
+.has-3d #seatScene { display: block; }
+.seatbox-head { padding-bottom: 1rem; }
+.has-3d .seatbox-head { padding-bottom: 0; }
 .plans { display: grid; gap: .75rem; padding: 0 1.2rem 1.4rem; }
 .plan { background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .14); border-radius: 16px; padding: .9rem 1.1rem; display: grid; gap: .15rem; }
 .plan.featured { background: #fff; color: var(--ink); border-color: #fff; }
@@ -404,7 +408,7 @@ legend { font-family: var(--mono); font-size: .8rem; font-weight: 600; letter-sp
 .billing button small { display: inline-block; margin-left: .35em; font-size: .68rem; font-weight: 700; background: var(--amber); color: var(--ink); border-radius: 999px; padding: .08em .5em; }
 .nudge { font-size: .92rem; font-weight: 600; color: var(--blue-deep); background: var(--blue-soft); border-radius: 12px; padding: .65rem .85rem; margin: 0 0 1rem; }
 .anchor { font-size: .95rem; font-weight: 600; color: var(--mint); margin: .2rem 0 .8rem; }
-.insight-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 1.2rem; align-items: start; }
+.insight-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.2rem; align-items: start; }
 .chart-card { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 24px; padding: 1.6rem; box-shadow: var(--shadow); }
 .chart-card figcaption { display: flex; justify-content: space-between; align-items: center; gap: 1rem; font-family: var(--display); font-weight: 700; color: var(--ink); margin-bottom: 1.1rem; }
 .tag { font-family: var(--mono); font-size: .7rem; background: var(--amber-soft); color: var(--ink); border-radius: 999px; padding: .2em .6em; white-space: nowrap; }
@@ -416,7 +420,8 @@ legend { font-family: var(--mono); font-size: .8rem; font-weight: 600; letter-sp
 .bars li.hot > span:first-child { color: var(--ink); font-weight: 700; }
 .bars b { font-family: var(--mono); color: var(--ink); text-align: right; }
 .chart-note { margin-top: 1.1rem; font-size: .92rem; color: var(--muted); }
-.insight-list { display: grid; gap: 1rem; }
+.insight-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+@media (max-width: 860px) { .insight-list { grid-template-columns: minmax(0, 1fr); } }
 .insight-card { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 1.2rem 1.3rem; box-shadow: var(--shadow); }
 .insight-card h3 { font-family: var(--display); font-size: 1.08rem; color: var(--ink); margin-bottom: .3rem; }
 .insight-card p { font-size: .96rem; }
@@ -469,3 +474,67 @@ legend { font-family: var(--mono); font-size: .8rem; font-weight: 600; letter-sp
   .seg button { padding: .45em .7em; font-size: .8rem; }
 }
 @media (prefers-reduced-motion: reduce) { .loss-bars .fill { transition: none; } }
+
+/* ---------- Awwwards touches: serif italic accents, numbered sections, blueprint frames ---------- */
+/* An italic serif for the key phrase in a heading, against the bold sans (as on Neutomni). */
+.h2 em, .hero h1 .hot {
+  font-family: var(--serif); font-style: italic; font-weight: 400; letter-spacing: -.01em;
+}
+.h2 em { color: var(--blue-deep); font-size: 1.06em; }
+.hero h1 .hot { font-size: 1.08em; }
+
+/* Section eyebrows carry a running index, [01] to [07], in place of the amber square. */
+main { counter-reset: sec; }
+.section { counter-increment: sec; }
+.section .eyebrow::before {
+  content: "[" counter(sec, decimal-leading-zero) "]"; width: auto; height: auto; background: none; border-radius: 0;
+  color: #b97a00; font-weight: 600;
+}
+
+/* Blueprint frame: a dashed hairline a few pixels outside a card, with crosshairs at the corners. */
+.stage-card, .chart-card { position: relative; }
+.stage-card::after, .chart-card::after {
+  content: ""; position: absolute; inset: -12px; border: 1px dashed rgba(36, 86, 230, .22); border-radius: 36px; pointer-events: none;
+}
+.chart-card::after { border-radius: 32px; }
+.stage-card { overflow: visible; }
+.stage-card > .said { border-radius: 28px 0 0 28px; }
+.stage-card > .stage-visual { border-radius: 0 28px 28px 0; overflow: hidden; }
+@media (max-width: 860px) { .stage-card > .said { border-radius: 28px 28px 0 0; } .stage-card > .stage-visual { border-radius: 0 0 28px 28px; } }
+html:not(.has-3d) .stage-card > .said { border-radius: 28px; }
+
+/* The call blueprint (By step) */
+.blueprint {
+  position: relative; border: 1px solid var(--line); border-radius: 18px; margin-bottom: .4rem;
+  background-color: #f7f9ff;
+  background-image:
+    linear-gradient(rgba(36, 86, 230, .07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(36, 86, 230, .07) 1px, transparent 1px),
+    linear-gradient(rgba(36, 86, 230, .035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(36, 86, 230, .035) 1px, transparent 1px);
+  background-size: 60px 60px, 60px 60px, 12px 12px, 12px 12px;
+}
+.blueprint svg { display: block; width: 100%; height: auto; }
+.bp-cross { stroke: var(--blue); stroke-width: 1.2; opacity: .55; }
+.bp-note { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; fill: var(--muted); }
+.bp-line { fill: none; stroke: var(--ink); stroke-width: 1.5; }
+.bp-count { font-family: var(--mono); font-size: 12px; font-weight: 600; fill: var(--blue-deep); }
+.bp-idx { font-family: var(--mono); font-size: 11px; font-weight: 600; fill: #b97a00; }
+.bp-box { fill: #fff; stroke: var(--ink); stroke-width: 1.5; }
+.bp-label { font-family: var(--display); font-weight: 700; font-size: 14px; fill: var(--ink); }
+.bp-step.hot .bp-box { stroke: #b97a00; stroke-width: 2; }
+.bp-drop { stroke: var(--line-strong); stroke-width: 1.2; stroke-dasharray: 3 4; }
+.bp-mark { cursor: pointer; outline: none; }
+.bp-dot { fill: rgba(245, 165, 36, .18); stroke: #d48a00; stroke-width: 1.5; transition: fill .2s, stroke-width .2s; }
+.bp-step.hot .bp-dot { fill: rgba(245, 165, 36, .42); }
+.bp-mark:hover .bp-dot, .bp-mark:focus-visible .bp-dot { stroke-width: 3; }
+.bp-step.on .bp-dot { fill: var(--ink); stroke: var(--ink); }
+.bp-v { font-family: var(--display); font-weight: 800; font-size: 13px; fill: var(--ink); pointer-events: none; }
+.bp-step.on .bp-v { fill: #fff; }
+.bp-delta { font-family: var(--mono); font-size: 11px; font-weight: 600; }
+.bp-delta.down { fill: var(--mint); }
+.bp-delta.up { fill: #b4232a; }
+.bp-pulse { fill: none; stroke: #f5a524; stroke-width: 2; transform-box: fill-box; transform-origin: center; animation: bppulse 2.2s ease-out infinite; }
+@keyframes bppulse { from { transform: scale(1); opacity: .8; } to { transform: scale(1.9); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .bp-pulse { animation: none; opacity: 0; } }
+.blueprint.tall .bp-label { font-size: 15px; }
