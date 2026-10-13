@@ -480,6 +480,8 @@ legend { font-family: var(--mono); font-size: .8rem; font-weight: 600; letter-sp
 .insight-card { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 1.2rem 1.3rem; box-shadow: var(--shadow); }
 .insight-card h3 { font-family: var(--display); font-size: 1.08rem; color: var(--ink); margin-bottom: .3rem; }
 .insight-card p { font-size: .96rem; }
+.who-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+@media (max-width: 860px) { .who-grid { grid-template-columns: 1fr; } }
 .insight-cta { margin-top: 2rem; }
 @media (max-width: 860px) {
   .insight-grid { grid-template-columns: minmax(0, 1fr); }

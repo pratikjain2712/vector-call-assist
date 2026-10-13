@@ -1,5 +1,5 @@
 /* Public home page: hero motion, tilt and magnetic buttons, the call console demo, the pricing calculator,
-   tabs, and sign-in / free trial. Sign-in is an emailed link (no password). A new login starts a trial only
+   tabs, and sign-in / free trial. A new trial signs in with an emailed link; existing accounts can also use a password. A new login starts a trial only
    through start_trial_institute; an existing invite is claimed with claim_my_invite. Nothing here is inline,
    so the page's CSP holds. The 3D scene (scene.js) listens for the 'vca:seats' event from the calculator. */
 (function () {
@@ -32,7 +32,7 @@
   (function splitTitle() {
     var h = $('heroTitle');
     if (!h || reduce) return;
-    var parts = [{ t: 'Every call on script.' }, { t: 'Every result counted.', hot: true }];
+    var parts = [{ t: 'Close more calls.' }, { t: 'Know why the rest were lost.', hot: true }];
     h.textContent = '';
     var i = 0;
     parts.forEach(function (part) {
