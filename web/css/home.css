@@ -91,7 +91,7 @@ ul, ol { padding: 0; list-style: none; }
 .menu a { font-weight: 600; font-size: .98rem; text-decoration: none; color: var(--text); padding: .4em 0; border-bottom: 2px solid transparent; transition: border-color .2s, color .2s; }
 .menu a:hover { color: var(--ink); border-color: var(--amber); }
 .nav-cta { display: flex; align-items: center; gap: .4rem; }
-@media (max-width: 960px) { .menu { display: none; } }
+@media (max-width: 1100px) { .menu { display: none; } }
 @media (max-width: 520px) { .nav-cta .link { display: none; } }
 
 /* Hero */
@@ -480,6 +480,8 @@ legend { font-family: var(--mono); font-size: .8rem; font-weight: 600; letter-sp
 .insight-card { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 1.2rem 1.3rem; box-shadow: var(--shadow); }
 .insight-card h3 { font-family: var(--display); font-size: 1.08rem; color: var(--ink); margin-bottom: .3rem; }
 .insight-card p { font-size: .96rem; }
+.who-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+@media (max-width: 860px) { .who-grid { grid-template-columns: 1fr; } }
 .insight-cta { margin-top: 2rem; }
 @media (max-width: 860px) {
   .insight-grid { grid-template-columns: minmax(0, 1fr); }
@@ -503,8 +505,13 @@ legend { font-family: var(--mono); font-size: .8rem; font-weight: 600; letter-sp
   .slot .panel .stats { display: none; }
 }
 
-/* Text on the left, the 3D devices on the right (desktop). */
-@media (min-width: 961px) { .slot { left: var(--gutter); right: auto; } }
+/* Text on the left, the 3D devices on the right (desktop). The card and the chapter rail line up with the
+   header's 1200px container instead of the screen edge. */
+@media (min-width: 961px) {
+  .stage { --edge: max(var(--gutter), calc((100% - var(--measure)) / 2 + var(--gutter))); }
+  .slot { left: var(--edge); right: auto; }
+  .rail { left: var(--edge); }
+}
 
 /* Phone and tablet: no pinned scroll stage. The chapters are ordinary cards, one below the other, on the
    blue background, so nothing appears or disappears as you scroll and there is no empty scrolling. */
