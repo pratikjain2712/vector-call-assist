@@ -381,7 +381,20 @@ function initHero(canvas) {
   let visible = true;
   new IntersectionObserver(function (en) { visible = en[0].isIntersecting; }).observe(canvas);
   window.addEventListener('resize', function () { sizeTo(r, cam, canvas); });
+  // Desktop: the free space for the devices runs from the text card's right edge to the screen's right gutter.
+  // Measured in screen fractions on load and resize; the frame loop turns it into world units.
+  const slot = document.querySelector('.slot');
+  let freeL = 0.42, freeR = 0.96;
+  function measure() {
+    const cw = canvas.clientWidth || 1, cr = canvas.getBoundingClientRect();
+    const sr = slot ? slot.getBoundingClientRect() : null;
+    const gutter = parseFloat(getComputedStyle(slot || canvas).getPropertyValue('--gutter')) || 64;
+    if (sr) freeL = (sr.right - cr.left + 24) / cw;
+    freeR = (cw - gutter) / cw;
+  }
+  window.addEventListener('resize', measure);
   sizeTo(r, cam, canvas);
+  measure();
 
   function frame(now) {
     requestAnimationFrame(frame);
@@ -394,7 +407,12 @@ function initHero(canvas) {
     // and the devices are raised into the space above the text panel.
     const halfTan = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
     const camZ = narrow ? Math.min(26, Math.max(15, 2.85 / (halfTan * cam.aspect))) : 13;
-    const xs = narrow ? 0 : 2.4, xk = narrow ? 0.6 : 1, yo = narrow ? halfTan * camZ * 0.36 : 0;
+    // Desktop: centre the devices in the free space and shrink them when it is narrower than the 6.4 world
+    // units the chapter positions were drawn for (1440px wide with the card at the screen edge).
+    const halfW = halfTan * camZ * cam.aspect;
+    const fit = narrow ? 1 : Math.min(1, ((freeR - freeL) * 2 * halfW) / 6.4);
+    const xs = narrow ? 0 : ((freeL + freeR) / 2 - 0.5) * 2 * halfW - 0.4 * fit;
+    const xk = narrow ? 0.6 : fit, yo = narrow ? halfTan * camZ * 0.36 : 0;
     cam.position.z = camZ;
 
     ease(cur.phone, goal.phone, k); ease(cur.phoneR, goal.phoneR, k); ease(cur.phoneS, goal.phoneS, k);
@@ -408,10 +426,11 @@ function initHero(canvas) {
 
     phone.position.set(cur.phone[0] * xk + xs, cur.phone[1] + yo + sway, cur.phone[2]);
     phone.rotation.set(cur.phoneR[0] + tx2 * 0.4, cur.phoneR[1] + ty, cur.phoneR[2]);
-    phone.scale.setScalar(cur.phoneS[0]);
+    phone.scale.setScalar(cur.phoneS[0] * fit);
 
     laptop.position.set(cur.laptop[0] * xk + xs, cur.laptop[1] + yo - sway * 0.5, cur.laptop[2]);
     laptop.rotation.set(cur.laptopR[0] + tx2 * 0.3, cur.laptopR[1] + ty * 0.7, cur.laptopR[2]);
+    laptop.scale.setScalar(fit);
     hinge.rotation.x = cur.lid[0];
 
     const bp = beamGeo.attributes.position.array;
@@ -421,6 +440,7 @@ function initHero(canvas) {
     beamMat.opacity = cur.beam[0] * 0.9;
 
     team.position.set(xs, -2.6 + yo, 0);
+    team.scale.setScalar(fit);
     for (let i = 0; i < cells.length; i++) {
       cells[i].scale.setScalar(Math.max(0, cur.team[0]));
     }
