@@ -28,8 +28,8 @@
       <span>Vector<em> Call Assist</em></span>
     </a>
     <nav class="menu" aria-label="Main">
-      <a href="#product">Product</a>
       <a href="#demo">Live demo</a>
+      <a href="#who">Who it's for</a>
       <a href="#how">How it works</a>
       <a href="#insights">Analytics</a>
       <a href="#pricing">Pricing</a>
@@ -44,8 +44,8 @@
 
 <main id="main">
 
-<!-- HERO: a pinned, scroll-driven stage. Each chapter changes the 3D devices and the text beside them. -->
-<section class="stage-wrap" id="hero" aria-label="How Vector works, chapter by chapter">
+<!-- HERO: one screen. The 3D phone and laptop can be dragged and clicked; the dock below them switches the feature shown. -->
+<section class="stage-wrap" id="hero" aria-label="Vector Call Assist">
   <div class="stage" id="stage">
     <canvas id="heroScene" aria-hidden="true"></canvas>
     <div class="fallback" aria-hidden="true">
@@ -85,50 +85,20 @@
         </dl>
       </article>
 
-      <article class="panel" data-ch="1">
-        <span class="chap"><i>02</i> Pair</span>
-        <h2>Pair the phone once.</h2>
-        <p>Scan the code on the laptop from the Android app. After that the phone and laptop stay linked.</p>
-        <ul class="chips"><li>Scan once</li><li>Stays paired</li><li>One seat, one phone</li></ul>
-      </article>
-
-      <article class="panel" data-ch="2">
-        <span class="chap"><i>03</i> Call</span>
-        <h2>Dial from the laptop. It rings on the SIM.</h2>
-        <p>The laptop starts the call. The phone places it on the rep's own SIM, so the lead sees the rep's line.</p>
-        <ul class="chips"><li>Rep's own SIM</li><li>Live call timer</li><li>Connected time from the call log</li><li>Incoming calls flagged, not counted</li></ul>
-      </article>
-
-      <article class="panel" data-ch="3">
-        <span class="chap"><i>04</i> Script</span>
-        <h2>One line at a time.</h2>
-        <p>The laptop shows the current step and the next line, with objection branches one tap away. Admins publish new versions; each call records the one used.</p>
-        <ul class="chips"><li>Steps</li><li>Objection branches</li><li>Shortcut keys</li><li>Versions recorded per call</li></ul>
-      </article>
-
-      <article class="panel" data-ch="4">
-        <span class="chap"><i>05</i> Outcome</span>
-        <h2>Log the result. Undo a mistake.</h2>
-        <p>Each outcome is saved on the laptop first and uploaded when the connection returns. Each one is stored once, however many retries it takes.</p>
-        <ul class="chips"><li>Answered</li><li>No answer</li><li>Callback</li><li>Won</li><li>Undo, logged</li></ul>
-      </article>
-
-      <article class="panel" data-ch="5">
-        <span class="chap"><i>06</i> Team</span>
-        <h2>The whole team on one page.</h2>
-        <p>Admins see results per seat, connect rate and talk time. A seat is one person, one phone and one laptop, and it can move to someone new.</p>
-        <ul class="chips"><li>Activity per rep</li><li>Daily targets</li><li>Supervisor notes</li><li>Weekly summary</li></ul>
-      </article>
     </div>
 
-    <nav class="rail" aria-label="Chapters">
-      <button type="button" data-goto="0" aria-current="step">Intro</button>
-      <button type="button" data-goto="1">Pair</button>
-      <button type="button" data-goto="2">Call</button>
-      <button type="button" data-goto="3">Script</button>
-      <button type="button" data-goto="4">Outcome</button>
-      <button type="button" data-goto="5">Team</button>
-    </nav>
+    <div class="explore" id="explore">
+      <p class="explore-hint" id="exploreHint"><span aria-hidden="true">↻</span> Drag to turn · click the phone or laptop</p>
+      <div class="dock" id="dock" aria-label="See each part of Vector">
+        <button type="button" data-goto="0" aria-pressed="true">Overview</button>
+        <button type="button" data-goto="1" aria-pressed="false">Pair</button>
+        <button type="button" data-goto="2" aria-pressed="false">Call</button>
+        <button type="button" data-goto="3" aria-pressed="false">Script</button>
+        <button type="button" data-goto="4" aria-pressed="false">Outcome</button>
+        <button type="button" data-goto="5" aria-pressed="false">Team</button>
+      </div>
+      <p class="explore-cap" id="exploreCap" aria-live="polite">The rep's phone and laptop, paired. Pick a step to see it.</p>
+    </div>
   </div>
 </section>
 
@@ -141,113 +111,19 @@
   </div>
 </div>
 
-<!-- WHO IT'S FOR -->
-<section class="section" id="who">
-  <div class="wrap">
-    <div class="section-head reveal">
-      <span class="eyebrow">Who it's for</span>
-      <h2 class="h2">Built for teams that call leads all day.</h2>
-      <p class="lede">If your reps call enquiries from a list and you can't tell why most of them say no, Vector is for you.</p>
-    </div>
-    <div class="who-grid reveal">
-      <article class="insight-card">
-        <h3>Coaching and admissions</h3>
-        <p>Counsellors call enquiries about courses, demo classes and fees. See which line loses students, and which answer to "too expensive" gets the seat booked.</p>
-      </article>
-      <article class="insight-card">
-        <h3>Ed-tech counselling</h3>
-        <p>New counsellors follow the script from day one, with objection answers in front of them. You see connect rate and talk time per counsellor.</p>
-      </article>
-      <article class="insight-card">
-        <h3>Inside sales</h3>
-        <p>Reps call from their own number, callbacks ring on the phone on time, and every outcome lands on one admin page.</p>
-      </article>
-    </div>
-  </div>
-</section>
-
-<!-- PRODUCT -->
-<section class="section" id="product">
-  <div class="wrap">
-    <div class="section-head reveal">
-      <span class="eyebrow">Product</span>
-      <h2 class="h2">Three screens. One team.</h2>
-      <p class="lede">Pick a view to see what each person works in. The screens below show the layout with sample data.</p>
-    </div>
-
-    <div class="pwrap reveal">
-      <div class="ptabs" role="tablist" aria-label="Product views" data-tabs>
-        <button type="button" role="tab" id="pt-phone" aria-controls="pp-phone" aria-selected="true" tabindex="0">Phone<small>for the rep</small></button>
-        <button type="button" role="tab" id="pt-laptop" aria-controls="pp-laptop" aria-selected="false" tabindex="-1">Laptop<small>script and objections</small></button>
-        <button type="button" role="tab" id="pt-admin" aria-controls="pp-admin" aria-selected="false" tabindex="-1">Admin<small>the whole team</small></button>
-      </div>
-
-      <div class="pview" id="pp-phone" role="tabpanel" aria-labelledby="pt-phone" data-panel>
-        <div class="pview-device"><div class="mock-phone big"><div class="pscreen">
-          <span class="kick">Paired with your laptop</span>
-          <strong>Ready for calls</strong>
-          <span class="muted">Same Wi-Fi as the laptop</span>
-          <span class="timer-pill">Call 00:42</span>
-          <span class="out">Ringing out on your SIM</span>
-          <div class="out-grid"><span>Link on</span><span>Permissions ok</span><span class="on">Reminders on</span><span>Battery ok</span></div>
-        </div></div></div>
-        <ul class="pview-list">
-          <li><b>Calls start from the laptop</b><span>Press Dial on the laptop. The phone places the call on the rep's own SIM, so the lead sees the rep's line.</span></li>
-          <li><b>Pair once, then it stays linked</b><span>Scan the code on the laptop from the Android app. After that, no setup is needed for each call.</span></li>
-          <li><b>Status you can check</b><span>The screen shows pairing, permissions, Wi-Fi and call state. Callback reminders ring from the phone at the time set on the laptop.</span></li>
-        </ul>
-      </div>
-
-      <div class="pview" id="pp-laptop" role="tabpanel" aria-labelledby="pt-laptop" data-panel hidden>
-        <div class="pview-device"><div class="mock-laptop big">
-          <div class="lid"><div class="screen">
-            <span class="bar"></span>
-            <span class="kick">Step 3 of 4 · Offer</span>
-            <p>"We have a free demo class on Saturday. Shall I reserve a seat for you?"</p>
-            <div class="chips"><span>Too expensive</span><span>Call me later</span><span>Already joined</span></div>
-          </div></div>
-          <div class="base"></div>
-        </div></div>
-        <ul class="pview-list">
-          <li><b>One line at a time</b><span>The published script shows the current step, with the next line ready.</span></li>
-          <li><b>Objections next to the script</b><span>Tap what the lead said and the answer appears in place.</span></li>
-          <li><b>Published by the admin</b><span>New versions reach reps at their next sign-in. Each call records the version used.</span></li>
-        </ul>
-      </div>
-
-      <div class="pview" id="pp-admin" role="tabpanel" aria-labelledby="pt-admin" data-panel hidden>
-        <div class="pview-device"><div class="admin-card">
-          <div class="admin-head"><span class="kick">Today · sample data</span><span class="pill-ok">Live</span></div>
-          <table>
-            <thead><tr><th>Seat</th><th>Calls</th><th>Connected</th><th>Callbacks</th></tr></thead>
-            <tbody>
-              <tr><td>Rep 1</td><td>48</td><td>31</td><td>6</td></tr>
-              <tr><td>Rep 2</td><td>52</td><td>27</td><td>9</td></tr>
-              <tr><td>Rep 3</td><td>44</td><td>35</td><td>4</td></tr>
-            </tbody>
-          </table>
-          <div class="admin-bars">
-            <div><span>Connected</span><i class="w62"></i></div>
-            <div><span>Target</span><i class="w80"></i></div>
-          </div>
-        </div></div>
-        <ul class="pview-list">
-          <li><b>Team activity on one page</b><span>Results by outcome, per seat and per day.</span></li>
-          <li><b>Targets and supervisor notes</b><span>Set daily targets per rep and leave notes against a call.</span></li>
-          <li><b>Weekly summary</b><span>A CSV for the week, ready to share with your admin.</span></li>
-        </ul>
-      </div>
-    </div>
-  </div>
-</section>
-
 <!-- LIVE DEMO -->
-<section class="section band" id="demo">
+<section class="section band demo-sec" id="demo">
   <div class="wrap">
-    <div class="section-head reveal">
-      <span class="eyebrow">Live demo</span>
-      <h2 class="h2">Work a lead. Watch the numbers move.</h2>
-      <p class="lede">A made-up lead list. Pick a lead, step through the script, answer an objection, dial, then log the outcome. Nothing here is saved.</p>
+    <div class="demo-head">
+      <div class="section-head reveal">
+        <span class="eyebrow">Live demo</span>
+        <h2 class="h2">Work a lead. Watch the numbers move.</h2>
+        <p class="lede">A made-up lead list. Pick a lead, step through the script, answer an objection, press Dial, then log the outcome. Nothing here is saved.</p>
+      </div>
+      <figure class="demo-phone" id="demoPhone">
+        <canvas id="demoScene" aria-hidden="true"></canvas>
+        <figcaption>The rep's phone rings when you press Dial. Drag to turn it.</figcaption>
+      </figure>
     </div>
 
     <div class="console reveal" id="console">
@@ -305,23 +181,34 @@
   </div>
 </section>
 
-<!-- HOW IT WORKS -->
-<section class="section" id="how">
+<!-- WHO IT'S FOR -->
+<section class="section" id="who">
   <div class="wrap">
     <div class="section-head reveal">
-      <span class="eyebrow">How it works</span>
-      <h2 class="h2">From invite to first call in four steps.</h2>
+      <span class="eyebrow">Who it's for</span>
+      <h2 class="h2">Built for teams that call leads all day.</h2>
+      <p class="lede">If your reps call enquiries from a list and you can't tell why most of them say no, Vector is for you.</p>
     </div>
-    <ol class="timeline" id="timeline">
-      <li class="tstep reveal"><span class="num">1</span><h3>Invite</h3><p>Add each rep by email. Every invite takes one seat, and the rep signs in with an emailed link.</p></li>
-      <li class="tstep reveal"><span class="num">2</span><h3>Pair</h3><p>Scan the code on the laptop from the Android app. The phone and laptop pair to that seat over local Wi-Fi.</p></li>
-      <li class="tstep reveal"><span class="num">3</span><h3>Work the list</h3><p>The laptop shows the next lead and the script. Each Dial starts the call on the rep's SIM through the paired phone.</p></li>
-      <li class="tstep reveal"><span class="num">4</span><h3>Results</h3><p>Each outcome is saved on the laptop first, then synced per seat. Admins see the team's progress live.</p></li>
-    </ol>
+    <div class="who-grid reveal">
+      <article class="insight-card">
+        <h3>Coaching and admissions</h3>
+        <p>Counsellors call enquiries about courses, demo classes and fees. See which line loses students, and which answer to "too expensive" gets the seat booked.</p>
+      </article>
+      <article class="insight-card">
+        <h3>Ed-tech counselling</h3>
+        <p>New counsellors follow the script from day one, with objection answers in front of them. You see connect rate and talk time per counsellor.</p>
+      </article>
+      <article class="insight-card">
+        <h3>Inside sales</h3>
+        <p>Reps call from their own number, callbacks ring on the phone on time, and every outcome lands on one admin page.</p>
+      </article>
+    </div>
   </div>
 </section>
 
-<!-- PRICING -->
+
+
+<!-- ANALYTICS -->
 <section class="section" id="insights" aria-labelledby="insightsTitle">
   <div class="wrap">
     <div class="section-head reveal">
@@ -361,14 +248,6 @@
           <p>Drop-off by script step, so you change the one line that costs the most, not the whole script.</p>
         </article>
         <article class="insight-card">
-          <h3>Which objection comes up, and what works</h3>
-          <p>Objection frequency and outcome by answer, so the team learns from calls that closed.</p>
-        </article>
-        <article class="insight-card">
-          <h3>Who is calling, and how it goes</h3>
-          <p>Calls per rep per day, connect rate and talk time, from the same admin page.</p>
-        </article>
-        <article class="insight-card">
           <h3>Why the call was lost</h3>
           <p>A rep taps one reason on a lost call: price, timing, already enrolled, no need or wrong person. It takes a second and it sharpens the next call.</p>
         </article>
@@ -376,13 +255,25 @@
           <h3>The script gets better with each version</h3>
           <p>Each version is compared with the one before. The system suggests what to change, the admin approves it, and the team sees what changed.</p>
         </article>
-        <article class="insight-card">
-          <h3>Calls that failed for the network</h3>
-          <p>A dropped call is logged as a network drop, not as the lead's answer, and offline phones are flagged during working hours.</p>
-        </article>
       </div>
     </div>
     <p class="insight-cta reveal"><a class="btn btn-ghost" href="#demo">See it in the live demo</a></p>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="section" id="how">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">How it works</span>
+      <h2 class="h2">From invite to first call in four steps.</h2>
+    </div>
+    <ol class="timeline" id="timeline">
+      <li class="tstep reveal"><span class="num">1</span><h3>Invite</h3><p>Add each rep by email. Every invite takes one seat, and the rep signs in with an emailed link.</p></li>
+      <li class="tstep reveal"><span class="num">2</span><h3>Pair</h3><p>Scan the code on the laptop from the Android app. The phone and laptop pair to that seat over local Wi-Fi.</p></li>
+      <li class="tstep reveal"><span class="num">3</span><h3>Work the list</h3><p>The laptop shows the next lead and the script. Each Dial starts the call on the rep's SIM through the paired phone.</p></li>
+      <li class="tstep reveal"><span class="num">4</span><h3>Results</h3><p>Each outcome is saved on the laptop first, then synced per seat. Admins see the team's progress live.</p></li>
+    </ol>
   </div>
 </section>
 
@@ -585,10 +476,6 @@
         <p>Call outcomes, timings and seat details, so the admin can see results. Lead names and phone numbers stay on the laptop.</p>
       </details>
       <details>
-        <summary>Can one person use two laptops?</summary>
-        <p>No. A seat is paired with one phone and one laptop. A second laptop needs its own seat.</p>
-      </details>
-      <details>
         <summary>Do I need a card for the trial?</summary>
         <p>No. The trial is 5 days with up to 5 seats and needs no payment.</p>
       </details>
@@ -605,7 +492,7 @@
       <p>Human calling for admissions and sales teams.</p>
     </div>
     <div class="foot-links">
-      <a href="#product">Product</a>
+      <a href="#demo">Live demo</a>
       <a href="#pricing">Pricing</a>
       <a href="#faq">FAQ</a>
       <a href="#account">Sign in</a>

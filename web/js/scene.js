@@ -1,5 +1,7 @@
 /* 3D visuals for the home page, built on three.js r160 from jsDelivr (exact version pinned).
-   - heroScene: a phone and a laptop that float and follow the pointer.
+   - heroScene: a phone and a laptop. Drag to turn them, hover to lift one, click one to show its feature.
+     The dock in home.js picks the feature ('vca:chapter'); a click on a device sends 'vca:pick'.
+   - demoScene: the rep's phone beside the live demo. It rings, times and logs the call ('vca:demo').
    - seatScene: a grid of seats; the number lit follows the seat count in the pricing calculator.
    If WebGL or the module fails, nothing is added to the page and the static fallback stays visible. */
 /* three.js is loaded only on wide screens (961px and up). Phones and small tablets never download it and see the
@@ -54,7 +56,7 @@ function screen(draw) {
   return t;
 }
 
-/* ---------- hero: a pinned stage. Scroll picks the chapter (home.js sends 'vca:chapter'); the devices move and the screens change. ---------- */
+/* ---------- hero: the dock or a click picks the chapter; the devices move and the screens change. ---------- */
 const PHONE_W = 386, PHONE_H = 846, PHONE_S = 2, LAP_W = 640, LAP_H = 405, LAP_S = 2;
 const INK = '#0e1628', MUTED = '#56617a', BLUE = '#2456e6', BLUE_DEEP = '#1a42b8', MINT_HEX = '#0b8f6a', PALE = '#e6edff';
 /* Each chapter is a target pose. Arrays so they can be eased one by one. */
@@ -302,6 +304,10 @@ function initHero(canvas) {
 
   const bodyMat = new THREE.MeshStandardMaterial({ color: C.bodyDark, metalness: 0.25, roughness: 0.4 });
 
+  // Everything turns together when the visitor drags.
+  const rig = new THREE.Group();
+  scene.add(rig);
+
   // Phone
   const phone = new THREE.Group();
   phone.add(new THREE.Mesh(slab(1.5, 3.1, 0.18, 0.24), bodyMat));
@@ -309,7 +315,7 @@ function initHero(canvas) {
   const pScreen = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 2.85), new THREE.MeshBasicMaterial({ toneMapped: false, map: phoneScr.tex }));
   pScreen.position.z = 0.235;
   phone.add(pScreen);
-  scene.add(phone);
+  rig.add(phone);
 
   // Laptop
   const laptop = new THREE.Group();
@@ -327,17 +333,17 @@ function initHero(canvas) {
   const lScreen = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 1.9), new THREE.MeshBasicMaterial({ toneMapped: false, map: lapScr.tex }));
   lScreen.position.set(0, 1.1, 0.175);
   hinge.add(lScreen);
-  scene.add(laptop);
+  rig.add(laptop);
 
   // Beam between phone and laptop, shown while a call is placed
   const beamGeo = new THREE.BufferGeometry();
   beamGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
   const beamMat = new THREE.LineBasicMaterial({ color: C.amber, transparent: true, opacity: 0 });
-  scene.add(new THREE.Line(beamGeo, beamMat));
+  rig.add(new THREE.Line(beamGeo, beamMat));
 
   // Team: six seat cards in a row, shown in the Team chapter
   const team = new THREE.Group();
-  scene.add(team);
+  rig.add(team);
   const cellGeo = slab(0.9, 0.6, 0.05, 0.08);
   const cells = [];
   for (let i = 0; i < 6; i++) {
@@ -350,7 +356,7 @@ function initHero(canvas) {
 
   const ring = new THREE.Mesh(new THREE.TorusGeometry(4.6, 0.02, 8, 120), new THREE.MeshBasicMaterial({ color: C.blue, transparent: true, opacity: 0.35 }));
   ring.rotation.x = Math.PI / 2.4;
-  scene.add(ring);
+  rig.add(ring);
 
   // Chapter state
   const cur = {
@@ -365,18 +371,71 @@ function initHero(canvas) {
     painted = i;
   }
   paintChapter(0);
+  let chapter = 0;
   document.addEventListener('vca:chapter', function (e) {
     const i = e.detail && e.detail.index;
     if (typeof i !== 'number' || !CHAPTERS[i]) return;
+    chapter = i;
     goal = CHAPTERS[i];
     if (i !== painted) paintChapter(i);
   });
 
-  let px = 0, py = 0, tx2 = 0, ty = 0;
+  // Pointer: a gentle tilt toward the cursor, drag to turn, hover to lift a device, click to pick its feature.
+  // Phone: Call, then Outcome. Laptop: Script, then Team.
+  let px = 0, py = 0;
   window.addEventListener('pointermove', function (e) {
     px = e.clientX / window.innerWidth - 0.5;
     py = e.clientY / window.innerHeight - 0.5;
   }, { passive: true });
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+  let hover = null, drag = null, yaw = 0, pitch = 0, dragYaw = 0, dragPitch = 0, liftP = 0, liftL = 0;
+  function hit(e) {
+    const b = canvas.getBoundingClientRect();
+    ndc.set(((e.clientX - b.left) / b.width) * 2 - 1, -((e.clientY - b.top) / b.height) * 2 + 1);
+    ray.setFromCamera(ndc, cam);
+    const h = ray.intersectObjects([phone, laptop], true)[0];
+    if (!h) return null;
+    let o = h.object;
+    while (o && o !== phone && o !== laptop) o = o.parent;
+    return o;
+  }
+  function cursor() { canvas.style.cursor = drag && drag.moved ? 'grabbing' : hover ? 'pointer' : 'grab'; }
+  canvas.addEventListener('pointerdown', function (e) {
+    if (e.button !== 0) return;
+    drag = { x: e.clientX, y: e.clientY, yaw: dragYaw, pitch: dragPitch, moved: false, target: hit(e) };
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener('pointermove', function (e) {
+    if (drag) {
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (!drag.moved && Math.hypot(dx, dy) > 6) {
+        drag.moved = true;
+        document.dispatchEvent(new CustomEvent('vca:grab'));
+      }
+      if (drag.moved) {
+        dragYaw = Math.max(-1.1, Math.min(1.1, drag.yaw + dx * 0.008));
+        dragPitch = Math.max(-0.35, Math.min(0.35, drag.pitch + dy * 0.004));
+      }
+    } else {
+      hover = hit(e);
+    }
+    cursor();
+  });
+  function release(e) {
+    if (!drag) return;
+    if (!drag.moved && drag.target) {
+      const onPhone = drag.target === phone;
+      const first = onPhone ? 2 : 3, second = onPhone ? 4 : 5;
+      document.dispatchEvent(new CustomEvent('vca:pick', { detail: { index: chapter === first ? second : first } }));
+    }
+    drag = null;
+    if (e && canvas.hasPointerCapture && canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+    cursor();
+  }
+  canvas.addEventListener('pointerup', release);
+  canvas.addEventListener('pointercancel', release);
+  canvas.addEventListener('pointerleave', function () { if (!drag) { hover = null; cursor(); } });
+  cursor();
 
   let visible = true;
   new IntersectionObserver(function (en) { visible = en[0].isIntersecting; }).observe(canvas);
@@ -419,33 +478,40 @@ function initHero(canvas) {
     ease(cur.laptop, goal.laptop, k); ease(cur.laptopR, goal.laptopR, k); ease(cur.lid, goal.lid, k);
     ease(cur.beam, goal.beam, k); ease(cur.team, goal.team, k);
 
-    // Still: the devices only move when the chapter changes, no sway and no pointer tilt.
-    const sway = 0;
-    tx2 = 0;
-    ty = 0;
+    // Released devices spring back to their pose; the pointer adds a small tilt; a hovered device lifts.
+    if (!drag) { dragYaw *= 0.93; dragPitch *= 0.93; }
+    const tiltOn = !reduce && !drag;
+    yaw += (dragYaw + (tiltOn ? px * 0.3 : 0) - yaw) * 0.12;
+    pitch += (dragPitch + (tiltOn ? py * 0.12 : 0) - pitch) * 0.12;
+    liftP += ((hover === phone && !drag ? 1 : 0) - liftP) * 0.15;
+    liftL += ((hover === laptop && !drag ? 1 : 0) - liftL) * 0.15;
+    const sway = reduce ? 0 : Math.sin(t * 1.1) * 0.06;
 
-    phone.position.set(cur.phone[0] * xk + xs, cur.phone[1] + yo + sway, cur.phone[2]);
-    phone.rotation.set(cur.phoneR[0] + tx2 * 0.4, cur.phoneR[1] + ty, cur.phoneR[2]);
-    phone.scale.setScalar(cur.phoneS[0] * fit);
+    rig.position.set(xs, yo, 0);
+    rig.rotation.set(pitch, yaw, 0);
 
-    laptop.position.set(cur.laptop[0] * xk + xs, cur.laptop[1] + yo - sway * 0.5, cur.laptop[2]);
-    laptop.rotation.set(cur.laptopR[0] + tx2 * 0.3, cur.laptopR[1] + ty * 0.7, cur.laptopR[2]);
-    laptop.scale.setScalar(fit);
+    phone.position.set(cur.phone[0] * xk, cur.phone[1] + sway + liftP * 0.15, cur.phone[2] + liftP * 0.3);
+    phone.rotation.set(cur.phoneR[0], cur.phoneR[1], cur.phoneR[2]);
+    phone.scale.setScalar(cur.phoneS[0] * fit * (1 + liftP * 0.05));
+
+    laptop.position.set(cur.laptop[0] * xk, cur.laptop[1] - sway * 0.5 + liftL * 0.12, cur.laptop[2] + liftL * 0.3);
+    laptop.rotation.set(cur.laptopR[0], cur.laptopR[1], cur.laptopR[2]);
+    laptop.scale.setScalar(fit * (1 + liftL * 0.04));
     hinge.rotation.x = cur.lid[0];
 
     const bp = beamGeo.attributes.position.array;
     bp[0] = phone.position.x; bp[1] = phone.position.y; bp[2] = phone.position.z;
     bp[3] = laptop.position.x; bp[4] = laptop.position.y + 0.8; bp[5] = laptop.position.z;
     beamGeo.attributes.position.needsUpdate = true;
-    beamMat.opacity = cur.beam[0] * 0.9;
+    beamMat.opacity = cur.beam[0] * (reduce ? 0.9 : 0.6 + 0.3 * Math.sin(t * 6));
 
-    team.position.set(xs, -2.6 + yo, 0);
+    team.position.set(0, -2.6, 0);
     team.scale.setScalar(fit);
     for (let i = 0; i < cells.length; i++) {
       cells[i].scale.setScalar(Math.max(0, cur.team[0]));
     }
 
-    ring.rotation.z = 0;
+    ring.rotation.z = reduce ? 0 : t * 0.05;
     r.render(scene, cam);
   }
   requestAnimationFrame(frame);
@@ -515,12 +581,161 @@ function initSeats(canvas) {
   return true;
 }
 
+/* ---------- demo phone: rings, times and logs the call from the live demo console ---------- */
+function initials(name) { return name.replace(/[^A-Za-z ]/g, '').split(' ').filter(Boolean).map(function (w) { return w[0]; }).join('').slice(0, 2).toUpperCase(); }
+function mmss(n) { const m = Math.floor(n / 60), s = n % 60; return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s; }
+function drawDemo(g, d) {
+  const cx = PHONE_W / 2;
+  if (d.state === 'ringing' || d.state === 'live') {
+    phoneFrame(g, d.state === 'ringing' ? 'Calling…' : 'On call');
+    dot(g, cx, 290, 70, PALE);
+    tx(g, initials(d.name), cx, 306, 'bold 44px sans-serif', BLUE_DEEP, 'center');
+    tx(g, d.name, cx, 410, 'bold 32px sans-serif', INK, 'center');
+    if (d.state === 'ringing') {
+      tx(g, 'Ringing…', cx, 480, 'bold 30px sans-serif', MUTED, 'center');
+    } else {
+      tx(g, mmss(d.secs), cx, 490, 'bold 60px sans-serif', INK, 'center');
+    }
+    rr(g, cx - 83, 518, 166, 40, 20, MINT_HEX); tx(g, 'On your SIM', cx, 545, 'bold 18px sans-serif', '#ffffff', 'center');
+    tx(g, 'The lead sees your number', cx, 590, '17px sans-serif', MUTED, 'center');
+    rr(g, 40, 720, 306, 76, 38, '#d6453d'); tx(g, 'Hang up', cx, 767, 'bold 22px sans-serif', '#ffffff', 'center');
+  } else if (d.state === 'ended') {
+    phoneFrame(g, 'Call ended');
+    tx(g, d.name, cx, 300, 'bold 32px sans-serif', INK, 'center');
+    tx(g, mmss(d.secs), cx, 370, 'bold 52px sans-serif', INK, 'center');
+    tx(g, 'talk time', cx, 402, '17px sans-serif', MUTED, 'center');
+    rr(g, 16, 470, 354, 120, 26, '#ffffff');
+    tx(g, 'Log the outcome', cx, 520, 'bold 22px sans-serif', INK, 'center');
+    tx(g, 'on the laptop', cx, 552, '18px sans-serif', MUTED, 'center');
+  } else if (d.state === 'logged') {
+    phoneFrame(g, 'Saved');
+    dot(g, cx, 300, 74, MINT_HEX);
+    g.strokeStyle = '#ffffff'; g.lineWidth = 12; g.lineCap = 'round'; g.lineJoin = 'round';
+    g.beginPath(); g.moveTo(cx - 32, 302); g.lineTo(cx - 8, 326); g.lineTo(cx + 36, 276); g.stroke();
+    tx(g, d.name, cx, 430, 'bold 30px sans-serif', INK, 'center');
+    tx(g, d.outcome || '', cx, 474, 'bold 26px sans-serif', MINT_HEX, 'center');
+    tx(g, 'Synced to the admin page', cx, 520, '17px sans-serif', MUTED, 'center');
+    rr(g, 16, 600, 354, 74, 37, BLUE); tx(g, 'Next lead is ready', cx, 645, 'bold 20px sans-serif', '#ffffff', 'center');
+  } else {
+    phoneFrame(g, 'Vector');
+    rr(g, 16, 22, 96, 28, 14, 'rgba(255,255,255,.18)'); tx(g, 'Paired', 30, 42, 'bold 15px sans-serif', '#ffffff');
+    rr(g, 16, 172, 354, 160, 26, '#ffffff');
+    tx(g, 'Ready for calls', 36, 220, 'bold 26px sans-serif', INK);
+    dot(g, 44, 262, 7, MINT_HEX); tx(g, 'Link is healthy', 62, 269, 'bold 17px sans-serif', MINT_HEX);
+    tx(g, 'Calls ring on your SIM', 36, 306, '17px sans-serif', MUTED);
+    rr(g, 16, 352, 354, 128, 26, '#ffffff');
+    tx(g, 'Next call from laptop', 36, 394, '16px sans-serif', MUTED);
+    tx(g, d.name, 36, 432, 'bold 28px sans-serif', INK);
+    rr(g, 16, 506, 354, 74, 37, BLUE); tx(g, 'Press Dial on the laptop', cx, 552, 'bold 20px sans-serif', '#ffffff', 'center');
+  }
+}
+
+function initDemo(canvas) {
+  const r = renderer(canvas);
+  if (!r) return false;
+  const scene = new THREE.Scene();
+  const cam = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
+  cam.position.set(0, 0, 7.4);
+  scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+  const key = new THREE.DirectionalLight(0xffffff, 1.4);
+  key.position.set(4, 6, 8);
+  scene.add(key);
+  const rim = new THREE.DirectionalLight(0x9db8ff, 0.8);
+  rim.position.set(-6, 2, -4);
+  scene.add(rim);
+
+  const phone = new THREE.Group();
+  phone.add(new THREE.Mesh(slab(1.5, 3.1, 0.18, 0.24), new THREE.MeshStandardMaterial({ color: C.bodyDark, metalness: 0.25, roughness: 0.4 })));
+  const scr = makeScreen(PHONE_W * PHONE_S, PHONE_H * PHONE_S);
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 2.85), new THREE.MeshBasicMaterial({ toneMapped: false, map: scr.tex }));
+  face.position.z = 0.235;
+  phone.add(face);
+  scene.add(phone);
+
+  // Ripples behind the phone while it rings (amber) or while the call is live (mint, slower).
+  const waves = [];
+  for (let i = 0; i < 3; i++) {
+    const m = new THREE.Mesh(new THREE.TorusGeometry(1, 0.025, 8, 96), new THREE.MeshBasicMaterial({ color: C.amber, transparent: true, opacity: 0 }));
+    m.position.z = -0.3;
+    scene.add(m);
+    waves.push(m);
+  }
+
+  const first = document.querySelector('.lead[aria-pressed="true"] b');
+  const d = { state: 'idle', name: first ? first.textContent : 'Riya S.', secs: 0, outcome: '' };
+  let since = 0;
+  function repaint() { paint(scr, function (g) { drawDemo(g, d); }, PHONE_S); }
+  repaint();
+  document.addEventListener('vca:demo', function (e) {
+    const n = e.detail || {};
+    if (n.state && n.state !== d.state) since = performance.now() / 1000;
+    for (const k in n) d[k] = n[k];
+    repaint();
+  });
+
+  // Drag to turn; it springs back. Elsewhere on the page the pointer tilts it a little.
+  let drag = null, dragYaw = 0, yaw = 0, px = 0;
+  window.addEventListener('pointermove', function (e) { px = e.clientX / window.innerWidth - 0.5; }, { passive: true });
+  canvas.style.cursor = 'grab';
+  canvas.addEventListener('pointerdown', function (e) {
+    drag = { x: e.clientX, yaw: dragYaw };
+    canvas.setPointerCapture(e.pointerId);
+    canvas.style.cursor = 'grabbing';
+  });
+  canvas.addEventListener('pointermove', function (e) {
+    if (drag) dragYaw = Math.max(-1.3, Math.min(1.3, drag.yaw + (e.clientX - drag.x) * 0.01));
+  });
+  function release() { drag = null; canvas.style.cursor = 'grab'; }
+  canvas.addEventListener('pointerup', release);
+  canvas.addEventListener('pointercancel', release);
+
+  let visible = true;
+  new IntersectionObserver(function (en) { visible = en[0].isIntersecting; }).observe(canvas);
+  // The figure is hidden until this scene starts, so size the canvas whenever its box changes.
+  if ('ResizeObserver' in window) new ResizeObserver(function () { sizeTo(r, cam, canvas); }).observe(canvas);
+  else window.addEventListener('resize', function () { sizeTo(r, cam, canvas); });
+  sizeTo(r, cam, canvas);
+
+  const amber = new THREE.Color(C.amber), mint = new THREE.Color(C.mint);
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (!visible || document.hidden) return;
+    const t = now / 1000;
+    if (!drag) dragYaw *= 0.93;
+    yaw += (dragYaw + (reduce ? 0 : px * 0.4) - yaw) * 0.12;
+    const ringing = d.state === 'ringing', live = d.state === 'live';
+    // A ringing phone buzzes in short bursts; a logged call gives one small hop.
+    const buzz = ringing && !reduce && Math.sin(t * 5) > 0 ? Math.sin(t * 70) * 0.04 : 0;
+    const hop = d.state === 'logged' && !reduce ? Math.max(0, Math.sin(Math.min(1, t - since) * Math.PI)) * 0.25 : 0;
+    phone.rotation.set(-0.08, -0.35 + yaw, buzz);
+    phone.position.y = (reduce ? 0 : Math.sin(t * 1.2) * 0.06) + hop;
+
+    for (let i = 0; i < waves.length; i++) {
+      const m = waves[i];
+      if ((ringing || live) && !reduce) {
+        const speed = ringing ? 0.9 : 0.35;
+        const k = ((t * speed + i / waves.length) % 1);
+        m.scale.set(0.95 + k * 0.8, 1.5 + k * 0.6, 1);
+        m.material.opacity = (1 - k) * (ringing ? 0.7 : 0.35);
+        m.material.color.copy(ringing ? amber : mint);
+      } else {
+        m.material.opacity *= 0.85;
+      }
+    }
+    r.render(scene, cam);
+  }
+  requestAnimationFrame(frame);
+  return true;
+}
+
 function start() {
   if (!THREE) return;
   const hero = document.getElementById('heroScene');
   const seats = document.getElementById('seatScene');
   if (hero && initHero(hero)) document.documentElement.classList.add('has-3d');
   if (seats) initSeats(seats);
+  const demo = document.getElementById('demoScene');
+  if (demo && initDemo(demo)) document.documentElement.classList.add('has-demo-3d');
 }
 
 start();
