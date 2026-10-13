@@ -568,64 +568,79 @@
   })();
 })();
 
-/* ---------- hero explorer: the dock picks the feature the 3D devices show ----------
-   Plays through the features on its own until the visitor clicks the dock, drags the devices or clicks one
-   (scene.js sends 'vca:pick' and 'vca:grab'). Each change sends 'vca:chapter' to scene.js. */
-(function heroExplorer() {
-  var dock = document.getElementById('dock');
-  var cap = document.getElementById('exploreCap');
+/* ---------- hero: what the lead said ----------
+   The chips pick an objection; the answer appears beside them and, on wide screens, on the 3D laptop
+   (scene.js listens for 'vca:objection'). They play through on their own until the visitor clicks a chip
+   or drags the devices ('vca:grab'). Clicking a device ('vca:pick') shows the next one. */
+(function heroObjections() {
+  var box = document.getElementById('saidChips');
+  var text = document.getElementById('answerText');
   var hero = document.getElementById('hero');
-  if (!dock || !cap) return;
-  var btns = Array.prototype.slice.call(dock.querySelectorAll('button'));
-  var CAPS = [
-    "The rep's phone and laptop, paired. Pick a step to see it.",
-    "Scan once. The phone and laptop stay paired to that rep's seat.",
-    "Press Dial on the laptop. The call rings out on the rep's own SIM.",
-    'One line at a time, with the answer to each objection one tap away.',
-    'One tap logs the result. It is saved even when the internet drops.',
-    'Calls, connect rate and talk time for every rep, on one page.'
-  ];
+  if (!box || !text) return;
+  var btns = Array.prototype.slice.call(box.querySelectorAll('button'));
+  var ANSWERS = {
+    price: 'Ask what budget they had in mind. Then mention the fee can be paid in three instalments.',
+    later: 'Ask what time suits them, and set a callback for exactly then. The phone rings on time.',
+    joined: 'Ask what they are using to prepare, then offer a free mock test as the next step.'
+  };
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var current = 0, timer = null, inView = true, AUTO_MS = 5200;
+  var current = 0, timer = null, inView = true, AUTO_MS = 4600;
 
-  function setChapter(i) {
+  function pick(i) {
     current = i;
-    btns.forEach(function (b, k) { b.setAttribute('aria-pressed', k === i ? 'true' : 'false'); });
-    cap.textContent = CAPS[i];
-    document.dispatchEvent(new CustomEvent('vca:chapter', { detail: { index: i } }));
+    var b = btns[i], key = b.getAttribute('data-obj');
+    btns.forEach(function (o, k) { o.setAttribute('aria-pressed', k === i ? 'true' : 'false'); });
+    text.classList.add('swap');
+    setTimeout(function () { text.textContent = ANSWERS[key]; text.classList.remove('swap'); }, reduce ? 0 : 160);
+    document.dispatchEvent(new CustomEvent('vca:objection', { detail: { key: key, said: b.textContent, answer: ANSWERS[key] } }));
   }
   function stopAuto() {
     if (timer) { clearInterval(timer); timer = null; }
-    dock.classList.remove('auto');
+    box.classList.remove('auto');
   }
   function startAuto() {
     if (reduce || timer) return;
-    dock.classList.add('auto');
+    box.classList.add('auto');
     timer = setInterval(function () {
       if (!inView || document.hidden) return;
-      setChapter((current + 1) % btns.length);
-      // restart the progress bar on the newly pressed button
-      dock.classList.remove('auto'); void dock.offsetWidth; dock.classList.add('auto');
+      pick((current + 1) % btns.length);
+      // restart the fill on the newly pressed chip
+      box.classList.remove('auto'); void box.offsetWidth; box.classList.add('auto');
     }, AUTO_MS);
   }
 
-  btns.forEach(function (b) {
-    b.addEventListener('click', function () { stopAuto(); setChapter(Number(b.getAttribute('data-goto')) || 0); });
-  });
-  document.addEventListener('vca:pick', function (e) {
-    var i = e.detail && e.detail.index;
-    if (typeof i !== 'number' || !btns[i]) return;
-    stopAuto();
-    setChapter(i);
-  });
+  btns.forEach(function (b, i) { b.addEventListener('click', function () { stopAuto(); pick(i); }); });
+  document.addEventListener('vca:pick', function () { stopAuto(); pick((current + 1) % btns.length); });
   document.addEventListener('vca:grab', stopAuto);
-
   if (hero && 'IntersectionObserver' in window) {
     new IntersectionObserver(function (en) { inView = en[0].isIntersecting; }).observe(hero);
   }
-  setChapter(0);
-  // The devices exist only on wide screens with WebGL; on phones the dock is hidden and nothing plays.
-  if (window.matchMedia('(min-width: 961px)').matches) startAuto();
+  pick(0);
+  startAuto();
+})();
+
+/* ---------- menu button: its text follows the section in view (each section has data-cta) ---------- */
+(function navCta() {
+  var btn = document.getElementById('navCta');
+  var secs = Array.prototype.slice.call(document.querySelectorAll('[data-cta]'));
+  if (!btn || !secs.length) return;
+  var shown = btn.textContent, queued = false;
+  function update() {
+    queued = false;
+    var line = window.innerHeight * 0.4, want = shown;
+    for (var i = 0; i < secs.length; i++) {
+      var r = secs[i].getBoundingClientRect();
+      if (r.top <= line && r.bottom > line) { want = secs[i].getAttribute('data-cta'); break; }
+    }
+    // On the sign-up section itself the button would point at itself, so it steps aside.
+    btn.classList.toggle('gone', !want);
+    if (!want || want === shown) return;
+    shown = want;
+    btn.classList.add('swap');
+    setTimeout(function () { btn.textContent = want; btn.classList.remove('swap'); }, 180);
+  }
+  window.addEventListener('scroll', function () { if (!queued) { queued = true; requestAnimationFrame(update); } }, { passive: true });
+  update();
 })();
 
 /* ---------- analytics example bars: widths come from data-w ---------- */

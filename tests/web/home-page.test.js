@@ -58,7 +58,9 @@ test('home page: the 3D scripts use an exact three.js release and both canvases 
   assert.match(html, /<canvas id="heroScene"/);
   assert.match(html, /<canvas id="seatScene"/);
   assert.match(html, /<canvas id="demoScene"/);
-  assert.match(html, /<div class="fallback"/, 'static fallback for the hero must stay in the page');
+  // Without 3D the hero card still shows what the lead said and the answer, as plain HTML.
+  assert.match(html, /id="saidChips"/, 'the objection chips must stay in the page');
+  assert.match(html, /id="answerText"/, 'the answer must stay in the page as text');
 });
 
 test('home page: calculator and seat scene share the vca:seats event; seat label exists', () => {
@@ -67,13 +69,13 @@ test('home page: calculator and seat scene share the vca:seats event; seat label
   assert.match(html, /id="seatLabel"/);
 });
 
-test('home page: hero dock, demo phone and timeline wire to elements that exist', () => {
-  for (const id of ['dock', 'exploreCap', 'demoScene', 'dialBtn', 'hangBtn', 'timeline']) {
+test('home page: hero chips, menu button, demo phone and timeline wire to elements that exist', () => {
+  for (const id of ['saidChips', 'answerText', 'navCta', 'demoScene', 'dialBtn', 'hangBtn', 'timeline']) {
     assert.match(html, new RegExp('id="' + id + '"'), 'missing id ' + id);
   }
   assert.match(js, /getElementById\('timeline'\)|\$\('timeline'\)/);
-  // The dock and the 3D scenes talk through these events; both sides must use the same names.
-  for (const ev of ['vca:chapter', 'vca:demo']) {
+  // The hero and the 3D scenes talk through these events; both sides must use the same names.
+  for (const ev of ['vca:objection', 'vca:demo']) {
     assert.match(js, new RegExp("CustomEvent\\('" + ev + "'"), 'home.js never sends ' + ev);
     assert.match(scene, new RegExp("addEventListener\\('" + ev + "'"), 'scene.js never listens for ' + ev);
   }
@@ -81,4 +83,9 @@ test('home page: hero dock, demo phone and timeline wire to elements that exist'
     assert.match(scene, new RegExp("CustomEvent\\('" + ev + "'"), 'scene.js never sends ' + ev);
     assert.match(js, new RegExp("addEventListener\\('" + ev + "'"), 'home.js never listens for ' + ev);
   }
+  // Every chip has an answer, and every section's menu-button text is set.
+  for (const m of html.matchAll(/data-obj="([a-z]+)"/g)) {
+    if (/id="saidChips"/.test(html)) assert.match(js, new RegExp('\\b' + m[1] + ':\\s'), 'no answer for chip ' + m[1]);
+  }
+  assert.ok((html.match(/data-cta="/g) || []).length >= 6, 'sections carry data-cta');
 });

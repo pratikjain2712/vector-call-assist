@@ -22,7 +22,7 @@
 <a class="skip" href="#main">Skip to content</a>
 
 <header class="top" id="top">
-  <div class="wrap nav">
+  <div class="nav">
     <a class="brand" href="#hero" aria-label="Vector Call Assist, home">
       <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#2456e6"/><path d="M7 9l9 15 9-15h-4l-5 9-5-9z" fill="#fff"/></svg>
       <span>Vector<em> Call Assist</em></span>
@@ -37,82 +37,88 @@
     </nav>
     <div class="nav-cta">
       <a class="link" href="#account">Sign in</a>
-      <a class="btn btn-primary btn-sm magnetic" href="#account">Start free trial</a>
+      <a class="btn btn-primary btn-sm" id="navCta" href="#account">Start free trial</a>
     </div>
   </div>
 </header>
 
 <main id="main">
 
-<!-- HERO: one screen. The 3D phone and laptop can be dragged and clicked; the dock below them switches the feature shown. -->
-<section class="stage-wrap" id="hero" aria-label="Vector Call Assist">
-  <div class="stage" id="stage">
-    <canvas id="heroScene" aria-hidden="true"></canvas>
-    <div class="fallback" aria-hidden="true">
-      <div class="mock-laptop">
-        <div class="lid"><div class="screen">
-          <span class="kick">Step 2 of 4 · Ask</span>
-          <p>"Is this a good time for two minutes about the offer you asked about?"</p>
-          <span class="next">Next line →</span>
-        </div></div>
-        <div class="base"></div>
+<!-- HERO: centred copy, then a stage card where the visitor picks what the lead said: the 3D laptop shows the
+     answer and the phone goes on call. Walls of sample Vector screens scroll beside it on wide screens. -->
+<section class="hero" id="hero" data-cta="Start free trial" aria-label="Vector Call Assist">
+  <div class="wall wall-l" aria-hidden="true">
+      <div class="wall-track">
+        <div class="wcard"><span class="wk">Step 2 of 4 · Ask</span><p class="wq">"Which course were you looking at, and what would you like to know first?"</p></div>
+        <div class="wcard"><span class="wk">Outcome logged</span><p class="wrow"><b>Riya S.</b><span class="wpill won">Won</span></p><p class="wsub">Talk time 04:12</p></div>
+        <div class="wcard"><span class="wk">Callback</span><p class="wrow"><b>Arjun M.</b><span class="wsub">Today, 5:30 pm</span></p><p class="wsub">Rings on the rep's phone</p></div>
+        <div class="wcard"><span class="wk">Where calls are lost</span><p class="wbar"><span>Greeting</span><i class="w20"></i></p><p class="wbar hot"><span>Offer</span><i class="w75"></i></p><p class="wbar"><span>Close</span><i class="w25"></i></p></div>
+        <div class="wcard"><span class="wk">The lead says</span><p class="wchip">Too expensive</p><p class="wsub">Say: the fee can be paid in three instalments.</p></div>
+        <div class="wcard"><span class="wk">Connect rate today</span><p class="wbig">62%</p><p class="wbar"><span></span><i class="w60"></i></p></div>
+        <div class="wcard"><span class="wk">Step 2 of 4 · Ask</span><p class="wq">"Which course were you looking at, and what would you like to know first?"</p></div>
+        <div class="wcard"><span class="wk">Outcome logged</span><p class="wrow"><b>Riya S.</b><span class="wpill won">Won</span></p><p class="wsub">Talk time 04:12</p></div>
+        <div class="wcard"><span class="wk">Callback</span><p class="wrow"><b>Arjun M.</b><span class="wsub">Today, 5:30 pm</span></p><p class="wsub">Rings on the rep's phone</p></div>
+        <div class="wcard"><span class="wk">Where calls are lost</span><p class="wbar"><span>Greeting</span><i class="w20"></i></p><p class="wbar hot"><span>Offer</span><i class="w75"></i></p><p class="wbar"><span>Close</span><i class="w25"></i></p></div>
+        <div class="wcard"><span class="wk">The lead says</span><p class="wchip">Too expensive</p><p class="wsub">Say: the fee can be paid in three instalments.</p></div>
+        <div class="wcard"><span class="wk">Connect rate today</span><p class="wbig">62%</p><p class="wbar"><span></span><i class="w60"></i></p></div>
       </div>
-      <div class="mock-phone">
-        <div class="pscreen">
-          <span class="kick">Paired</span>
-          <strong>Ready</strong>
-          <span class="muted">Paired with your laptop</span>
-          <span class="timer-pill">Call 00:42</span>
+  </div>
+  <div class="wall wall-r" aria-hidden="true">
+      <div class="wall-track">
+        <div class="wcard"><span class="wk">Team today</span><p class="wrow"><b>Ravi</b><span class="wsub">48 calls</span></p><p class="wrow"><b>Meera</b><span class="wsub">52 calls</span></p><p class="wrow"><b>Arjun</b><span class="wsub">44 calls</span></p></div>
+        <div class="wcard"><span class="wk">On call</span><p class="wbig">00:42</p><p class="wpill sim">On your SIM</p></div>
+        <div class="wcard"><span class="wk">Script v2 published</span><p class="wsub">Reps get it at their next sign-in. Each call records the version used.</p></div>
+        <div class="wcard"><span class="wk">Why it was lost</span><p class="wchip">Price</p><p class="wsub">One tap after the call</p></div>
+        <div class="wcard"><span class="wk">Outcome logged</span><p class="wrow"><b>Neha K.</b><span class="wpill cb">Callback</span></p><p class="wsub">Saturday, 11:00 am</p></div>
+        <div class="wcard"><span class="wk">This week</span><p class="wbig">312 <small>calls</small></p><p class="wsub">118 connected · 21 callbacks</p></div>
+        <div class="wcard"><span class="wk">Team today</span><p class="wrow"><b>Ravi</b><span class="wsub">48 calls</span></p><p class="wrow"><b>Meera</b><span class="wsub">52 calls</span></p><p class="wrow"><b>Arjun</b><span class="wsub">44 calls</span></p></div>
+        <div class="wcard"><span class="wk">On call</span><p class="wbig">00:42</p><p class="wpill sim">On your SIM</p></div>
+        <div class="wcard"><span class="wk">Script v2 published</span><p class="wsub">Reps get it at their next sign-in. Each call records the version used.</p></div>
+        <div class="wcard"><span class="wk">Why it was lost</span><p class="wchip">Price</p><p class="wsub">One tap after the call</p></div>
+        <div class="wcard"><span class="wk">Outcome logged</span><p class="wrow"><b>Neha K.</b><span class="wpill cb">Callback</span></p><p class="wsub">Saturday, 11:00 am</p></div>
+        <div class="wcard"><span class="wk">This week</span><p class="wbig">312 <small>calls</small></p><p class="wsub">118 connected · 21 callbacks</p></div>
+      </div>
+  </div>
+  <div class="hero-core">
+    <span class="eyebrow">For admissions and sales calling teams</span>
+    <h1 id="heroTitle">Close more calls. <span class="hot">Know why the rest were lost.</span></h1>
+    <p class="lede">Your reps follow your best script on the laptop, with the answer to every objection one tap away. Calls go out on their own SIM, and you see the exact step where each lost call went wrong.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary btn-lg magnetic" href="#account">Start my team's free trial <span class="arrow" aria-hidden="true">→</span></a>
+      <a class="btn btn-lg btn-ghost magnetic" href="#demo">Show me a call</a>
+    </div>
+    <p class="micro"><span class="tick" aria-hidden="true">✓</span> 5 days · up to 5 seats · no card needed</p>
+
+    <div class="stage-card" id="stage">
+      <div class="said">
+        <p class="said-q">The lead says…</p>
+        <div class="said-chips" id="saidChips" role="group" aria-label="Pick what the lead said">
+          <button type="button" data-obj="price" aria-pressed="true">Too expensive</button>
+          <button type="button" data-obj="later" aria-pressed="false">Call me later</button>
+          <button type="button" data-obj="joined" aria-pressed="false">Already joined</button>
+        </div>
+        <div class="answer" aria-live="polite">
+          <span class="answer-tag">Your rep sees</span>
+          <p id="answerText">Ask what budget they had in mind. Then mention the fee can be paid in three instalments.</p>
         </div>
       </div>
-    </div>
-
-    <div class="slot">
-      <article class="panel on" data-ch="0">
-        <span class="eyebrow">For admissions and sales calling teams</span>
-        <h1 id="heroTitle">Close more calls. <span class="hot">Know why the rest were lost.</span></h1>
-        <p class="lede">Every rep follows your best script, with the answer to each objection one tap away. You see who called, who connected and the exact step where each lost call went wrong, so you fix that line, not the whole pitch. Calls go out on the rep's own SIM.</p>
-        <div class="cta-row">
-          <a class="btn btn-primary btn-lg magnetic" href="#account">Start free trial <span class="arrow" aria-hidden="true">→</span></a>
-          <a class="btn btn-lg btn-ghost magnetic" href="#demo">Try the live demo</a>
-        </div>
-        <p class="micro"><span class="tick" aria-hidden="true">✓</span> 5 days · up to 5 seats · no card needed</p>
-        <dl class="stats" aria-label="At a glance">
-          <div><dt>Trial length</dt><dd><span data-count="5">5</span> days</dd></div>
-          <div><dt>Seats to try</dt><dd><span data-count="5">5</span> free</dd></div>
-          <div><dt>Per seat, yearly</dt><dd>₹<span data-count="399">399</span>/mo</dd></div>
-          <div><dt>Setup per rep</dt><dd><span data-count="20">20</span> min</dd></div>
-        </dl>
-      </article>
-
-    </div>
-
-    <div class="explore" id="explore">
-      <p class="explore-hint" id="exploreHint"><span aria-hidden="true">↻</span> Drag to turn · click the phone or laptop</p>
-      <div class="dock" id="dock" aria-label="See each part of Vector">
-        <button type="button" data-goto="0" aria-pressed="true">Overview</button>
-        <button type="button" data-goto="1" aria-pressed="false">Pair</button>
-        <button type="button" data-goto="2" aria-pressed="false">Call</button>
-        <button type="button" data-goto="3" aria-pressed="false">Script</button>
-        <button type="button" data-goto="4" aria-pressed="false">Outcome</button>
-        <button type="button" data-goto="5" aria-pressed="false">Team</button>
+      <div class="stage-visual">
+        <canvas id="heroScene" aria-hidden="true"></canvas>
+        <p class="stage-hint"><span aria-hidden="true">↻</span> Drag to turn · click a device</p>
       </div>
-      <p class="explore-cap" id="exploreCap" aria-live="polite">The rep's phone and laptop, paired. Pick a step to see it.</p>
     </div>
   </div>
 </section>
 
-<div class="trust" aria-label="What Vector gives your team">
-  <div class="wrap trust-row">
-    <div><b>Own SIM</b><span>Calls leave the rep's own phone line</span></div>
-    <div><b>Script on screen</b><span>The next line is always in view</span></div>
-    <div><b>Callbacks that ring</b><span>Reminders on the phone at the set time</span></div>
-    <div><b>Results per seat</b><span>Outcomes sync, stored once each</span></div>
+<div class="built" aria-label="Who Vector is built for">
+  <div class="wrap built-row">
+    <span class="built-k">Built for</span>
+    <span>Coaching institutes</span><span>Admissions teams</span><span>Ed-tech counselling</span><span>Inside sales</span>
   </div>
 </div>
 
 <!-- LIVE DEMO -->
-<section class="section band demo-sec" id="demo">
+<section class="section band demo-sec" id="demo" data-cta="Start my team's trial">
   <div class="wrap">
     <div class="demo-head">
       <div class="section-head reveal">
@@ -178,11 +184,12 @@
         <ul class="log" id="log" aria-live="polite"></ul>
       </div>
     </div>
+    <p class="sec-cta reveal"><a class="btn btn-primary" href="#account">Start my team's trial <span class="arrow" aria-hidden="true">→</span></a></p>
   </div>
 </section>
 
 <!-- WHO IT'S FOR -->
-<section class="section" id="who">
+<section class="section" id="who" data-cta="Try it with my team">
   <div class="wrap">
     <div class="section-head reveal">
       <span class="eyebrow">Who it's for</span>
@@ -203,13 +210,14 @@
         <p>Reps call from their own number, callbacks ring on the phone on time, and every outcome lands on one admin page.</p>
       </article>
     </div>
+    <p class="sec-cta reveal"><a class="btn btn-primary" href="#account">Try it with my team <span class="arrow" aria-hidden="true">→</span></a></p>
   </div>
 </section>
 
 
 
 <!-- ANALYTICS -->
-<section class="section" id="insights" aria-labelledby="insightsTitle">
+<section class="section" id="insights" aria-labelledby="insightsTitle" data-cta="Find my lost calls">
   <div class="wrap">
     <div class="section-head reveal">
       <span class="eyebrow">Analytics</span>
@@ -257,12 +265,12 @@
         </article>
       </div>
     </div>
-    <p class="insight-cta reveal"><a class="btn btn-ghost" href="#demo">See it in the live demo</a></p>
+    <p class="sec-cta reveal"><a class="btn btn-primary" href="#account">Find where my calls are lost <span class="arrow" aria-hidden="true">→</span></a> <a class="btn btn-ghost" href="#demo">Try the live demo</a></p>
   </div>
 </section>
 
 <!-- HOW IT WORKS -->
-<section class="section" id="how">
+<section class="section" id="how" data-cta="Start in 20 minutes">
   <div class="wrap">
     <div class="section-head reveal">
       <span class="eyebrow">How it works</span>
@@ -274,10 +282,11 @@
       <li class="tstep reveal"><span class="num">3</span><h3>Work the list</h3><p>The laptop shows the next lead and the script. Each Dial starts the call on the rep's SIM through the paired phone.</p></li>
       <li class="tstep reveal"><span class="num">4</span><h3>Results</h3><p>Each outcome is saved on the laptop first, then synced per seat. Admins see the team's progress live.</p></li>
     </ol>
+    <p class="sec-cta reveal"><a class="btn btn-primary" href="#account">Start my team's free trial <span class="arrow" aria-hidden="true">→</span></a></p>
   </div>
 </section>
 
-<section class="section band" id="pricing">
+<section class="section band" id="pricing" data-cta="Start my 5-day trial">
   <div class="wrap">
     <div class="section-head reveal">
       <span class="eyebrow">Pricing</span>
@@ -355,7 +364,7 @@
 </section>
 
 <!-- ACCOUNT -->
-<section class="section" id="account">
+<section class="section" id="account" data-cta="">
   <div class="wrap account">
     <div class="account-copy reveal">
       <span class="eyebrow">Get started</span>
@@ -444,7 +453,7 @@
 </section>
 
 <!-- FAQ -->
-<section class="section band" id="faq">
+<section class="section band" id="faq" data-cta="Start free trial">
   <div class="wrap">
     <div class="section-head reveal">
       <span class="eyebrow">Questions</span>
