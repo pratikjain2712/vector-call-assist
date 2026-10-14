@@ -306,6 +306,9 @@
       tween(perMonth);
       $('nudge').textContent = nudgeText(n, vol, yearly);
       $('rowBundle').textContent = bundleName(n) + ' bundle';
+      // The seat box beside the calculator: the team size and its bundle, with that bundle's plan highlighted.
+      $('seatLabel').textContent = plural(n) + ' · ' + bundleName(n);
+      all('.plan[data-bundle]').forEach(function (p) { p.classList.toggle('featured', p.getAttribute('data-bundle') === bundleName(n)); });
       $('rowSeat').textContent = inr(seatBase) + ' × ' + plural(n);
       $('rowVol').textContent = vol ? '−' + vol + '%' : 'None yet';
       $('rowAddon').textContent = addon.checked ? inr(addBase) + ' × ' + plural(n) : 'Not included';
@@ -657,6 +660,7 @@
   var root = document.getElementById('lossExplorer');
   if (!root) return;
   var list = document.getElementById('lossBars');
+  var plan = document.getElementById('lossBlueprint');
   var summary = document.getElementById('lossSummary');
   var detail = document.getElementById('lossDetail');
 
@@ -719,8 +723,13 @@
     summary.textContent = TOTAL[ver] + ' of every 100 calls are lost on script v' + (ver + 1) +
       (ver === 1 ? ', down from ' + TOTAL[0] + ' on v1.' : '. Switch to v2 to see the next version.');
 
+    // By step: the call drawn as a blueprint. By reason or objection: bars.
+    var asPlan = view === 'step' && !!plan && !!document.createElementNS;
+    if (plan) plan.hidden = !asPlan;
+    list.hidden = asPlan;
+    if (asPlan) drawBlueprint(rows, top);
     list.textContent = '';
-    rows.forEach(function (r) {
+    if (!asPlan) rows.forEach(function (r) {
       var li = el('li', r.key === top ? 'hot' : '');
       var b = el('button', 'bar-btn');
       b.type = 'button';
@@ -745,13 +754,84 @@
     drawDetail();
   }
 
+  /* The call as a blueprint (Awwwards-style technical drawing): each script step is a box on a grid, the
+     calls still alive are written on the line between steps, and a marker under each step is sized by the
+     calls lost there. The biggest marker pulses. Markers are buttons: they open the same detail as the bars.
+     Wide cards draw left to right; narrow cards draw top to bottom so the labels stay readable. */
+  var NS = 'http://www.w3.org/2000/svg';
+  function svg(tag, attrs, text) {
+    var n = document.createElementNS(NS, tag);
+    Object.keys(attrs || {}).forEach(function (k) { n.setAttribute(k, attrs[k]); });
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function drawBlueprint(rows, top) {
+    plan.textContent = '';
+    var wide = plan.clientWidth === 0 || plan.clientWidth >= 620;
+    plan.classList.toggle('tall', !wide);
+    var W = wide ? 900 : 360, H = wide ? 330 : 520;
+    var s = svg('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'group', 'aria-label': 'Blueprint of a call: where calls are lost at each step' });
+    // Corner crosshairs
+    [[14, 14], [W - 14, 14], [14, H - 14], [W - 14, H - 14]].forEach(function (c) {
+      s.appendChild(svg('path', { d: 'M' + (c[0] - 7) + ' ' + c[1] + 'h14M' + c[0] + ' ' + (c[1] - 7) + 'v14', class: 'bp-cross' }));
+    });
+    s.appendChild(svg('text', { x: 28, y: 34, class: 'bp-note' }, (wide ? 'FIG. 1 — ONE CALL, STEP BY STEP · SCRIPT V' : 'FIG. 1 — ONE CALL · SCRIPT V') + (ver + 1)));
+    var n = rows.length, alive = 100, max = 0;
+    rows.forEach(function (r) { max = Math.max(max, r.v[0], r.v[1]); });
+    var pos = rows.map(function (r, i) {
+      return wide ? { x: 180 + i * ((W - 360) / (n - 1)), y: 130 } : { x: 120, y: 96 + i * ((H - 170) / (n - 1)) };
+    });
+    // The line through the steps, with the calls still alive written between them.
+    var d = '';
+    pos.forEach(function (p, i) { d += (i ? 'L' : 'M') + p.x + ' ' + p.y; });
+    s.appendChild(svg('path', { d: (wide ? 'M30 130L' + pos[0].x + ' 130' : 'M120 52L120 ' + pos[0].y) + d.replace(/^M/, 'L') + (wide ? 'L' + (W - 30) + ' 130' : 'L120 ' + (H - 40)), class: 'bp-line' }));
+    s.appendChild(svg('text', wide ? { x: 34, y: 118, class: 'bp-count' } : { x: 132, y: 64, class: 'bp-count' }, '100 calls'));
+    rows.forEach(function (r, i) {
+      var p = pos[i], v = r.v[ver], hot = r.key === top, on = picked === r.key;
+      alive -= v;
+      var g = svg('g', { class: 'bp-step' + (hot ? ' hot' : '') + (on ? ' on' : '') });
+      g.appendChild(svg('text', wide ? { x: p.x, y: p.y - 34, class: 'bp-idx', 'text-anchor': 'middle' } : { x: 22, y: p.y + 4, class: 'bp-idx' }, '[0' + (i + 1) + ']'));
+      g.appendChild(svg('rect', { x: p.x - 52, y: p.y - 21, width: 104, height: 42, rx: 10, class: 'bp-box' }));
+      g.appendChild(svg('text', { x: p.x, y: p.y + 5, class: 'bp-label', 'text-anchor': 'middle' }, r.key));
+      // Calls still alive after this step, on the line to the next one.
+      var next = pos[i + 1];
+      var cx = next ? (p.x + next.x) / 2 : (wide ? p.x + 66 : p.x), cy = next ? (p.y + next.y) / 2 : (wide ? p.y - 12 : p.y + 40);
+      g.appendChild(svg('text', wide ? { x: cx, y: next ? cy - 10 : cy, class: 'bp-count', 'text-anchor': next ? 'middle' : 'start' } : { x: cx + 12, y: cy + 4, class: 'bp-count' }, alive + (next ? '' : ' go on')));
+      // The loss marker, hanging off the step.
+      var rad = 9 + (v / max) * 20;
+      var mx = wide ? p.x : p.x + 160, my = wide ? 246 : p.y;
+      g.appendChild(svg('path', { d: wide ? 'M' + p.x + ' ' + (p.y + 21) + 'V' + (my - rad) : 'M' + (p.x + 52) + ' ' + p.y + 'H' + (mx - rad), class: 'bp-drop' }));
+      var m = svg('g', { class: 'bp-mark', tabindex: '0', role: 'button', 'aria-pressed': String(on),
+        'aria-label': r.key + ': ' + v + ' of every 100 calls lost here' + (ver === 1 && r.v[0] !== v ? ', ' + r.v[0] + ' on v1' : '') });
+      if (hot) m.appendChild(svg('circle', { cx: mx, cy: my, r: rad, class: 'bp-pulse' }));
+      m.appendChild(svg('circle', { cx: mx, cy: my, r: rad, class: 'bp-dot' }));
+      m.appendChild(svg('text', { x: mx, y: my + 5, class: 'bp-v', 'text-anchor': 'middle' }, '−' + v));
+      var delta = ver === 1 ? v - r.v[0] : 0;
+      if (delta) m.appendChild(svg('text', wide ? { x: mx, y: my + rad + 18, class: 'bp-delta ' + (delta < 0 ? 'down' : 'up'), 'text-anchor': 'middle' } : { x: mx + rad + 10, y: my + 5, class: 'bp-delta ' + (delta < 0 ? 'down' : 'up') }, (delta < 0 ? '↓' : '↑') + Math.abs(delta) + ' vs v1'));
+      function choose() { picked = picked === r.key ? null : r.key; draw(); var again = plan.querySelector('.bp-step.on .bp-mark'); if (again) again.focus(); }
+      m.addEventListener('click', choose);
+      m.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); choose(); } });
+      g.appendChild(m);
+      s.appendChild(g);
+    });
+    s.appendChild(svg('text', { x: 28, y: H - 18, class: 'bp-note' }, wide ? 'MARKER SIZE = CALLS LOST AT THAT STEP, PER 100 CALLS' : 'MARKER = CALLS LOST PER 100'));
+    plan.appendChild(s);
+  }
+  // Redraw when the card crosses the wide/narrow line.
+  var lastWide = null;
+  window.addEventListener('resize', function () {
+    if (!plan || plan.hidden) return;
+    var w = plan.clientWidth >= 620;
+    if (w !== lastWide) { lastWide = w; draw(); }
+  });
+
   function drawDetail() {
     var set = DATA[view];
     detail.textContent = '';
     var row = null;
     set.rows.forEach(function (r) { if (r.key === picked) row = r; });
     if (!row) {
-      detail.appendChild(el('p', 'hint', set.unit + ' Tap a bar to see what to change.'));
+      detail.appendChild(el('p', 'hint', set.unit + (view === 'step' ? ' Tap a marker on the drawing' : ' Tap a bar') + ' to see what to change.'));
       return;
     }
     var n = row.v[ver];

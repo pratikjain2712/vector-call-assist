@@ -362,8 +362,6 @@ function initSeats(canvas) {
   function setCount(n) {
     count = Math.max(1, Math.min(MAX, n));
     for (let i = 0; i < MAX; i++) want[i] = i < count ? 1 : 0;
-    const label = document.getElementById('seatLabel');
-    if (label) label.textContent = count + ' of ' + MAX;
   }
   setCount(5);
   document.addEventListener('vca:seats', function (e) { setCount((e.detail && e.detail.count) || 1); });

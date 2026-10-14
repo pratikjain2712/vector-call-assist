@@ -63,6 +63,26 @@ test('home page: the 3D scripts use an exact three.js release and both canvases 
   assert.match(html, /id="answerText"/, 'the answer must stay in the page as text');
 });
 
+test('home page: the calculator owns the seat label, so it updates without 3D', () => {
+  // The label once lived in scene.js only, which phones never load, so it stayed at its placeholder.
+  assert.match(js, /\$\('seatLabel'\)\.textContent = plural\(n\)/, 'home.js must write the seat label');
+  assert.doesNotMatch(scene, /seatLabel/, 'scene.js must not write the seat label');
+  assert.match(html, /id="seatLabel"[^>]*>5 seats · Business</, 'placeholder matches the default of 5 seats');
+  for (const b of ['Starter', 'Team', 'Business']) assert.match(html, new RegExp('data-bundle="' + b + '"'), 'plan ' + b);
+});
+
+test('home page: the seat grid shows only when 3D runs', () => {
+  const css = read(path.join('css', 'home.css'));
+  assert.match(css, /#seatScene \{[^}]*display: none;/);
+  assert.match(css, /\.has-3d #seatScene \{ display: block; \}/);
+});
+
+test('home page: the call blueprint is built with DOM calls, not HTML strings', () => {
+  assert.match(html, /id="lossBlueprint"/);
+  assert.match(js, /createElementNS\(NS, tag\)/);
+  assert.doesNotMatch(js, /innerHTML|outerHTML|insertAdjacentHTML/);
+});
+
 test('home page: calculator and seat scene share the vca:seats event; seat label exists', () => {
   assert.match(js, /new CustomEvent\('vca:seats'/);
   assert.match(scene, /addEventListener\('vca:seats'/);
