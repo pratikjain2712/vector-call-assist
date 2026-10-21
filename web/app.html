@@ -123,7 +123,7 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
 
 /* ---- Workspace, once paired ---- */
 .topbar { background: var(--bg); border-bottom: 1px solid var(--line); position: relative; z-index: 20; }
-.topbar-in { max-width: 1200px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+.topbar-in { max-width: 1600px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
 .brand { margin: 0 auto 0 0; font-size: 1.05rem; font-weight: 700; }
 .brand span { color: var(--muted); font-weight: 400; }
 
@@ -160,13 +160,13 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
 .pill summary::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--yes); }
 .pill[open] summary { border-color: var(--accent); }
 .pill-menu { position: absolute; z-index: 30; right: 0; top: calc(100% + 6px); width: min(300px, calc(100vw - 32px)); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.12); }
-.shell { max-width: 1200px; margin: 0 auto; padding: 20px 16px 32px; display: flex; flex-direction: column; gap: 16px; }
+.shell { max-width: 1600px; margin: 0 auto; padding: 20px 16px 32px; display: flex; flex-direction: column; gap: 16px; }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .panel h2 { margin: 0; font-family: var(--util); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
 /* Wide screens: the call on the left, objections beside it. Narrower: objections under the call. */
 .work, .workmain { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 @media (min-width: 1100px) {
-  .work { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); grid-template-rows: auto 1fr; align-items: start; gap: 16px 20px; }
+  .work { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1fr); grid-template-rows: auto 1fr; align-items: start; gap: 16px 20px; }
   .work .workmain { grid-column: 1; grid-row: 1; }
   .work .objcard { grid-column: 2; grid-row: 1 / span 2; }
   .work .sheetbar { grid-column: 1; grid-row: 2; }
@@ -304,7 +304,14 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
       <details class="pill" id="settings-panel">
         <summary><span data-i18n="settings.open">Settings</span></summary>
         <div class="pill-menu">
-          <label class="check"><input id="pref-large" type="checkbox"> <span data-i18n="settings.large">Large text</span></label>
+          <div class="field"><span class="label" id="pref-size-label" data-i18n="settings.size">Text size</span>
+            <div class="sizes" id="pref-size" role="group" aria-labelledby="pref-size-label">
+              <button type="button" class="size s" data-size="s" aria-pressed="false" data-i18n-label="settings.size.s" aria-label="Small" title="Small">A</button>
+              <button type="button" class="size m" data-size="m" aria-pressed="true" data-i18n-label="settings.size.m" aria-label="Normal" title="Normal">A</button>
+              <button type="button" class="size l" data-size="l" aria-pressed="false" data-i18n-label="settings.size.l" aria-label="Large" title="Large">A</button>
+              <button type="button" class="size xl" data-size="xl" aria-pressed="false" data-i18n-label="settings.size.xl" aria-label="Extra large" title="Extra large">A</button>
+            </div>
+          </div>
           <label class="check"><input id="pref-contrast" type="checkbox"> <span data-i18n="settings.contrast">High contrast</span></label>
           <label class="field"><span class="label" data-i18n="settings.language">Language</span>
             <select id="pref-lang">

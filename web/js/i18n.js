@@ -1,7 +1,8 @@
 /* Interface text in English and Hindi, for the workspace labels only. Hindi is a DRAFT: a native speaker
    must review every Hindi string before it is offered as final.
    Lookup falls back to English when a Hindi string is missing, and to the key itself when neither has it.
-   Elements with data-i18n="key" get their text; data-i18n-placeholder="key" sets a placeholder.
+   Elements with data-i18n="key" get their text; data-i18n-placeholder="key" sets a placeholder;
+   data-i18n-label="key" sets aria-label and title (for buttons whose text is a symbol).
    Nothing here touches lead data. */
 (function (root) {
   const STRINGS = {
@@ -41,7 +42,11 @@
       "timeout.continue": "Continue",
       "timeout.signedOut": "You were signed out after 35 minutes with no activity. Sign in again to keep syncing.",
       "settings.open": "Settings",
-      "settings.large": "Large text",
+      "settings.size": "Text size",
+      "settings.size.s": "Small",
+      "settings.size.m": "Normal",
+      "settings.size.l": "Large",
+      "settings.size.xl": "Extra large",
       "settings.contrast": "High contrast",
       "settings.language": "Language",
       "settings.lang.en": "English",
@@ -107,7 +112,11 @@
       "timeout.continue": "जारी रखें",
       "timeout.signedOut": "35 मिनट तक कोई गतिविधि न होने पर आप साइन आउट हो गए। सिंक जारी रखने के लिए फिर से साइन इन करें।",
       "settings.open": "सेटिंग्स",
-      "settings.large": "बड़ा अक्षर",
+      "settings.size": "अक्षर का आकार",
+      "settings.size.s": "छोटा",
+      "settings.size.m": "सामान्य",
+      "settings.size.l": "बड़ा",
+      "settings.size.xl": "बहुत बड़ा",
       "settings.contrast": "उच्च कंट्रास्ट",
       "settings.language": "भाषा",
       "settings.lang.en": "English",
@@ -159,6 +168,7 @@
     const d = doc || root.document;
     d.querySelectorAll("[data-i18n]").forEach((node) => { node.textContent = translate(node.dataset.i18n, current); });
     d.querySelectorAll("[data-i18n-placeholder]").forEach((node) => { node.placeholder = translate(node.dataset.i18nPlaceholder, current); });
+    d.querySelectorAll("[data-i18n-label]").forEach((node) => { const t = translate(node.dataset.i18nLabel, current); node.setAttribute("aria-label", t); node.title = t; });
   }
 
   root.I18n = {

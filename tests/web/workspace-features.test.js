@@ -176,13 +176,17 @@ test("terms: an acceptance counts only for the same version, with a time", () =>
 test("access settings: prefs are clean, default and stored as three values", () => {
   const ctx = load(["js/i18n.js", "js/access-settings.js"]);
   const A = ctx.AccessSettings;
-  assert.deepEqual(plain(A.normalize(null)), { large: false, contrast: false, lang: "en" });
-  assert.deepEqual(plain(A.normalize({ large: true, contrast: "yes", lang: "hi", leadName: "x" })), { large: true, contrast: false, lang: "hi" });
-  assert.deepEqual(plain(A.bodyClasses({ large: true, contrast: false })), { "large-text": true, "high-contrast": false });
+  assert.deepEqual(plain(A.normalize(null)), { size: "m", contrast: false, lang: "en" });
+  assert.deepEqual(plain(A.normalize({ size: "xl", contrast: "yes", lang: "hi", leadName: "x" })), { size: "xl", contrast: false, lang: "hi" });
+  assert.equal(A.normalize({ size: "huge" }).size, "m");
+  // An older save with the Large text checkbox on becomes the Large step.
+  assert.equal(A.normalize({ large: true }).size, "l");
+  assert.deepEqual(plain(A.bodyClasses({ size: "xl", contrast: false })), { "text-s": false, "text-l": false, "text-xl": true, "high-contrast": false });
+  assert.deepEqual(plain(A.bodyClasses({ size: "m", contrast: true })), { "text-s": false, "text-l": false, "text-xl": false, "high-contrast": true });
   const store = memoryStorage({ [A.KEY]: "{not json" });
-  assert.deepEqual(plain(A.readPrefs(store)), { large: false, contrast: false, lang: "en" });
-  A.writePrefs(store, { large: true, contrast: true, lang: "hi" });
-  assert.deepEqual(Object.keys(JSON.parse(store._map.get(A.KEY))).sort(), ["contrast", "lang", "large"]);
+  assert.deepEqual(plain(A.readPrefs(store)), { size: "m", contrast: false, lang: "en" });
+  A.writePrefs(store, { size: "s", contrast: true, lang: "hi" });
+  assert.deepEqual(Object.keys(JSON.parse(store._map.get(A.KEY))).sort(), ["contrast", "lang", "size"]);
 });
 
 // ---- first-run walkthrough ----

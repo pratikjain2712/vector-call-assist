@@ -1,5 +1,5 @@
 /* Workspace additions: practice banner, terms panel, feedback and walkthrough dialogs, timeout message,
-   settings menu, and the large-text and high-contrast modes (classes on the body). Loaded by app.html.
+   settings menu, and the text-size and high-contrast modes (classes on the body). Loaded by app.html.
    No inline style attributes anywhere (the page's content security policy). */
 
 /* Header: the new buttons wrap on narrow screens. */
@@ -34,11 +34,20 @@
 .pill-menu select, .cbfield select { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; }
 .pill-menu .field { display: flex; flex-direction: column; gap: 4px; }
 
-/* Large text: the root font size scales every rem-based size; body text gets a larger base. */
-:root:has(body.large-text) { font-size: 120%; }
-body.large-text { font-size: 19px; }
-body.large-text .chip, body.large-text .objcard .chip { font-size: 1rem; }
-body.large-text .ans span { font-size: 1.05rem; }
+/* Text size, four steps: the root font size scales every rem-based size; body text gets its own base.
+   Normal (m) has no class. */
+.sizes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.sizes .size { font: inherit; font-weight: 700; line-height: 1; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; min-height: 44px; padding: 0; cursor: pointer; }
+.sizes .size.s { font-size: 13px; } .sizes .size.m { font-size: 16px; } .sizes .size.l { font-size: 20px; } .sizes .size.xl { font-size: 24px; }
+.sizes .size[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: var(--bg); }
+:root:has(body.text-s) { font-size: 90%; }
+body.text-s { font-size: 15px; }
+:root:has(body.text-l) { font-size: 115%; }
+body.text-l { font-size: 18px; }
+:root:has(body.text-xl) { font-size: 130%; }
+body.text-xl { font-size: 20px; }
+body.text-l .chip, body.text-l .objcard .chip, body.text-xl .chip, body.text-xl .objcard .chip { font-size: 1rem; }
+body.text-l .ans span, body.text-xl .ans span { font-size: 1.05rem; }
 
 /* High contrast: solid colours and heavier borders. Light by default, dark when the page is dark. */
 body.high-contrast {
