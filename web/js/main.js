@@ -7,7 +7,7 @@ let FLOW = {
     opts: [{ k: "yes", hint: "It is them", to: "intro" }, { k: "no", hint: "Wrong person picked up", to: "wrong_person" }, { k: "maybe", hint: "“Who is this?”", to: "intro" }] },
   wrong_person: { stage: 0, say: ["Oh, sorry! Is {name} there?"],
     opts: [{ k: "yes", hint: "Hands the phone over", to: "intro" }, { k: "no", hint: "Wrong number", to: "exit_wrong" }, { k: "maybe", hint: "Not available right now", to: "callback" }] },
-  intro: { stage: 0, say: ["Hi {name}, {me} here, from TechSimPlus.", "You recently enquired about Vector 2.0, our Gen-AI program for working professionals. Is this a good time to talk?"],
+  intro: { stage: 0, say: ["Hi {name}, {me} here, from TechSimPlus.", "You recently enquired about Vector 2.0, our live Gen-AI course. Is this a good time to talk?"],
     opts: [{ k: "yes", hint: "Can talk", to: "frame" }, { k: "no", hint: "Busy", to: "callback" }, { k: "maybe", hint: "“What is this about?”", to: "intro_maybe" }] },
   intro_maybe: { stage: 0, say: ["Sure. We run a live Gen-AI course, Vector 2.0.", "I want to check if it is useful for you. Can I ask two quick questions?"],
     opts: [{ k: "yes", hint: "Go ahead", to: "q_work" }, { k: "no", hint: "Not interested", to: "ni_soft" }, { k: "maybe", hint: "Not now", to: "callback" }] },
@@ -28,7 +28,7 @@ let FLOW = {
     opts: [{ k: "yes", hint: "Wants a tech team call", to: "techcall" }, { k: "no", hint: "No questions, continue", to: "q_work" }, { k: "maybe", hint: "Asked something, answered it", to: "q_work" }] },
   techcall: { stage: 1, say: ["Sure, I will set that up. When suits you, this evening or tomorrow?", "Till then, can I ask you two quick questions?"], tip: "Write the time and their question down before you move on.",
     opts: [{ k: "yes", hint: "Gave a time, happy to continue", to: "q_work" }, { k: "no", hint: "Gave a time, has to go", to: "end_techcall" }, { k: "maybe", hint: "Will message a time", to: "end_techcall" }] },
-  q_work: { stage: 1, say: ["So, what do you do right now?", "And how many years of experience do you have?"], tip: "Let them talk. Note the role and years. You will use it in the pitch.",
+  q_work: { stage: 1, say: ["So, what do you do at the moment?"], tip: "Let them talk. If they do not say how long, ask: how many years have you been doing this? Note the role and years. You will use them in the pitch.",
     opts: [{ k: "yes", hint: "Working developer or engineer", to: "q_python" }, { k: "no", hint: "Student or fresher", to: "fresher" }, { k: "maybe", hint: "Non-coding role", to: "q_python" }] },
   fresher: { stage: 1, say: ["Okay. I will be honest, this is made for working engineers.", "But if your Python is good, you can still do it. How is your Python?"],
     opts: [{ k: "yes", hint: "Good", to: "q_genai" }, { k: "no", hint: "Weak or none", to: "python_no" }, { k: "maybe", hint: "Basic", to: "python_maybe" }] },
@@ -827,13 +827,22 @@ function refreshLinkPanel() {
 /* ---- Phone connection: checked every 15 s while this tab is visible, and on every request ---- */
 let linkHealth = "checking";   // checking | ok | offline | unpaired | clock
 let linkError = "";
+let linkMisses = 0;   // unanswered requests in a row: one is often the phone's Wi-Fi waking up, so it takes two to show "offline"
+let recheck = null;
 
 async function phone(op, extra) {
   try {
     const r = await PhoneLink.request(op, extra);
+    linkMisses = 0;
     setHealth("ok");
     return r;
   } catch (e) {
+    if (e.unreachable && ++linkMisses < 2 && linkHealth === "ok") {
+      // First miss while connected: keep showing connected and look again in 3 seconds instead of 15.
+      clearTimeout(recheck);
+      recheck = setTimeout(checkPhone, 3000);
+      throw e;
+    }
     setHealth(e.unpaired ? "unpaired" : e.clock ? "clock" : e.unreachable ? "offline" : linkHealth, e.message);
     throw e;
   }
