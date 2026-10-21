@@ -13,6 +13,7 @@
   var NAME_KEY = 'vca-trial-institute';   // the institute name typed before the link is sent (this tab only)
   // A magic link returns with the session in the URL hash. Read it before the client clears it.
   var fromLink = /access_token=|type=magiclink|error_code=/.test(location.hash);
+  var passwordSignIn = false;   // set while a Sign in with a password is under way: go straight in, like a link
   var client = (cfg.supabaseUrl && cfg.supabaseAnonKey && window.supabase && window.supabase.createClient)
     ? window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey)
     : null;
@@ -394,10 +395,12 @@
       // Sign-in tab with a password: sign in at once, no email. The session handler then routes by role.
       var password = form.elements.password ? form.elements.password.value : '';
       if (!create && password) {
+        passwordSignIn = true;
         client.auth.signInWithPassword({ email: email, password: password }).then(function (res) {
           if (res.error) throw res.error;
           form.elements.password.value = '';
         }).catch(function (err) {
+          passwordSignIn = false;
           setMsg(msg, friendly(err), 'error');
         }).then(function () {
           busy = false;
@@ -533,7 +536,7 @@
   } else {
     client.auth.onAuthStateChange(function (event, session) {
       if (session && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
-        route(session, fromLink);
+        route(session, fromLink || passwordSignIn);
       } else if (event === 'SIGNED_OUT') {
         show('stateSignedOut');
       }
