@@ -10,6 +10,7 @@ import android.net.LinkProperties
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.net.wifi.WifiManager
 import android.os.Handler
 import android.os.Looper
 import org.json.JSONArray
@@ -76,10 +77,12 @@ object LinkServer {
     private const val JSON = "application/json"
     private const val NOTIFY_CHANNEL = "vector_link_calls"
     private const val NOTIFY_ID = 4201
+    private const val MOVED_NOTIFY_ID = 4202
 
     @Volatile private var server: ServerSocket? = null
     @Volatile private var host: String? = null     // the Wi-Fi address the certificate names
     private var netCallback: ConnectivityManager.NetworkCallback? = null
+    private val wifiLocks = mutableListOf<WifiManager.WifiLock>()   // held while the link listens, so Wi-Fi power saving does not drop requests
     private val pool = Executors.newCachedThreadPool()
     private val main = Handler(Looper.getMainLooper())
     private val seenNonces = ConcurrentHashMap<String, Long>()
@@ -128,6 +131,7 @@ object LinkServer {
         val s = server ?: return   // already stopped: nothing to close or log
         s.close()
         server = null
+        releaseWifiLockLocked()
         pendingSecret = null
         pendingDisplay = null
         EventLog.add("LINK_STOPPED")
@@ -142,6 +146,7 @@ object LinkServer {
         s.bind(InetSocketAddress(PORT))
         server = s
         host = ip
+        holdWifiLockLocked(ctx)
         Thread({ acceptLoop(s, ctx) }, "vca-link").start()
         EventLog.add("LINK_STARTED", null, "https port $PORT")
     }
@@ -238,7 +243,10 @@ object LinkServer {
         server = null
         try {
             bindLocked(ctx)
-            if (moved) EventLog.add("LINK_ADDRESS_CHANGED", null, "now $ip:$PORT, laptop must pair again")
+            if (moved) {
+                EventLog.add("LINK_ADDRESS_CHANGED", null, "now $ip:$PORT, laptop must pair again")
+                if (isPaired(ctx)) showMovedNotification(ctx, "$ip:$PORT")
+            }
         } catch (e: Exception) {
             EventLog.add("LINK_RESUME_FAILED", null, "${e.javaClass.simpleName}: ${e.message?.take(80)}")
         }
@@ -526,6 +534,51 @@ object LinkServer {
         val hit = CallLogProbe.lookup(ctx, s) ?: return base.put("pending", true).put("reason", "call log not updated yet")
         return base.put("pending", false).put("connectedSeconds", hit.connectedSeconds)
             .put("answered", hit.connectedSeconds > 0).put("logStartMs", hit.logStartMs)
+    }
+
+    /**
+     * Without this, many phones put the Wi-Fi into power saving after the screen goes off, and the laptop's
+     * requests time out ("Phone offline"). Two locks: low-latency mode while the screen is on, and the older
+     * high-performance mode, which some Android versions still honour with the screen off. Newer versions
+     * may ignore it; the foreground service and "Battery unrestricted" then matter most.
+     */
+    @Suppress("DEPRECATION")   // WIFI_MODE_FULL_HIGH_PERF
+    private fun holdWifiLockLocked(ctx: Context) {
+        if (wifiLocks.isNotEmpty()) return
+        val wm = ctx.getSystemService(WifiManager::class.java) ?: return
+        for (mode in listOf(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, WifiManager.WIFI_MODE_FULL_HIGH_PERF)) {
+            try {
+                val lock = wm.createWifiLock(mode, "vector:link")
+                lock.setReferenceCounted(false)
+                lock.acquire()
+                wifiLocks += lock
+            } catch (e: Exception) {
+                EventLog.add("LINK_WIFI_LOCK_FAILED", null, "mode $mode: ${e.javaClass.simpleName}")
+            }
+        }
+    }
+
+    private fun releaseWifiLockLocked() {
+        for (lock in wifiLocks) try { if (lock.isHeld) lock.release() } catch (e: Exception) {}
+        wifiLocks.clear()
+    }
+
+    /** The router gave the phone a new address: the laptop cannot reach it until it scans the pairing QR again. */
+    private fun showMovedNotification(ctx: Context, address: String) {
+        val nm = ctx.getSystemService(NotificationManager::class.java) ?: return
+        if (!nm.areNotificationsEnabled()) return
+        nm.createNotificationChannel(NotificationChannel(NOTIFY_CHANNEL, "Calls from the laptop", NotificationManager.IMPORTANCE_DEFAULT))
+        val open = android.app.PendingIntent.getActivity(ctx, 0, android.content.Intent(ctx, MainActivity::class.java),
+            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT)
+        val note: Notification = Notification.Builder(ctx, NOTIFY_CHANNEL)
+            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setContentTitle("Phone address changed")
+            .setContentText("Now $address. On the laptop, tap Pair again and scan the QR here.")
+            .setStyle(Notification.BigTextStyle().bigText("The Wi-Fi router gave this phone a new address ($address), so the laptop can no longer reach it. On the laptop, tap Pair again and scan the QR shown here. To stop this happening, reserve a fixed address for this phone in the router settings."))
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .build()
+        nm.notify(MOVED_NOTIFY_ID, note)
     }
 
     private fun showDialNotification(ctx: Context, number: String) {
