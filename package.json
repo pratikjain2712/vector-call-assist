@@ -1,0 +1,16 @@
+{
+  "name": "vector-call-assist-tests",
+  "private": true,
+  "description": "Test tooling only. The website itself has no build step and no npm dependencies.",
+  "scripts": {
+    "test:unit": "node --test tests/web/",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.45.0",
+    "@supabase/supabase-js": "2.45.4",
+    "jsqr": "1.4.0",
+    "three": "0.160.0",
+    "xlsx": "0.18.5"
+  }
+}

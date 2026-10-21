@@ -10,3 +10,9 @@ captures/
 
 # Local Claude tooling, not part of the app
 .claude/
+
+# Test tooling (package.json): installed packages and Playwright output
+node_modules/
+test-results/
+playwright-report/
+tests/e2e/.local-env.json
