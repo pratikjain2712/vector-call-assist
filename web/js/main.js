@@ -7,7 +7,7 @@ let FLOW = {
     opts: [{ k: "yes", hint: "It is them", to: "intro" }, { k: "no", hint: "Someone else picked up", to: "wrong_person" }, { k: "maybe", hint: "“Who is this?”", to: "intro" }] },
   wrong_person: { stage: 0, say: ["Oh, sorry! Is {name} there?"],
     opts: [{ k: "yes", hint: "Gives the phone to them", to: "intro" }, { k: "no", hint: "Wrong number", to: "exit_wrong" }, { k: "maybe", hint: "Not there right now", to: "callback" }] },
-  intro: { stage: 0, say: ["Hi {name}, this is {me} from TechSimPlus.", "You had enquired about Vector 2.0, our live Gen-AI course. Is this a good time to talk?"],
+  intro: { stage: 0, say: ["Hi {name}, this is {me} from TechSimPlus.", "You had enquired about Vector 2.0, our live Gen-AI course. Right now we have a ₹5,000 offer, till 30 October. Is this a good time to talk?"],
     opts: [{ k: "yes", hint: "Can talk", to: "frame" }, { k: "no", hint: "Busy", to: "callback" }, { k: "maybe", hint: "“What is this about?”", to: "intro_maybe" }] },
   intro_maybe: { stage: 0, say: ["Sure. Vector 2.0 is our live Gen-AI course.", "I want to see if it is useful for you. Can I ask two small questions?"],
     opts: [{ k: "yes", hint: "Go ahead", to: "q_work" }, { k: "no", hint: "Not interested", to: "ni_soft" }, { k: "maybe", hint: "Not now", to: "callback" }] },
@@ -21,6 +21,28 @@ let FLOW = {
     opts: [{ k: "yes", hint: "Gave a time", to: "callback_ok" }, { k: "no", hint: "“Do not call back”", to: "exit_dnc" }, { k: "maybe", hint: "“Just message me”", to: "followup_n" }] },
   callback_ok: { stage: 0, say: ["Okay, I will call you then. Thank you, {name}!"],
     opts: [{ k: "next", hint: "Call finished", to: "end_callback" }] },
+
+  // Intro call, 2 to 5 minutes: check the fit, give the short pitch and the fee, then book a full call.
+  i_open: { stage: 0, say: ["Hello, am I speaking with {name}?"], tip: "Smile before you speak. Speak slowly.",
+    opts: [{ k: "yes", hint: "It is them", to: "i_intro" }, { k: "no", hint: "Someone else picked up", to: "i_wrong" }, { k: "maybe", hint: "“Who is this?”", to: "i_intro" }] },
+  i_wrong: { stage: 0, say: ["Oh, sorry! Is {name} there?"],
+    opts: [{ k: "yes", hint: "Gives the phone to them", to: "i_intro" }, { k: "no", hint: "Wrong number", to: "exit_wrong" }, { k: "maybe", hint: "Not there right now", to: "callback" }] },
+  i_intro: { stage: 0, say: ["Hi {name}, this is {me} from TechSimPlus.", "You had enquired about Vector 2.0, our live Gen-AI course. Right now we have a ₹5,000 offer, till 30 October. Do you have 2 minutes?"],
+    opts: [{ k: "yes", hint: "Has 2 minutes", to: "i_fit" }, { k: "no", hint: "Busy", to: "callback" }, { k: "maybe", hint: "“What is this about?”", to: "i_fit" }] },
+  i_fit: { stage: 1, say: ["Great. What work are you doing right now?", "And do you know Python?"], tip: "Only note the job and the Python level. Do not go deep on this call.",
+    opts: [{ k: "yes", hint: "Working, knows Python", to: "i_pitch" }, { k: "no", hint: "Student, or no Python", to: "i_fresher" }, { k: "maybe", hint: "Some Python", to: "i_pitch" }] },
+  i_fresher: { stage: 1, say: ["Okay. This course is mainly for working engineers who know Python.", "If you know another coding language, we give you recorded Python classes. Still interested?"],
+    opts: [{ k: "yes", hint: "Still interested", to: "i_pitch" }, { k: "no", hint: "Not for them", to: "exit_notfit" }, { k: "maybe", hint: "Not sure", to: "i_pitch" }] },
+  i_pitch: { stage: 2, say: ["In short: a 3-month live course, taught by a senior Gen-AI developer.", "You build five real apps, and get five mock interviews and a mentor.", "Does this sound useful for you?"], tip: "Keep it short. The details are for the full call.",
+    opts: [{ k: "yes", hint: "Sounds useful", to: "i_fee" }, { k: "no", hint: "Not convinced", to: "i_no" }, { k: "maybe", hint: "Wants more details", to: "i_next" }] },
+  i_no: { stage: 2, say: ["No problem. What is stopping you?"], tip: "Tap the matching worry in the list, then come back here.",
+    opts: [{ k: "yes", hint: "Worry answered", to: "i_fee" }, { k: "no", hint: "Still a no", to: "exit_polite" }, { k: "maybe", hint: "Wants more details", to: "i_next" }] },
+  i_fee: { stage: 4, say: ["The full fee is ₹25,000. With the offer, you save ₹5,000: only ₹20,000 if you join by 30 October.", "You can pay ₹6,000 to join, and the rest within 15 days. And there is a full refund within 3 days."], tip: "Now stop talking. Let them speak first.",
+    opts: [{ k: "yes", hint: "Ready to join now", to: "close" }, { k: "no", hint: "Too expensive", to: "fee_no" }, { k: "maybe", hint: "Wants to think", to: "i_next" }] },
+  i_next: { stage: 5, say: ["I will send you the syllabus and details on WhatsApp.", "Can we do a 10-minute call tomorrow or this weekend? I will explain fully and answer your doubts."], tip: "Book the time now. On that call, choose Full call.",
+    opts: [{ k: "yes", hint: "Gave a time", to: "i_booked" }, { k: "no", hint: "“Just send the details”", to: "followup_n" }, { k: "maybe", hint: "Will message a time", to: "end_details" }] },
+  i_booked: { stage: 5, say: ["Perfect, I will call you then. Thank you, {name}!"],
+    opts: [{ k: "next", hint: "Call finished", to: "end_followup" }] },
 
   q_curriculum: { stage: 1, say: ["First, did you get a chance to see the course syllabus?"],
     opts: [{ k: "yes", hint: "Saw it", to: "curr_yes" }, { k: "no", hint: "Not yet", to: "q_work" }, { k: "maybe", hint: "Saw a little", to: "q_work" }] },
@@ -81,7 +103,7 @@ let FLOW = {
   exit_later: { stage: 3, say: ["I understand. It is better to join when you have time.", "I will send you the details on WhatsApp, for later. Thank you, {name}."],
     opts: [{ k: "next", hint: "Call finished", to: "end_details" }] },
 
-  fee: { stage: 4, say: ["Now, the fees. The full fee is ₹25,000.", "But if you join by 30 October, it is only ₹20,000. Everything is included."], tip: "Now stop talking. Let them speak first.",
+  fee: { stage: 4, say: ["Now, the fees. The full fee is ₹25,000.", "But with our offer, you save ₹5,000. It is only ₹20,000 if you join by 30 October. Everything is included."], tip: "Now stop talking. Let them speak first.",
     opts: [{ k: "yes", hint: "Fine with it", to: "close" }, { k: "no", hint: "Too expensive", to: "fee_no" }, { k: "maybe", hint: "Quiet, or “hmm”", to: "fee_maybe" }] },
   fee_maybe: { stage: 4, say: ["And we give a full refund within 3 days, no questions asked.", "So if you do not like it, you get your money back. Okay?"],
     opts: [{ k: "yes", hint: "Okay", to: "close" }, { k: "no", hint: "Still too much", to: "fee_no" }, { k: "maybe", hint: "Wants to think", to: "think" }] },
@@ -92,13 +114,13 @@ let FLOW = {
   fee_only: { stage: 4, say: ["Okay, so only the fee is the problem.", "I cannot promise anything more. But I will check with my team and message you today. Okay?"], tip: "Do not promise a discount. Paying in two parts is the only option you can offer.",
     opts: [{ k: "yes", hint: "Fine", to: "end_followup" }, { k: "no", hint: "Leave it", to: "exit_polite" }, { k: "maybe", hint: "Okay", to: "end_followup" }] },
 
-  close: { stage: 5, say: ["Honestly, I think this course suits you.", "Shall I send you the link on WhatsApp now? You can join with just ₹6,000."], tip: "If they hesitate: the ₹20,000 price ends on 30 October, and registrations close on 11 November.",
+  close: { stage: 5, say: ["Honestly, I think this course suits you.", "Shall I send you the link on WhatsApp now? You get ₹5,000 off, and you can join with just ₹6,000."], tip: "If they hesitate: the ₹5,000 offer ends on 30 October, and registrations close on 11 November.",
     opts: [{ k: "yes", hint: "Send it", to: "won" }, { k: "no", hint: "Not now", to: "think" }, { k: "maybe", hint: "“Let me think”", to: "think" }] },
   won: { stage: 5, say: ["Great, I am sending it now. This is your WhatsApp number, right?", "I will message you tomorrow. Welcome to Vector 2.0, {name}!"],
     opts: [{ k: "next", hint: "Call finished", to: "end_won" }] },
   think: { stage: 5, say: ["Sure, take your time.", "Just tell me, what is stopping you? Time, fees, or the course?"], tip: "Answer it from the worries list, then come back here.",
     opts: [{ k: "yes", hint: "Doubt cleared, ready to join", to: "won" }, { k: "no", hint: "Clear no", to: "exit_polite" }, { k: "maybe", hint: "Still wants time", to: "followup" }] },
-  followup: { stage: 5, say: ["No problem. I will send you the syllabus on WhatsApp.", "Can I call you on Saturday at 11? The ₹20,000 price ends on 30 October."], tip: "Change the day and time to suit them.",
+  followup: { stage: 5, say: ["No problem. I will send you the syllabus on WhatsApp.", "Can I call you on Saturday at 11? The ₹5,000 offer ends on 30 October."], tip: "Change the day and time to suit them.",
     opts: [{ k: "yes", hint: "Agreed", to: "end_followup" }, { k: "no", hint: "“I will call you”", to: "followup_n" }, { k: "maybe", hint: "Different time", to: "followup_time" }] },
   followup_time: { stage: 5, say: ["Sure. Which day is good for you?", "Okay, I will call you then. Thank you, {name}!"],
     opts: [{ k: "next", hint: "Time agreed", to: "end_followup" }] },
@@ -115,17 +137,17 @@ let FLOW = {
     opts: [{ k: "next", hint: "Call finished", to: "end_dnc" }] },
 
   end_won: { stage: 5, end: { tone: "good", label: "Enrolling", note: "Send the link within five minutes. Message them tomorrow.",
-    msg: "Hi {name}, this is {me} from TechSimPlus. Nice talking to you.\n\nHere is the Vector 2.0 joining page: " + SITE + "\n\nOffer price is ₹20,000 till 30 Oct. You can pay in 2 parts: ₹6,000 to join, the rest within 15 days. Full refund within 3 days, no questions asked. Registrations close on 11 Nov, and the batch starts on 21 Nov.\n\nMessage me here if you need any help." } },
+    msg: "Hi {name}, this is {me} from TechSimPlus. Nice talking to you.\n\nHere is the Vector 2.0 joining page: " + SITE + "\n\nOffer: ₹5,000 off, so ₹20,000 instead of ₹25,000, till 30 Oct. You can pay in 2 parts: ₹6,000 to join, the rest within 15 days. Full refund within 3 days, no questions asked. Registrations close on 11 Nov, and the batch starts on 21 Nov.\n\nMessage me here if you need any help." } },
   end_followup: { stage: 5, end: { tone: "mid", label: "Follow-up booked", note: "Send this now. Put the follow-up in your calendar.",
-    msg: "Hi {name}, this is {me} from TechSimPlus. Nice talking to you. As we discussed, here is Vector 2.0: " + SITE + "\n\nIn short: a 3-month live Gen-AI batch, 5 real projects live on AWS, 5 one-on-one mock interviews with real Gen-AI developers, a personal mentor, and a Demo Day with hiring companies. 2 weekday classes (morning 6:30–8:30 or night 8–10) and a weekend class, 10 to 4. Recordings for life.\n\nOffer price is ₹20,000 till 30 Oct (₹25,000 after that). You can pay in 2 parts: ₹6,000 to join, the rest within 15 days. Full refund within 3 days, no questions asked. Registrations close on 11 Nov, and the batch starts on 21 Nov.\n\nI will call you at the time we agreed. Message me here if you have any doubt before that." } },
+    msg: "Hi {name}, this is {me} from TechSimPlus. Nice talking to you. As we discussed, here is Vector 2.0: " + SITE + "\n\nIn short: a 3-month live Gen-AI batch, 5 real projects live on AWS, 5 one-on-one mock interviews with real Gen-AI developers, a personal mentor, and a Demo Day with hiring companies. 2 weekday classes (morning 6:30–8:30 or night 8–10) and a weekend class, 10 to 4. Recordings for life.\n\nOffer: ₹5,000 off, so ₹20,000 instead of ₹25,000, till 30 Oct. You can pay in 2 parts: ₹6,000 to join, the rest within 15 days. Full refund within 3 days, no questions asked. Registrations close on 11 Nov, and the batch starts on 21 Nov.\n\nI will call you at the time we agreed. Message me here if you have any doubt before that." } },
   end_callback: { stage: 0, end: { tone: "mid", label: "Call back later", note: "Send this so they know your number next time.",
-    msg: "Hi {name}, this is {me} from TechSimPlus. I called about Vector 2.0, our live Gen-AI course. I will call you at the time we agreed.\n\nDetails, if you want to see them first: " + SITE } },
+    msg: "Hi {name}, this is {me} from TechSimPlus. I called about Vector 2.0, our live Gen-AI course. There is a ₹5,000 offer till 30 Oct. I will call you at the time we agreed.\n\nDetails, if you want to see them first: " + SITE } },
   end_techcall: { stage: 1, end: { tone: "mid", label: "Tech team call", note: "Book the tech team call now. Pass on their doubts.",
-    msg: "Hi {name}, this is {me} from TechSimPlus. Nice talking to you. I am setting up a call with our tech team for your Vector 2.0 doubts, at the time we agreed.\n\nCourse details: " + SITE + "\n\nOffer price is ₹20,000 till 30 Oct, and you can pay in 2 parts. Registrations close on 11 Nov, and the batch starts on 21 Nov.\n\nMessage me here if you want to change the time." } },
+    msg: "Hi {name}, this is {me} from TechSimPlus. Nice talking to you. I am setting up a call with our tech team for your Vector 2.0 doubts, at the time we agreed.\n\nCourse details: " + SITE + "\n\nOffer: ₹5,000 off, so ₹20,000 instead of ₹25,000, till 30 Oct. You can pay in 2 parts. Registrations close on 11 Nov, and the batch starts on 21 Nov.\n\nMessage me here if you want to change the time." } },
   end_details: { stage: 5, end: { tone: "mid", label: "Details only", note: "Send this once. Do not keep calling unless they agreed to a call.",
-    msg: "Hi {name}, this is {me} from TechSimPlus. Thank you for your time today. Here are the details of Vector 2.0, our live Gen-AI course: " + SITE + "\n\nRegistrations close on 11 Nov, and the batch starts on 21 Nov. Offer price is ₹20,000 till 30 Oct, and you can pay in 2 parts.\n\nNo hurry. Message me here if you have any questions." } },
+    msg: "Hi {name}, this is {me} from TechSimPlus. Thank you for your time today. Here are the details of Vector 2.0, our live Gen-AI course: " + SITE + "\n\nRegistrations close on 11 Nov, and the batch starts on 21 Nov. Offer: ₹5,000 off, so ₹20,000 instead of ₹25,000, till 30 Oct. You can pay in 2 parts.\n\nNo hurry. Message me here if you have any questions." } },
   end_noanswer: { stage: 0, end: { tone: "mid", label: "No answer", note: "Send this, then try once more at a different time of day.",
-    msg: "Hi {name}, this is {me} from TechSimPlus. I called about your enquiry for Vector 2.0, our Gen-AI course. When can I call you for 5 minutes?" } },
+    msg: "Hi {name}, this is {me} from TechSimPlus. I called about your enquiry for Vector 2.0, our Gen-AI course. There is a ₹5,000 offer till 30 Oct. When can I call you for 5 minutes?" } },
   end_lost: { stage: 5, end: { tone: "bad", label: "Not this time", note: "No message needed. Note the reason they gave. It will help your next call." } },
   end_wrong: { stage: 0, end: { tone: "bad", label: "Wrong number", note: "Mark the number as wrong in your lead sheet." } },
   end_dnc: { stage: 0, end: { tone: "bad", label: "Do not call", note: "Mark this lead as do-not-call. No message, no second try." } }
@@ -146,8 +168,8 @@ const OBJECTIONS = [
 
   { g: "worry", chip: "What is TechSimPlus?", say: "We are a tech training company in Bhopal. We have trained more than 12,000 students. Vector 2.0 is our live Gen-AI course.", tip: "If they ask about placements: our website lists past students at TCS, Infosys, Wipro, Flipkart and Samsung. That is for TechSimPlus overall, not a promise for Vector." },
   { g: "worry", chip: "Where are you based? Is it online?", say: "Our office is in Bhopal. But Vector 2.0 is fully live online, so you can join from anywhere." },
-  { g: "worry", chip: "Too expensive", say: "I understand, ₹20,000 is a big amount. You can pay in two parts, ₹6,000 to join. And there is a full refund within 3 days. Does that help?" },
-  { g: "worry", chip: "Can I pay in instalments?", say: "Yes. ₹6,000 to join, and the rest within 15 days.", tip: "Do not promise a discount. For anything more than two parts, ask the team first." },
+  { g: "worry", chip: "Too expensive", say: "I understand. But right now you save ₹5,000: it is ₹20,000 instead of ₹25,000, till 30 October. You can pay in two parts, ₹6,000 to join. And there is a full refund within 3 days. Does that help?" },
+  { g: "worry", chip: "Can I pay in instalments?", say: "Yes. ₹6,000 to join, and the rest within 15 days. And with the offer, the total is only ₹20,000 till 30 October.", tip: "Do not promise a discount. For anything more than two parts, ask the team first." },
   { g: "worry", chip: "Placement support? Will I get a job?", say: "Yes, we help you prepare and apply for Gen-AI jobs. You get five mock interviews and a Demo Day with hiring companies. But honestly, nobody can guarantee a job." },
   { g: "worry", chip: "No Gen-AI experience", say: "This course is made for people like you. You only need Python. We start from the basics, step by step." },
   { g: "worry", chip: "I do not know Python", say: "If you know any other coding language, you are fine. We give you recorded Python classes to finish before the batch starts." },
@@ -175,7 +197,7 @@ const OBJECTIONS = [
   { g: "worry", chip: "150 is a big batch", say: "Yes, up to 150 students. But your final project and mock interviews are one-on-one. And you get a personal mentor." },
   { g: "worry", chip: "Who is the instructor?", say: "Prateek Mishra. Senior Gen-AI developer in an MNC, with 8 years of experience. He taught the first batch also. I will send you his LinkedIn." },
   { g: "worry", chip: "Need to ask family", say: "Of course. What will they ask you? Tell me, and I will give you the answer now." },
-  { g: "worry", chip: "I will join next batch", say: "You can. But the ₹20,000 price ends on 30 October, and registrations for this batch close on 11 November. What will change for you by the next batch?" },
+  { g: "worry", chip: "I will join next batch", say: "You can. But the ₹5,000 offer is only for this batch, till 30 October. And registrations close on 11 November. What will change for you by the next batch?" },
   { g: "worry", chip: "Will my company pay?", say: "Many people ask this. Let me check the GST invoice details with my team, and I will send them today." },
   { g: "worry", chip: "I do not know the answer", say: "Good question. I do not want to guess. Let me check with my team, and I will message you today." }
 ];
@@ -183,8 +205,13 @@ const OBJECTIONS = [
 
 const WORD = { yes: "Yes", no: "No", maybe: "Maybe", next: "Next" };
 const KEY = { yes: "1", no: "2", maybe: "3", next: "Enter" };
-const LABEL = { open: "Right person", wrong_person: "Lead available", intro: "Has time", intro_maybe: "Okay with questions", frame: "Agreed to talk", q_curriculum: "Checked curriculum", curr_yes: "Wants tech team call", techcall: "Continued after booking tech call", ni_soft: "Thinking of Gen-AI", send_details: "Okay to check back", callback: "Gave callback time", q_work: "Working engineer", fresher: "Python good", q_python: "Comfortable with Python", python_no: "Will do pre-work", q_genai: "Tried Gen-AI", burned: "Past course was recorded", trust: "Open to hear more", q_scale: "Can answer scaling question", experienced: "Done it all in production", q_goal: "Wants Gen-AI role", goal_no: "Projects would help", goal_no2: "Okay to send details", pitch1: "Following the pitch", trust_brand: "Okay to continue", pitch2: "Projects interesting", pitch3: "Is what they want", diff: "Wants timings", pitch_no: "Worry answered", time: "Timings doable", time_no: "Recordings help", time_no2: "Can adjust", fee: "Fine with fee", fee_maybe: "Okay after refund", fee_no: "Instalments work", fee_no2: "Would join if fee was no issue", fee_only: "Okay to wait on payment options", close: "Send link now", think: "Ready after worry", followup: "Follow-up agreed" };
-const BUILTIN = { flow: FLOW, start: "open", scriptId: null, version: null };   // the built-in script: the fallback
+const LABEL = { open: "Right person", wrong_person: "Lead available", intro: "Has time", intro_maybe: "Okay with questions", frame: "Agreed to talk", q_curriculum: "Checked curriculum", curr_yes: "Wants tech team call", techcall: "Continued after booking tech call", ni_soft: "Thinking of Gen-AI", send_details: "Okay to check back", callback: "Gave callback time", q_work: "Working engineer", fresher: "Python good", q_python: "Comfortable with Python", python_no: "Will do pre-work", q_genai: "Tried Gen-AI", burned: "Past course was recorded", trust: "Open to hear more", q_scale: "Can answer scaling question", experienced: "Done it all in production", q_goal: "Wants Gen-AI role", goal_no: "Projects would help", goal_no2: "Okay to send details", pitch1: "Following the pitch", trust_brand: "Okay to continue", pitch2: "Projects interesting", pitch3: "Is what they want", diff: "Wants timings", pitch_no: "Worry answered", time: "Timings doable", time_no: "Recordings help", time_no2: "Can adjust", fee: "Fine with fee", fee_maybe: "Okay after refund", fee_no: "Instalments work", fee_no2: "Would join if fee was no issue", fee_only: "Okay to wait on payment options", close: "Send link now", think: "Ready after worry", followup: "Follow-up agreed", i_intro: "Intro: has 2 minutes", i_fit: "Intro: working, knows Python", i_fresher: "Intro: still interested", i_pitch: "Intro: sounds useful", i_no: "Intro: worry answered", i_fee: "Intro: fine with fee", i_next: "Intro: booked full call" };
+/* Built-in script, two ways in: a short intro call (most first calls) or the full call. The choice is a
+   per-browser convenience in localStorage; it holds no lead data. */
+const CALL_MODES = { intro: { start: "i_open", aim: "aim 2 to 5 min" }, full: { start: "open", aim: "aim 10 to 12 min" } };
+const MODE_KEY = "vca2-call-mode";
+let callMode = (() => { try { return own(CALL_MODES, localStorage.getItem(MODE_KEY)) ? localStorage.getItem(MODE_KEY) : "intro"; } catch (e) { return "intro"; } })();
+const BUILTIN = { flow: FLOW, start: CALL_MODES[callMode].start, scriptId: null, version: null };   // the built-in script: the fallback
 let ACTIVE = BUILTIN;   // the script being walked; see useWanted()
 // Every script question that has a real choice, in script order. Each gets its own column in the Calls tab.
 const QUESTIONS = Object.keys(FLOW).filter((k) => LABEL[k]).map((k) => ({ key: k, label: LABEL[k] }));
@@ -195,7 +222,7 @@ const $ = (id) => document.getElementById(id);
 const own = (map, key) => (Object.prototype.hasOwnProperty.call(map, key) ? map[key] : undefined);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
-const state = { node: "open", history: [], trail: [], objs: [], objection: null, started: null, elapsed: 0, timer: null, callId: null, practice: false };
+const state = { node: BUILTIN.start, history: [], trail: [], objs: [], objection: null, started: null, elapsed: 0, timer: null, callId: null, practice: false };
 let sheet = null;
 let phoneCheck = null;   // ImportCheck result for the sheet: flags per lead and counts. Worked out on load, never saved.
 let lastOutcome = null;  // the outcome just saved on the end card, for Undo. Cleared when the lead or call changes.
@@ -662,6 +689,26 @@ function useWanted() {
   if (ACTIVE === wanted || !idleForScript()) return;
   ACTIVE = wanted; FLOW = ACTIVE.flow; state.node = ACTIVE.start; state.trail = [];
 }
+/* Intro call or Full call: switches only while the page is idle, like a published script. */
+function setCallMode(mode) {
+  if (!own(CALL_MODES, mode) || mode === callMode || !idleForScript()) return;
+  callMode = mode;
+  try { localStorage.setItem(MODE_KEY, mode); } catch (e) {}
+  BUILTIN.start = CALL_MODES[mode].start;
+  if (ACTIVE === BUILTIN) state.node = BUILTIN.start;
+  render();
+}
+function renderCallMode() {
+  const box = $("call-mode");
+  box.hidden = ACTIVE !== BUILTIN;
+  const idle = idleForScript();
+  box.querySelectorAll("[data-mode]").forEach((b) => {
+    const on = b.dataset.mode === callMode;
+    b.setAttribute("aria-pressed", String(on));
+    b.disabled = !on && !idle;
+  });
+  $("clock-aim").textContent = ACTIVE === BUILTIN ? CALL_MODES[callMode].aim : "aim 10 to 12 min";
+}
 async function loadPublishedScript() {
   const mine = ++scriptFetch;
   const got = await Cloud.publishedScript();   // null: cloud off, signed out, nothing published, or a read error
@@ -1085,6 +1132,7 @@ function render() {
   const node = FLOW[state.node];
   renderSheet();
   renderPractice();
+  renderCallMode();
   const rail = $("rail"); rail.textContent = "";
   STAGES.forEach((s, i) => { const li = el("li", i < node.stage ? "done" : i === node.stage ? "now" : "", s); if (i === node.stage) li.setAttribute("aria-current", "step"); rail.appendChild(li); });
 
@@ -1178,6 +1226,7 @@ OBJECTIONS.forEach((o, i) => {
   b.addEventListener("click", () => { if (!state.objs.includes(o.chip)) state.objs.push(o.chip); state.objection = i; render(); window.scrollTo({ top: 0, behavior: "auto" }); });
   $("chips-" + o.g).appendChild(b);
 });
+$("call-mode").querySelectorAll("[data-mode]").forEach((b) => b.addEventListener("click", () => setCallMode(b.dataset.mode)));
 $("back").addEventListener("click", back);
 $("restart").addEventListener("click", restart);
 $("lead-name").addEventListener("input", () => { if (state.objection != null || !FLOW[state.node].end) render(); });

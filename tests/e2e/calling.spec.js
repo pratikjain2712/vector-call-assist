@@ -5,8 +5,10 @@ const { test, expect, env, uploadedRows, intoWorkspace } = require('./fixtures')
 test('a lost call uploads its outcome, stage and loss reason, and no lead details', async ({ page, backend }) => {
   await intoWorkspace(page, 'rep1');
   await page.locator('#lead-name').fill('Asha Testlead');
+  await page.locator('#call-mode [data-mode="full"]').click();
+  await expect(page.locator('#clock-aim')).toHaveText('aim 10 to 12 min');
 
-  // Built-in script: right person, has time, agreed to talk, not seen the curriculum (no), student (no),
+  // Built-in script, full call: right person, has time, agreed to talk, not seen the curriculum (no), student (no),
   // weak Python (no), will not do the Python lectures (no) -> not a fit.
   for (const k of ['yes', 'yes', 'yes', 'no', 'no', 'no', 'no']) await page.locator('#ans-' + k).click();
   await page.locator('#ans-next').click();
@@ -29,4 +31,23 @@ test('a lost call uploads its outcome, stage and loss reason, and no lead detail
 
   // Lead names and numbers never leave the browser.
   expect(JSON.stringify(rows)).not.toContain('Asha');
+});
+
+test('the intro call is the default, books a full call, and the switch locks once a call starts', async ({ page, backend }) => {
+  await intoWorkspace(page, 'rep1');
+  await expect(page.locator('#call-mode [data-mode="intro"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#clock-aim')).toHaveText('aim 2 to 5 min');
+  await expect(page.locator('#stage')).toContainText('Hello, am I speaking with');
+
+  // Right person, has 2 minutes: the switch is locked mid-call.
+  for (const k of ['yes', 'yes']) await page.locator('#ans-' + k).click();
+  await expect(page.locator('#call-mode [data-mode="full"]')).toBeDisabled();
+  // Working with Python, sounds useful, wants to think about the fee, gave a time for the full call.
+  for (const k of ['yes', 'yes', 'maybe', 'yes']) await page.locator('#ans-' + k).click();
+  await page.locator('#ans-next').click();
+  await expect(page.locator('#stage')).toContainText('Follow-up booked');
+
+  const [row] = await uploadedRows(backend, env().seats.rep1, 1);
+  expect(row.outcome).toBe('interested');
+  expect(row.script_step).toBe('end_followup');
 });
