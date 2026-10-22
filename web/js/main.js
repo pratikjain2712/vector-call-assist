@@ -451,7 +451,7 @@ async function downloadSheet() {
   // Leads must stay the first tab: uploading this file again reads the first tab as the lead list.
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(leadsAoa(sheet)), "Leads");
   const calls = CallRecords.all();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(CallRecords.toAoa(calls, QUESTIONS, OBJECTIONS.map((o) => o.chip))), "Calls");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(CallRecords.toAoa(calls, QUESTIONS, ANSWERS.map((o) => o.chip))), "Calls");
   const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
   const filename = sheet.fileName.replace(/\.[^.]+$/, "") + "-called.xlsx";
   note("Preparing " + filename + "…");
@@ -1153,6 +1153,7 @@ function render() {
   renderSheet();
   renderPractice();
   renderCallMode();
+  renderHelp();
   const rail = $("rail"); rail.textContent = "";
   STAGES.forEach((s, i) => { const li = el("li", i < node.stage ? "done" : i === node.stage ? "now" : "", s); if (i === node.stage) li.setAttribute("aria-current", "step"); rail.appendChild(li); });
 
@@ -1246,6 +1247,136 @@ OBJECTIONS.forEach((o, i) => {
   b.addEventListener("click", () => { if (!state.objs.includes(o.chip)) state.objs.push(o.chip); state.objection = i; render(); window.scrollTo({ top: 0, behavior: "auto" }); });
   $("chips-" + o.g).appendChild(b);
 });
+/* ---- Helper column: the questions leads often ask at the step the call has reached ----
+   Each script step belongs to a topic, and each topic lists answers by name, from OBJECTIONS or HELP.
+   HELP holds answers that only appear here and in search, not in the Pushback and Worries lists. */
+const HELP = [
+  { g: "help", chip: "Why are you asking?", say: "Just to see if the course suits you. It is mainly for working engineers, but freshers with good Python also join." },
+  { g: "help", chip: "I am a fresher, can I join?", say: "Yes, if your Python is good. The course is mainly for working engineers, so you learn with experienced people. Do you know Python?" },
+  { g: "help", chip: "I am not in IT, can I join?", say: "Yes, if you can code. You need Python, and we give you Python classes before the batch starts. Do you know any coding?" },
+  { g: "help", chip: "I have a career gap, can I join?", say: "Yes. What matters is Python, and time to practise, about 20 hours a week. Do you know Python?" },
+  { g: "help", chip: "When do I get the Python classes?", say: "Within 24 hours of joining. So you can finish them before the batch starts on 21 November." },
+  { g: "help", chip: "Do I need Docker and Git?", say: "Only the basics. The classes before the batch cover Python, Docker and Git, so you will be ready." },
+  { g: "help", chip: "When will I get the recording?", say: "Within 24 hours of each class. And you can watch it for life." },
+  { g: "help", chip: "Is there an EMI?", say: "Right now you can pay in two parts. ₹6,000 to join, and the rest within 15 days.", tip: "For anything other than two parts, check with the team first." },
+  { g: "help", chip: "When does the batch start?", say: "On 21 November. Registrations close on 11 November." },
+];
+const ANSWERS = OBJECTIONS.concat(HELP);
+const TOPICS = {
+  opening: ["What is Vector 2.0?", "Where did you get my number?", "What is TechSimPlus?", "Where are you based? Is it online?"],
+  work: ["Why are you asking?", "I am a fresher, can I join?", "I am not in IT, can I join?", "I have a career gap, can I join?"],
+  python: ["I do not know Python", "When do I get the Python classes?", "Do I need Docker and Git?"],
+  experience: ["No Gen-AI experience", "YouTube is free", "Too basic for me", "Courses are useless"],
+  pitch: ["What will I learn?", "What are the five projects?", "Who is the instructor?", "Placement support? Will I get a job?"],
+  time: ["When will I get the recording?", "What if I miss a class?", "Can I switch batch?", "How many hours a week?"],
+  fee: ["Can I pay in instalments?", "Is there an EMI?", "Can I get a refund?", "Will my company pay?"],
+  close: ["When does the batch start?", "Can I see a demo class?", "Need to ask family", "I will join next batch"],
+};
+const TOPIC_STEPS = {
+  opening: "open wrong_person intro intro_maybe ni_soft send_details callback callback_ok i_open i_wrong i_intro i_about exit_wrong exit_dnc",
+  work: "q_curriculum curr_yes techcall q_work fresher i_work i_student",
+  python: "q_python python_no python_maybe i_python i_python_no i_python_ok",
+  experience: "q_genai genai_no burned burned_yes trust q_scale experienced q_goal goal_no goal_no2",
+  pitch: "pitch1 trust_brand pitch2 pitch3 diff pitch_no i_pitch i_unsure i_no",
+  time: "time time_no time_no2 exit_later i_time i_timeok i_notime",
+  fee: "fee fee_maybe fee_no fee_no2 fee_only i_fee",
+  close: "close won think followup followup_time followup_n exit_polite exit_notfit i_next i_booked",
+};
+const TOPIC_OF = {};
+Object.keys(TOPIC_STEPS).forEach((t) => TOPIC_STEPS[t].split(" ").forEach((s) => { TOPIC_OF[s] = t; }));
+const answerNamed = (name) => ANSWERS.find((a) => a.chip === name);
+
+/* Search: every word typed must appear in the answer (its name, text or tip), or one of its everyday synonyms. */
+const SYNONYMS = {
+  offer: ["offer", "discount", "20%", "₹5,000"], discount: ["discount", "offer", "20%"],
+  emi: ["emi", "instalment", "two parts"], instalment: ["instalment", "emi", "two parts"], installment: ["instalment", "emi", "two parts"],
+  fee: ["fee", "₹", "price", "expensive", "pay"], fees: ["fee", "₹", "price", "expensive", "pay"], price: ["fee", "price", "₹", "expensive"], cost: ["cost", "fee", "₹", "price"], money: ["money", "fee", "₹", "refund"],
+  recording: ["record", "miss"], record: ["record", "miss"], video: ["record", "video", "youtube"],
+  job: ["job", "placement", "hired", "interview"], placement: ["placement", "job", "hired"],
+  time: ["time", "hour", "weekday", "weekend", "batch", "timing"], timing: ["time", "weekday", "weekend", "batch"],
+  python: ["python", "coding", "code"], code: ["code", "coding", "python"], cloud: ["cloud", "aws", "azure"],
+  hindi: ["hindi", "english"], refund: ["refund", "money back"], start: ["start", "21 november", "batch"],
+};
+function searchAnswers(query) {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  return ANSWERS.map((a) => {
+    const name = a.chip.toLowerCase(), text = (a.chip + " " + a.say + " " + (a.tip || "")).toLowerCase();
+    let score = 0;
+    for (const w of words) {
+      const alts = own(SYNONYMS, w) || [w];
+      if (name.includes(w)) score += 4;   // the word itself in the question ranks first
+      else if (alts.some((x) => name.includes(x))) score += 3;
+      else if (alts.some((x) => text.includes(x))) score += 1;
+      else return null;
+    }
+    return { a, score };
+  }).filter(Boolean).sort((x, y) => y.score - x.score).slice(0, 8).map((r) => r.a);
+}
+
+let helpOpen = null;   // the answer shown under its question, by name
+let helpNode = null;   // the step the helper column was last drawn for
+function helpItems() {
+  const q = $("help-search").value.trim();
+  if (q) return searchAnswers(q);
+  return (TOPICS[TOPIC_OF[state.node]] || []).map(answerNamed).filter(Boolean);
+}
+function renderHelp() {
+  const col = $("help-col");
+  col.hidden = ACTIVE !== BUILTIN;   // the answers belong to the built-in script
+  if (col.hidden) return;
+  if (helpNode !== state.node) { helpNode = state.node; if (!$("help-search").value.trim()) helpOpen = null; }
+  const q = $("help-search").value.trim();
+  const items = helpItems();
+  $("help-title").textContent = q ? (items.length ? "Answers for “" + q + "”" : "No answer for “" + q + "”") : "They may ask now";
+  const list = $("help-list"); list.textContent = "";
+  if (!items.length && !q) list.appendChild(el("p", "hint", "Press / to search every answer."));
+  items.forEach((a) => {
+    const item = el("div", "help-item");
+    const b = el("button", "help-q", a.chip); b.type = "button";
+    b.setAttribute("aria-expanded", String(helpOpen === a.chip));
+    b.addEventListener("click", () => {
+      helpOpen = helpOpen === a.chip ? null : a.chip;
+      if (helpOpen && !state.objs.includes(a.chip)) state.objs.push(a.chip);   // counted as raised, like a tapped button
+      renderHelp();
+      const again = [...$("help-list").querySelectorAll(".help-q")].find((x) => x.textContent === a.chip);
+      if (again) again.focus();
+    });
+    item.appendChild(b);
+    if (helpOpen === a.chip) {
+      const ans = el("div", "help-a"); const p = el("p"); fillInto(p, a.say); ans.appendChild(p);
+      if (a.tip) ans.appendChild(el("p", "tip", a.tip));
+      item.appendChild(ans);
+    }
+    list.appendChild(item);
+  });
+  // While searching, the matching Pushback and Worries buttons light up and the others fade.
+  const hits = q ? new Set(items.map((a) => a.chip)) : null;
+  OBJECTIONS.forEach((o, i) => {
+    const c = $("obj-" + i); if (!c) return;
+    c.classList.toggle("match", !!hits && hits.has(o.chip));
+    c.classList.toggle("dim", !!hits && !hits.has(o.chip));
+  });
+}
+function clearHelpSearch() { $("help-search").value = ""; helpOpen = null; renderHelp(); }
+$("help-search").addEventListener("input", () => { helpOpen = null; renderHelp(); });
+$("help-search").addEventListener("keydown", (ev) => {
+  const items = helpItems();
+  if (ev.key === "Escape") { ev.preventDefault(); clearHelpSearch(); ev.target.blur(); }
+  else if (ev.key === "Enter" && items.length) { ev.preventDefault(); helpOpen = items[0].chip; if (!state.objs.includes(helpOpen)) state.objs.push(helpOpen); renderHelp(); }
+  else if (ev.key === "ArrowDown") { const f = $("help-list").querySelector(".help-q"); if (f) { ev.preventDefault(); f.focus(); } }
+});
+$("help-list").addEventListener("keydown", (ev) => {
+  if (ev.key !== "ArrowDown" && ev.key !== "ArrowUp" && ev.key !== "Escape") return;
+  ev.preventDefault();
+  if (ev.key === "Escape") { $("help-search").focus(); return; }
+  const qs = [...$("help-list").querySelectorAll(".help-q")];
+  const i = qs.indexOf(document.activeElement);
+  if (ev.key === "ArrowUp" && i <= 0) { $("help-search").focus(); return; }
+  const next = qs[Math.min(qs.length - 1, Math.max(0, i + (ev.key === "ArrowDown" ? 1 : -1)))];
+  if (next) next.focus();
+});
+
 $("call-mode").querySelectorAll("[data-mode]").forEach((b) => b.addEventListener("click", () => setCallMode(b.dataset.mode)));
 $("back").addEventListener("click", back);
 $("restart").addEventListener("click", restart);
@@ -1279,6 +1410,11 @@ document.addEventListener("keydown", (ev) => {
   if ($("app").hidden) return;
   if (document.querySelector(".modal-wrap:not([hidden])")) return;   // a dialog is open: no script shortcuts   // pairing screen: no script shortcuts
   const tag = ev.target.tagName;
+  const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+  if ((ev.key === "/" && !typing && !ev.ctrlKey && !ev.metaKey && !ev.altKey) || ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "k")) {
+    if (!$("help-col").hidden) { ev.preventDefault(); $("help-search").focus(); $("help-search").select(); }
+    return;
+  }
   if (tag === "INPUT" || tag === "TEXTAREA" || ev.metaKey || ev.ctrlKey || ev.altKey) return;
   const k = ev.key.toLowerCase();
   const map = { "1": "yes", "2": "no", "3": "maybe" };

@@ -173,23 +173,46 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
 /* Wide screens: the call on the left, objections beside it. Narrower: objections under the call. */
 .work, .workmain { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 @media (min-width: 1100px) {
-  .work { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1fr); grid-template-rows: auto 1fr; align-items: start; gap: 16px 20px; }
+  .work { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1fr); grid-template-rows: auto auto 1fr; align-items: start; gap: 16px 20px; }
   .work .workmain { grid-column: 1; grid-row: 1; }
-  .work .objcard { grid-column: 2; grid-row: 1 / span 2; }
-  .work .sheetbar { grid-column: 1; grid-row: 2; }
+  .work .helpcol { grid-column: 1; grid-row: 2; }
+  .work .objcard { grid-column: 2; grid-row: 1 / span 3; }
+  .work .sheetbar { grid-column: 1; grid-row: 3; }
   .work .objcard { grid-template-columns: minmax(0, 1fr); position: sticky; top: 16px; }
   .callcard .say p { font-size: 2rem; }
   .callcard .ans { padding: 18px 16px; }
   .callcard .ans b { font-size: 1.45rem; }
   .callcard .ans span { font-size: 1rem; }
-  .objcard .chip { font-size: 0.92rem; padding: 7px 13px; }
+  .objcard .chip { font-size: 1rem; padding: 8px 14px; }
 }
+/* 1400px and wider: three columns. Helper questions | the call | Pushback and Worries. */
+@media (min-width: 1400px) {
+  .work { grid-template-columns: minmax(0, .6fr) minmax(0, .9fr) minmax(0, 1fr); grid-template-rows: auto 1fr; }
+  .work .helpcol { grid-column: 1; grid-row: 1 / span 2; position: sticky; top: 16px; }
+  .work .workmain { grid-column: 2; grid-row: 1; }
+  .work .sheetbar { grid-column: 2; grid-row: 2; }
+  .work .objcard { grid-column: 3; grid-row: 1 / span 2; }
+}
+.helpcol { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.helpcol h2 { margin: 0; font-family: var(--util); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.help-search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; background: var(--bg); }
+.help-search:focus-within { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: 1px; }
+.help-search input { flex: 1; min-width: 0; font: inherit; font-size: 1rem; color: var(--fg); background: transparent; border: 0; padding: 10px 0; outline: none; }
+.help-search kbd { font-family: var(--util); font-size: 0.75rem; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; }
+.help-list { display: flex; flex-direction: column; gap: 8px; }
+.help-q { width: 100%; text-align: left; font: inherit; font-size: 1rem; font-weight: 700; line-height: 1.35; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; cursor: pointer; }
+.help-q:hover, .help-q[aria-expanded="true"] { border-color: var(--accent); }
+.help-a { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 4px; }
+.help-a p { margin: 0; font-size: 1.05rem; line-height: 1.5; overflow-wrap: anywhere; }
+.help-a .tip { font-size: 0.92rem; }
+.chip.match { border-color: var(--accent); background: var(--accent); color: var(--bg); }
+.chip.dim { opacity: 0.35; }
 .cardfoot { display: flex; flex-wrap: wrap; gap: 10px; padding: 0 20px 18px; }
 .objcard { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); gap: 16px 28px; }
 .objcol { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .objcol h2, .sheetbar .label { margin: 0; font-family: var(--util); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
-.objcard .chips { gap: 6px; }
-.objcard .chip { font-size: 0.86rem; padding: 5px 11px; }
+.objcard .chips { gap: 8px; }
+.objcard .chip { font-size: 1rem; padding: 8px 14px; }
 .sheetbar { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
 .sheetload { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
 .sheetload .hint { flex: 1 1 240px; }
@@ -379,6 +402,12 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
     </article>
     <p class="hint" id="sheet-msg" role="status"></p>
     </div>
+
+    <aside class="helpcol" id="help-col" aria-labelledby="help-title">
+      <label class="help-search" for="help-search"><span class="vh">Search every answer</span><input id="help-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search answers, e.g. offer"><kbd title="Press / or Ctrl+K">/</kbd></label>
+      <h2 id="help-title">They may ask now</h2>
+      <div class="help-list" id="help-list"></div>
+    </aside>
 
     <section class="objcard" id="obj-section">
       <div class="objcol">
