@@ -29,7 +29,7 @@ let FLOW = {
     opts: [{ k: "yes", hint: "Gives the phone to them", to: "i_intro" }, { k: "no", hint: "Wrong number", to: "exit_wrong" }, { k: "maybe", hint: "Not there right now", to: "callback" }] },
   i_intro: { stage: 0, say: ["Hi {name}, this is {me} from TechSimPlus.", "You had enquired about Vector 2.0, our live Gen-AI course. Right now we have a 20% discount offer, till 30 October. Can I ask you a few quick questions? It will take 2 minutes."],
     opts: [{ k: "yes", hint: "Has 2 minutes", to: "i_work" }, { k: "no", hint: "Busy", to: "callback" }, { k: "maybe", hint: "“What is this about?”", to: "i_work" }] },
-  i_work: { stage: 1, say: ["Great. What work are you doing right now?"], tip: "Only note the job. Do not go deep on this call.",
+  i_work: { stage: 1, say: ["Great. Are you working, or studying?"], tip: "If working, ask: which field? Only note it. Do not go deep on this call.",
     opts: [{ k: "yes", hint: "Working in IT or tech", to: "i_python" }, { k: "no", hint: "Student or fresher", to: "i_student" }, { k: "maybe", hint: "Working, non-tech job", to: "i_python" }] },
   i_student: { stage: 1, say: ["Okay. This course is mainly for working engineers.", "But if your Python is good, you can still join. Do you know Python?"],
     opts: [{ k: "yes", hint: "Knows Python", to: "i_pitch" }, { k: "no", hint: "No Python", to: "i_python_no" }, { k: "maybe", hint: "A little", to: "i_python_ok" }] },
