@@ -39,7 +39,7 @@ let FLOW = {
     opts: [{ k: "yes", hint: "Still interested", to: "i_pitch" }, { k: "no", hint: "Not for them", to: "exit_notfit" }, { k: "maybe", hint: "Not sure", to: "i_python_ok" }] },
   i_python_ok: { stage: 1, say: ["That is okay. Our recorded Python classes start from the basics, and the mentor helps you with any doubt.", "Let me quickly tell you about the course, then you can decide."],
     opts: [{ k: "next", hint: "Go to the pitch", to: "i_pitch" }] },
-  i_pitch: { stage: 2, say: ["Vector 2.0 is a 3-month live course by Prateek Mishra, a senior Gen-AI developer.", "You learn LangChain, RAG, AI agents and AWS, and build five real apps for your resume.", "Does this sound good?"], tip: "Link it to the job they told you about. Keep it short: the details are for the full call.",
+  i_pitch: { stage: 2, say: ["Okay, so Vector 2.0 is a 3-month live course by Prateek Mishra, a senior Gen-AI developer.", "You learn LangChain, RAG, AI agents and AWS, and build five real apps for your resume.", "Does this sound good?"], tip: "Link it to the job they told you about. Keep it short: the details are for the full call.",
     opts: [{ k: "yes", hint: "Yes, interested", to: "i_time" }, { k: "no", hint: "Not convinced", to: "i_no" }, { k: "maybe", hint: "Not sure yet", to: "i_unsure" }] },
   i_unsure: { stage: 2, say: ["No problem. What will help you decide?", "Is it the topics, the timings, or the fees?"], tip: "If they name a worry, tap it in the list and answer it. Then come back here.",
     opts: [{ k: "yes", hint: "Doubt cleared", to: "i_time" }, { k: "no", hint: "Not interested", to: "exit_polite" }, { k: "maybe", hint: "Wants details first", to: "i_next" }] },
