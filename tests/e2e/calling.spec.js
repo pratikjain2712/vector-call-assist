@@ -8,9 +8,9 @@ test('a lost call uploads its outcome, stage and loss reason, and no lead detail
   await page.locator('#call-mode [data-mode="full"]').click();
   await expect(page.locator('#clock-aim')).toHaveText('aim 10 to 12 min');
 
-  // Built-in script, full call: right person, has time, agreed to talk, not seen the curriculum (no), student (no),
+  // Built-in script, full call: right person, has time, not seen the syllabus (no), student (no),
   // weak Python (no), will not do the Python lectures (no) -> not a fit.
-  for (const k of ['yes', 'yes', 'yes', 'no', 'no', 'no', 'no']) await page.locator('#ans-' + k).click();
+  for (const k of ['yes', 'yes', 'no', 'no', 'no', 'no']) await page.locator('#ans-' + k).click();
   await page.locator('#ans-next').click();
   await expect(page.locator('#stage')).toContainText('Not this time');
 
