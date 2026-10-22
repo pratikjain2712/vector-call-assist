@@ -42,8 +42,13 @@ test('the intro call is the default, books a full call, and the switch locks onc
   // Right person, has 2 minutes: the switch is locked mid-call.
   for (const k of ['yes', 'yes']) await page.locator('#ans-' + k).click();
   await expect(page.locator('#call-mode [data-mode="full"]')).toBeDisabled();
-  // Working with Python, sounds useful, wants to think about the fee, gave a time for the full call.
-  for (const k of ['yes', 'yes', 'maybe', 'yes']) await page.locator('#ans-' + k).click();
+  // Works in IT, knows Python, sounds useful: each answer moves one stage on, through Timings to the Fee.
+  for (const k of ['yes', 'yes', 'yes']) await page.locator('#ans-' + k).click();
+  await expect(page.locator('#rail [aria-current="step"]')).toHaveText('Timings');
+  await page.locator('#ans-yes').click();
+  await expect(page.locator('#rail [aria-current="step"]')).toHaveText('Fee');
+  // Wants to think about the fee, then gives a time for the full call.
+  for (const k of ['maybe', 'yes']) await page.locator('#ans-' + k).click();
   await page.locator('#ans-next').click();
   await expect(page.locator('#stage')).toContainText('Follow-up booked');
 
