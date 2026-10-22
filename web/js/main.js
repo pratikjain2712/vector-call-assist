@@ -164,7 +164,8 @@ let FLOW = {
 };
 
 const OBJECTIONS = [
-  { g: "push", chip: "What is Vector 2.0?", say: "Vector 2.0 is our 3-month online Gen-AI course for developers. Prateek Mishra, a senior Gen-AI developer, teaches it live. You build five real apps, and get five mock interviews and a mentor. The batch starts on 21 November.", exit: "exit_polite" },
+  { g: "push", hot: true, chip: "What is Vector 2.0?", say: "Vector 2.0 is our 3-month online Gen-AI course for developers. Prateek Mishra, a senior Gen-AI developer, teaches it live. You build five real apps, and get five mock interviews and a mentor. The batch starts on 21 November.", exit: "exit_polite" },
+  { g: "push", hot: true, chip: "What is Gen-AI?", say: "Gen-AI is AI that writes text, code or answers, like ChatGPT. Companies now hire developers who build apps with it. This course teaches you that.", tip: "Keep it simple. Then connect it to the work they do today.", exit: "exit_polite" },
   { g: "push", chip: "Not interested", say: "No problem. Only one question before I go. Do you want to move into Gen-AI in your career?", exit: "exit_polite" },
   { g: "push", chip: "Where did you get my number?", say: "From the form on our website. You had enquired about Vector 2.0. If you do not want me to call, please tell me.", exit: "exit_dnc" },
   { g: "push", chip: "I never enquired", say: "Oh, sorry about that. Maybe someone typed your number by mistake. Are you interested in learning Gen-AI?", exit: "exit_dnc" },
@@ -191,7 +192,6 @@ const OBJECTIONS = [
   { g: "worry", chip: "Is there a certificate?", say: "Yes, you get a certificate from TechSimPlus Learnings." },
   { g: "worry", chip: "Can I see a demo class?", say: "We can share some class recordings from Vector 1.0. The same mentor teaches Vector 2.0, so you will see exactly how he teaches.", tip: "Get the recording link from the team and send it on WhatsApp." },
   { g: "worry", chip: "Are projects production level?", say: "Yes. They are real apps, like in a company. You put them live on AWS, with Docker and CI/CD." },
-  { g: "worry", chip: "What is Gen-AI?", say: "Gen-AI is AI that writes text, code or answers, like ChatGPT. Companies now hire developers who build apps with it. This course teaches you that.", tip: "Keep it simple. Then connect it to the work they do today." },
   { g: "worry", chip: "What is RAG?", say: "RAG means the AI first reads your documents, then answers. So the answers are correct. You build a full RAG project." },
   { g: "worry", chip: "What will I learn?", say: "FastAPI, LangChain, RAG, AI agents, and AI on AWS and Azure. At the end, you learn to run apps for lakhs of users. I will send the full syllabus on WhatsApp." },
   { g: "worry", chip: "Do you teach Azure?", say: "Yes. Everyone learns both AWS Bedrock and Azure AI. Then you choose AWS or Azure for your final project.", tip: "If they ask which one to choose: many IT service companies in India use Azure. Many product companies and startups use AWS." },
@@ -1234,7 +1234,7 @@ function render() {
 }
 
 OBJECTIONS.forEach((o, i) => {
-  const b = el("button", "chip", o.chip); b.type = "button"; b.id = "obj-" + i;
+  const b = el("button", o.hot ? "chip hot" : "chip", o.chip); b.type = "button"; b.id = "obj-" + i;
   b.addEventListener("click", () => { if (!state.objs.includes(o.chip)) state.objs.push(o.chip); state.objection = i; render(); window.scrollTo({ top: 0, behavior: "auto" }); });
   $("chips-" + o.g).appendChild(b);
 });

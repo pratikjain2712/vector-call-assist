@@ -4,7 +4,10 @@ const { test, expect, intoWorkspace } = require('./fixtures');
 test('course questions in the worry list show their answer, and Back returns to the call', async ({ page }) => {
   await intoWorkspace(page, 'rep1');
   const worries = page.locator('#chips-worry');
-  for (const chip of ['What is Gen-AI?', 'Do you teach Azure?', 'What do you cover in cloud?']) {
+  // The two course questions leads ask most sit at the top of Pushback, highlighted.
+  const push = page.locator('#chips-push');
+  for (const chip of ['What is Vector 2.0?', 'What is Gen-AI?']) await expect(push.getByRole('button', { name: chip, exact: true })).toHaveClass(/hot/);
+  for (const chip of ['Do you teach Azure?', 'What do you cover in cloud?']) {
     await expect(worries.getByRole('button', { name: chip, exact: true })).toBeVisible();
   }
 
