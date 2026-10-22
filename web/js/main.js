@@ -27,7 +27,7 @@ let FLOW = {
     opts: [{ k: "yes", hint: "It is them", to: "i_intro" }, { k: "no", hint: "Someone else picked up", to: "i_wrong" }, { k: "maybe", hint: "“Who is this?”", to: "i_intro" }] },
   i_wrong: { stage: 0, say: ["Oh, sorry! Is {name} there?"],
     opts: [{ k: "yes", hint: "Gives the phone to them", to: "i_intro" }, { k: "no", hint: "Wrong number", to: "exit_wrong" }, { k: "maybe", hint: "Not there right now", to: "callback" }] },
-  i_intro: { stage: 0, say: ["Hi {name}, this is {me} from TechSimPlus.", "You had enquired about Vector 2.0, our live Gen-AI course. Right now we have a 20% discount offer, till 30 October. Can I ask you a few quick questions? It will take 2 minutes."],
+  i_intro: { stage: 0, say: ["Hi {name}, this is {me} from TechSimPlus.", "You had enquired about Vector 2.0, our live Gen-AI course. Right now we have a 20% discount offer, till 30 October. Can I quickly ask you a few questions? Just 2 minutes."],
     opts: [{ k: "yes", hint: "Has 2 minutes", to: "i_work" }, { k: "no", hint: "Busy", to: "callback" }, { k: "maybe", hint: "“What is this about?”", to: "i_work" }] },
   i_work: { stage: 1, say: ["Great. Are you working, or studying?"], tip: "If working, ask: which field? Only note it. Do not go deep on this call.",
     opts: [{ k: "yes", hint: "Working in IT or tech", to: "i_python" }, { k: "no", hint: "Student or fresher", to: "i_student" }, { k: "maybe", hint: "Working, non-tech job", to: "i_python" }] },
