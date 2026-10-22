@@ -11,5 +11,5 @@ test('course questions in the worry list show their answer, and Back returns to 
   await worries.getByRole('button', { name: 'Do you teach Azure?', exact: true }).click();
   await expect(page.locator('#stage')).toContainText('Everyone learns both AWS Bedrock and Azure AI');
   await page.locator('#back').click();
-  await expect(page.locator('#stage')).toContainText('Hi, is this');
+  await expect(page.locator('#stage')).toContainText('Hello, am I speaking with');
 });
