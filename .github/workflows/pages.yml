@@ -26,6 +26,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      # Browsers keep js/ and css/ files for up to 10 minutes. A new ?v= on every deploy makes them fetch
+      # the new files as soon as the page itself is fresh, instead of mixing old scripts with new pages.
+      - name: Version the page's own scripts and styles
+        run: |
+          v="${GITHUB_SHA::8}"
+          sed -i -E "s#(src|href)=\"(js|css)/([^\"?]+)\"#\1=\"\2/\3?v=$v\"#g" web/*.html
+          grep -c "?v=$v" web/*.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web
