@@ -93,3 +93,30 @@ main.narrow { max-width: 560px; }
 .button-link { display: inline-block; padding: 7px 12px; border-radius: 6px; border: 1px solid var(--accent); color: var(--accent); text-decoration: none; }
 .button-link:hover { background: var(--accent); color: #fff; }
 .forgot { margin: 8px 0 0; font-size: .9rem; }
+
+/* Coaching and leaderboard (js/admin-coach.js) */
+.coach-list li { padding: 10px 0; }
+.coach-list p { margin: 4px 0; }
+.coach-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.coach-send { align-items: center; margin-top: 6px; }
+.coach-send input { flex: 1 1 260px; }
+.tag { font-size: .78rem; border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; color: var(--muted); }
+.tag.top { border-color: var(--ok); color: var(--ok); font-weight: 600; margin-left: 6px; }
+td.result.ok { color: var(--ok); font-weight: 600; }
+td.result.bad { color: var(--danger); font-weight: 600; }
+label.check { flex-direction: row; align-items: center; gap: 6px; color: var(--text); }
+label.check input { width: auto; }
+.seg { display: inline-flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 2px; }
+.seg button { padding: 5px 12px; border-radius: 999px; font-size: .88rem; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+.board-row { display: grid; grid-template-columns: 2.6rem minmax(7rem, 12rem) minmax(0, 1fr) 6.5rem; gap: 10px; align-items: center; }
+.board-rank { font-weight: 700; color: var(--muted); }
+.board-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.board-name > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-name .tag { flex: none; margin-left: 0; }
+.board-bar { margin-top: 0; }
+.board-value { text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) {
+  .board-row { grid-template-columns: 2.2rem minmax(0, 1fr) 5.5rem; }
+  .board-bar { grid-column: 2 / 4; grid-row: 2; }
+}
