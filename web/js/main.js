@@ -164,6 +164,7 @@ let FLOW = {
 };
 
 const OBJECTIONS = [
+  { g: "push", chip: "What is Vector 2.0?", say: "Vector 2.0 is our 3-month online Gen-AI course for developers. Prateek Mishra, a senior Gen-AI developer, teaches it live. You build five real apps, and get five mock interviews and a mentor. The batch starts on 21 November.", exit: "exit_polite" },
   { g: "push", chip: "Not interested", say: "No problem. Only one question before I go. Do you want to move into Gen-AI in your career?", exit: "exit_polite" },
   { g: "push", chip: "Where did you get my number?", say: "From the form on our website. You had enquired about Vector 2.0. If you do not want me to call, please tell me.", exit: "exit_dnc" },
   { g: "push", chip: "I never enquired", say: "Oh, sorry about that. Maybe someone typed your number by mistake. Are you interested in learning Gen-AI?", exit: "exit_dnc" },
