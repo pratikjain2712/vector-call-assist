@@ -1,2 +1,39 @@
-/* Settings tab (js/admin/settings.js). Scope every rule under .tab-settings. */
+/* Settings tab (js/admin/settings.js): call types and result buttons, institute, money switch, plan, terms and
+   the admin activity log. Scope every rule under .tab-settings. */
 .tab-settings .row { align-items: center; }
+.tab-settings form.row { align-items: flex-end; }
+.tab-settings .msg:empty { min-height: 0; margin: 0; }
+.tab-settings #settings-whatsapp:empty { display: none; }
+
+/* call types */
+.tab-settings #settings-call-types > h3 { margin-top: 18px; }
+.tab-settings .ct-list { margin: 6px 0 16px; }
+.tab-settings .ct-type { padding: 12px 0; }
+.tab-settings .ct-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.tab-settings .ct-head h3 { margin: 0; }
+.tab-settings .ct-tag { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: var(--radius-pill); padding: 1px 8px; }
+.tab-settings .ct-tag.off { color: var(--warn); border-color: var(--warn); }
+.tab-settings .ct-toggle { padding: 3px 10px; font-size: 13px; margin-left: auto; }
+.tab-settings .ct-results { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.tab-settings .ct-chip { display: inline-flex; align-items: center; gap: 4px; background: var(--panel-soft); border: 1px solid var(--line);
+  border-radius: var(--radius-pill); padding: 3px 10px; font-size: 13px; color: var(--heading); overflow-wrap: anywhere; }
+.tab-settings .ct-chip.good { border-color: var(--ok); }
+.tab-settings .ct-remove { border: 0; background: none; padding: 0 4px; font-size: 16px; line-height: 1; color: var(--danger); }
+.tab-settings .ct-flags { border: 0; padding: 0; margin: 0; display: flex; gap: 6px 14px; flex-wrap: wrap; align-items: center; min-width: 0; }
+.tab-settings .ct-flags legend { font-size: 13px; font-weight: 600; padding: 0; margin-bottom: 4px; }
+.tab-settings .check, .tab-settings .switch { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; cursor: pointer; }
+.tab-settings .check input, .tab-settings .switch input { width: 18px; height: 18px; accent-color: var(--accent); }
+.tab-settings .switch { font-weight: 600; font-size: 14px; }
+
+/* plan */
+.tab-settings .plan-text { font-weight: 600; color: var(--heading); margin: 0 0 8px; }
+.tab-settings .plan-on { color: var(--ok); font-weight: 600; }
+.tab-settings .plan-off { color: var(--warn); font-weight: 600; }
+
+/* log */
+.tab-settings .log-pager { margin-top: 10px; justify-content: space-between; }
+@media (max-width: 699px) {
+  .tab-settings .log-pager > * { flex: 1 1 30%; }
+  .tab-settings .ct-flags { flex: 1 1 100%; }
+  .tab-settings .check { flex: 1 1 100%; }
+}

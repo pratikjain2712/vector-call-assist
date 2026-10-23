@@ -1,4 +1,4 @@
-/* Callers tab (js/admin/callers.js): rep progress bars, target boxes and supervisor notes. */
+/* Callers tab (js/admin/callers.js): rep progress bars, target boxes, supervisor notes and the "Edit caller" panel. */
 .tab-callers .target-input { width: 7.5em; }
 .tab-callers .bar { height: 8px; background: var(--line-soft); border-radius: 4px; overflow: hidden; margin-top: 4px; min-width: 90px; }
 .tab-callers .bar-fill { height: 100%; background: var(--chart-2); }
@@ -11,7 +11,20 @@
 .tab-callers .health.ok { color: var(--ok); }
 .tab-callers .health.warn { color: var(--warn); }
 .tab-callers h3 { margin-top: 14px; }
+/* Edit caller */
+.tab-callers #caller-edit { border-color: var(--accent); }
+.tab-callers #caller-edit:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tab-callers #caller-edit .row.between h2 { margin: 0; }
+.tab-callers .edit-block { border: 0; border-top: 1px solid var(--line-soft); margin: 14px 0 0; padding: 14px 0 0; min-width: 0; }
+.tab-callers .edit-block legend { font-weight: 600; color: var(--heading); padding: 0; margin-bottom: 8px; float: left; width: 100%; }
+.tab-callers .edit-checks { clear: both; display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 10px; }
+.tab-callers .check, .tab-callers .switch { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; cursor: pointer; }
+.tab-callers .switch { margin-top: 12px; font-weight: 600; }
+.tab-callers .switch input { width: 18px; height: 18px; accent-color: var(--accent); }
+.tab-callers .check input { width: 18px; height: 18px; accent-color: var(--accent); }
 @media (max-width: 699px) {
+  .tab-callers #caller-edit .row.between { flex-wrap: nowrap; }
+  .tab-callers #caller-edit .row.between > * { flex: 0 1 auto; width: auto; }
   .tab-callers table.stack td .target-input { width: 100%; }
   .tab-callers .bar { min-width: 0; }
 }
