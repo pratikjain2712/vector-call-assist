@@ -1,0 +1,11 @@
+/* Reports tab (js/admin/reports.js): results tables, script results and the suggestions on lost calls. */
+.tab-reports .report-block { margin-top: 14px; }
+.tab-reports .report-block h4 { margin-top: 10px; }
+.tab-reports #report-out { max-width: 100%; }
+.tab-reports #report-out > p { margin: 12px 0 0; }
+.tab-reports .insights { margin-top: 20px; }
+.tab-reports .insights h3 { font-size: 16px; }
+.tab-reports .suggestion { border: 1px solid var(--line); border-radius: var(--radius-button); padding: 12px 14px; margin: 8px 0;
+  background: var(--panel-soft); }
+.tab-reports .suggestion p { margin: 0 0 6px; }
+.tab-reports .suggestion-actions { display: flex; gap: 8px; flex-wrap: wrap; }

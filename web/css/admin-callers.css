@@ -1,0 +1,17 @@
+/* Callers tab (js/admin/callers.js): rep progress bars, target boxes and supervisor notes. */
+.tab-callers .target-input { width: 7.5em; }
+.tab-callers .bar { height: 8px; background: var(--line-soft); border-radius: 4px; overflow: hidden; margin-top: 4px; min-width: 90px; }
+.tab-callers .bar-fill { height: 100%; background: var(--chart-2); }
+.tab-callers .bar-fill.met { background: var(--ok); }
+.tab-callers .note { padding: 8px 0; border-bottom: 1px solid var(--line-soft); }
+.tab-callers .note-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.tab-callers #note-count.error { color: var(--danger); }
+.tab-callers .stackform { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.tab-callers .stackform label { width: 100%; }
+.tab-callers .health.ok { color: var(--ok); }
+.tab-callers .health.warn { color: var(--warn); }
+.tab-callers h3 { margin-top: 14px; }
+@media (max-width: 699px) {
+  .tab-callers table.stack td .target-input { width: 100%; }
+  .tab-callers .bar { min-width: 0; }
+}

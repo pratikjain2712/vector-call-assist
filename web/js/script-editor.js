@@ -1,17 +1,14 @@
 'use strict';
-/* Admin script editor (web/script-editor.html), for Vector 2.0. Lists the institute's scripts, edits one
-   script's steps as a form, checks them with ScriptModel (script-model.js), walks them in test mode, saves
-   drafts and publishes versions, shows version history and runs a per-version report.
-   Writes go through admin_save_script_version and reads through admin_script_report
-   (supabase/migrations/20261011100007_scripts.sql). The database checks the admin role on every call.
-   Nothing here reaches a rep until a version is published. */
+/* Admin script editor, for Vector 2.0. Runs inside the Scripts tab of the admin app (web/admin.html;
+   js/admin/scripts.js calls VectorScriptEditor.mount); the old script-editor.html now sends people there.
+   Lists the institute's scripts, edits one script's steps as a form, checks them with ScriptModel
+   (script-model.js), walks them in test mode, saves drafts and publishes versions and shows version history.
+   A version's results (where calls ended, why calls were lost) are in the Reports tab.
+   Writes go through admin_save_script_version (supabase/migrations/20261011100007_scripts.sql). The database
+   checks the admin role on every call. Nothing here reaches a rep until a version is published. */
 (function () {
   const M = window.ScriptModel;
-  const cfg = window.VECTOR_CONFIG || {};
-  const enabled = !!(cfg.supabaseUrl && cfg.supabaseAnonKey && window.supabase && window.supabase.createClient);
   const $ = (id) => document.getElementById(id);
-  const SECTIONS = ['off', 'gate', 'notadmin', 'app'];
-  const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const STEP_SEL = '#steps fieldset.step';
   const TEST_MESSAGES = {
     end: 'Reached an end card.',
@@ -22,8 +19,7 @@
   };
 
   let client = null;
-  let mySeat = null;
-  let activeUser = null;
+  let ctx = null;                                     // the admin app's shared context (js/admin/shell.js)
   let scripts = [];                                   // { id, name }
   let versions = [];                                  // { id, version, steps, change_note, published, created_at }
   let work = { scriptId: null, name: '', steps: [] }; // the editor's working copy
@@ -32,17 +28,12 @@
 
   // ---------- small helpers ----------
 
-  const show = (section) => SECTIONS.forEach((s) => { $(s).hidden = s !== section; });
   function say(id, text, isError) {
     const node = $(id);
     node.textContent = text || '';
     node.classList.toggle('error', !!isError);
   }
   const clone = (x) => JSON.parse(JSON.stringify(x));
-  const pretty = (s) => String(s).replace(/_/g, ' ');
-  const pct = (share) => (share == null ? '' : (Math.round(Number(share) * 1000) / 10) + '%');
-  const pad2 = (n) => String(n).padStart(2, '0');
-  const ymd = (d) => d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
 
   // Builds an element from text and child nodes only: no HTML strings, so names from the database are never parsed as markup.
   function el(tag, props, kids) {
@@ -54,7 +45,7 @@
       else if (k === 'onClick') node.addEventListener('click', v);
       else if (k === 'value') node.value = v;
       else if (k === 'checked') node.checked = !!v;
-      else if (k === 'disabled') node.disabled = !!v;
+      else if (k === 'disabled' || k === 'hidden') node[k] = !!v;
       else node.setAttribute(k, v);
     });
     (kids || []).forEach((c) => node.appendChild(c));
@@ -73,19 +64,76 @@
     ['save-draft', 'publish-open', 'publish-go'].forEach((id) => { $(id).disabled = on; });
   }
 
-  // ---------- startup and sign-in (the same email link as admin.html) ----------
+  // ---------- the editor's page, built once per mount ----------
 
-  function init() {
-    if (!enabled) { $('signout').hidden = true; show('off'); return; }
-    client = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
-    });
-    // Supabase advises against calling the client inside this callback, so the work runs just after it.
-    client.auth.onAuthStateChange((_event, session) => { setTimeout(() => onSession(session), 0); });
-    $('gate-form').addEventListener('submit', sendLink);
-  $('gate-password').addEventListener('input', syncGateButton);
-    $('signout').addEventListener('click', () => { client.auth.signOut(); });
+  function build(box) {
+    const btn = (id, text, cls) => el('button', { id, type: 'button', text, className: cls || '' });
+    const msg = (id) => el('p', { id, className: 'msg', role: 'status' });
+    box.appendChild(el('div', { className: 'tab-head' }, [
+      el('h1', { text: 'Scripts' }),
+      el('p', { className: 'muted', text: 'What callers say on a call. Callers see a script only after you publish it.' }),
+    ]));
+    box.appendChild(el('div', { className: 'layout' }, [
+      el('aside', { className: 'panel', id: 'list-panel' }, [
+        el('div', { className: 'row between' }, [el('h2', { text: 'Your scripts' }), btn('new-script', 'New script')]),
+        el('ul', { id: 'script-list', className: 'plain' }),
+        el('p', { id: 'list-empty', className: 'muted', hidden: true, text: 'No scripts yet. Create one to start.' }),
+        msg('list-msg'),
+      ]),
+      el('div', { className: 'main-col' }, [
+        el('section', { className: 'panel', id: 'editor-panel' }, [
+          el('div', { className: 'row between' }, [
+            el('h2', { id: 'editor-title', text: 'New script' }),
+            el('span', { id: 'state-line', className: 'muted' }),
+          ]),
+          el('label', { className: 'field' }, [document.createTextNode('Script name'),
+            el('input', { id: 'script-name', type: 'text', maxlength: '120', autocomplete: 'off' })]),
+          el('div', { id: 'problems', className: 'problems', role: 'status', hidden: true }, [
+            el('h3', { text: 'Fix these' }),
+            el('ul', { id: 'problem-list' }),
+          ]),
+          el('div', { className: 'row between' }, [el('h3', { text: 'Steps' }), btn('add-step', 'Add step')]),
+          el('div', { id: 'steps' }),
+          el('datalist', { id: 'step-ids' }),
+          el('div', { className: 'row wrap' }, [
+            btn('test-toggle', 'Test mode'),
+            btn('save-draft', 'Save as draft', 'primary'),
+            btn('publish-open', 'Publish'),
+          ]),
+          el('div', { id: 'publish-box', className: 'confirm', hidden: true }, [
+            el('label', { className: 'field' }, [document.createTextNode('Change note (what changed, 500 characters at most)'),
+              el('textarea', { id: 'publish-note', maxlength: '500', rows: '3' })]),
+            el('div', { className: 'row wrap' }, [btn('publish-go', 'Publish this version', 'primary'), btn('publish-cancel', 'Cancel')]),
+          ]),
+          msg('editor-msg'),
+        ]),
+        el('section', { className: 'panel', id: 'test-panel', hidden: true }, [
+          el('div', { className: 'row between' }, [el('h2', { text: 'Test mode' }), btn('test-close', 'Close test')]),
+          el('p', { className: 'muted', text: 'Walks the script as it is in the editor now. Nothing is saved.' }),
+          el('div', { className: 'row wrap' }, [btn('test-back', 'Undo last choice'), btn('test-restart', 'Start over')]),
+          el('ol', { id: 'test-lines', className: 'test-lines' }),
+          el('div', { id: 'test-choices', className: 'row wrap' }),
+          msg('test-status'),
+        ]),
+        el('section', { className: 'panel', id: 'history-panel', hidden: true }, [
+          el('h2', { text: 'Version history' }),
+          el('div', { className: 'scroll' }, [el('table', null, [
+            el('thead', null, [el('tr', null, ['Version', 'Status', 'Saved', 'Change note', 'Actions'].map((h) => el('th', { text: h })))]),
+            el('tbody', { id: 'history-body' }),
+          ])]),
+          el('p', { id: 'history-empty', className: 'muted', hidden: true, text: 'No versions yet.' }),
+          el('div', { className: 'row wrap compare' }, [
+            el('label', null, [document.createTextNode('From version'), el('select', { id: 'diff-a' })]),
+            el('label', null, [document.createTextNode('To version'), el('select', { id: 'diff-b' })]),
+            btn('diff-go', 'Compare'),
+          ]),
+          el('div', { id: 'diff-out', className: 'diff', 'aria-live': 'polite' }),
+        ]),
+      ]),
+    ]));
+  }
 
+  function wire() {
     $('new-script').addEventListener('click', () => guardDirty(newScript));
     $('script-name').addEventListener('input', () => { work.name = $('script-name').value; markDirty(); });
     $('add-step').addEventListener('click', addStep);
@@ -101,68 +149,28 @@
     $('test-back').addEventListener('click', () => { if (testChoices && testChoices.length) { testChoices.pop(); renderTest(); } });
     $('test-restart').addEventListener('click', () => { testChoices = []; renderTest(); });
     $('diff-go').addEventListener('click', compareVersions);
-    $('report-form').addEventListener('submit', (e) => { e.preventDefault(); runReport(); });
-
-    const d = lastDays(7);
-    $('report-from').value = d.from;
-    $('report-to').value = d.to;
-    show('gate');
   }
 
-  function gateMessage(error) {
-    const m = (error && error.message) || '';
-    if (/invalid login credentials/i.test(m)) return 'Wrong email or password.';
-    if (/email not confirmed/i.test(m)) return 'This account is not confirmed yet. Confirm it in Supabase, or use a sign-in link.';
-    if (/signup|not allowed|not found/i.test(m)) return 'This email has no Vector account.';
-    if (/rate limit|too many|security purposes/i.test(m)) return 'Too many attempts or sign-in emails. Wait a few minutes and try again.';
-    return m || 'Sign-in failed. Try again.';
-  }
-  function syncGateButton() {
-    $('gate-submit').textContent = $('gate-password').value ? 'Sign in' : 'Send sign-in link';
-  }
-
-  async function sendLink(e) {
-    e.preventDefault();
-    const email = $('gate-email').value.trim();
-    if (!EMAIL.test(email)) { say('gate-msg', 'Enter your work email address.', true); return; }
-    // With a password: sign in at once (no email). Without: email a sign-in link.
-    const password = $('gate-password').value;
-    if (password) {
-      const { error } = await client.auth.signInWithPassword({ email, password });
-      $('gate-password').value = '';
-      syncGateButton();
-      if (error) say('gate-msg', gateMessage(error), true);
-      return;
-    }
-    const { error } = await client.auth.signInWithOtp({
-      email,
-      options: { shouldCreateUser: false, emailRedirectTo: location.origin + location.pathname },
-    });
-    say('gate-msg', error ? gateMessage(error) : 'Check your email for the sign-in link.', !!error);
-  }
-
-  async function onSession(session) {
-    if (!session) {
-      activeUser = null;
-      mySeat = null;
-      scripts = []; versions = []; work = { scriptId: null, name: '', steps: [] }; dirty = false;
-      show('gate');
-      return;
-    }
-    // A token refresh fires the same event again. Keep the editor as it is.
-    if (session.user.id === activeUser && mySeat) return;
-    activeUser = session.user.id;
-    $('who').textContent = session.user.email || '';
-
-    const { data, error } = await client.rpc('my_active_seat');
-    if (error) { say('gate-msg', 'Could not check your seat: ' + error.message, true); show('gate'); return; }
-    const row = Array.isArray(data) ? data[0] : data;
-    if (!row || !row.id || row.role !== 'admin') { show('notadmin'); return; }
-    mySeat = row;
-    show('app');
-    await loadScripts();
+  // Called by the Scripts tab the first time it opens, after the admin app has checked the admin seat.
+  async function mount(box, c) {
+    ctx = c;
+    client = c.client;
+    build(box);
+    wire();
     newScript();
+    await loadScripts();
   }
+
+  // Called on sign-out: forget the working copy. The tab's box is removed by the admin app.
+  function unmount() {
+    ctx = null;
+    client = null;
+    scripts = []; versions = []; work = { scriptId: null, name: '', steps: [] }; dirty = false;
+    testChoices = null;
+  }
+
+  // True while the editor has changes that are not saved.
+  const hasUnsaved = () => dirty;
 
   // ---------- scripts and versions ----------
 
@@ -209,7 +217,6 @@
     renderHistory();
     fillSelects();
     $('history-panel').hidden = false;
-    $('report-panel').hidden = false;
     say('editor-msg', '');
   }
 
@@ -223,7 +230,6 @@
     renderHistory();
     fillSelects();
     $('history-panel').hidden = true;
-    $('report-panel').hidden = true;
     say('editor-msg', '');
   }
 
@@ -410,7 +416,6 @@
       renderHistory();
       fillSelects();
       $('history-panel').hidden = false;
-      $('report-panel').hidden = false;
       let msg = publish ? 'Published this version.' : 'Draft saved.';
       if (problems.length) {
         msg += ' It has ' + problems.length + ' problem' + (problems.length === 1 ? '' : 's') + ' and cannot be published until they are fixed.';
@@ -472,7 +477,10 @@
       })]),
       cell(new Date(v.created_at).toLocaleString()),
       cell(v.change_note || ''),
-      el('td', null, [el('button', { type: 'button', text: 'Load into editor', onClick: () => guardDirty(() => loadVersion(v.version)) })]),
+      el('td', null, [el('div', { className: 'actions' }, [
+        el('button', { type: 'button', text: 'Load into editor', onClick: () => guardDirty(() => loadVersion(v.version)) }),
+        el('button', { type: 'button', text: 'See results', onClick: () => ctx.navigate('reports', { script: work.scriptId, version: v.id }) }),
+      ])]),
     ])));
   }
 
@@ -489,18 +497,14 @@
   function fillSelects() {
     const diffA = $('diff-a');
     const diffB = $('diff-b');
-    const report = $('report-version');
-    [diffA, diffB, report].forEach((s) => { s.textContent = ''; });
+    [diffA, diffB].forEach((s) => { s.textContent = ''; });
     versions.forEach((v) => {
       const label = 'v' + v.version + (v.published ? ' (published)' : ' (draft)');
       diffA.appendChild(el('option', { value: String(v.version), text: label }));
       diffB.appendChild(el('option', { value: String(v.version), text: label }));
-      report.appendChild(el('option', { value: v.id, text: label }));
     });
     if (versions.length >= 2) diffA.value = String(versions[1].version);
     if (versions.length) diffB.value = String(versions[0].version);
-    const pub = versions.find((v) => v.published) || versions[0];
-    if (pub) report.value = pub.id;
     compareVersions();
   }
 
@@ -524,126 +528,5 @@
     out.appendChild(diffLine('Changed (in both, different)', d.changed));
   }
 
-  // ---------- report ----------
-
-  async function runReport() {
-    const v = versions.find((x) => x.id === $('report-version').value);
-    if (!v || !mySeat) { say('report-msg', 'Pick a version.', true); return; }
-    let range;
-    try {
-      range = M.reportRange($('report-from').value, $('report-to').value);
-    } catch (err) { say('report-msg', err.message, true); return; }
-
-    say('report-msg', 'Loading...');
-    $('report-out').textContent = '';
-    const { data, error } = await client.rpc('admin_script_report', {
-      p_institute: mySeat.institute_id, p_script_version_id: v.id, p_from: range.from, p_to: range.to,
-    });
-    if (error) { say('report-msg', 'Could not load the report: ' + error.message, true); return; }
-    say('report-msg', 'Showing v' + v.version + ', ' + $('report-from').value + ' to ' + $('report-to').value + '.');
-    renderReport(data || {});
-    loadInsights(v, range);
-  }
-
-  // ---------- insights: why calls are lost, and suggested changes the admin approves ----------
-
-  const REASON_LABEL = {
-    price: 'Price', timing: 'Timing', already_enrolled: 'Already enrolled', no_need: 'No need',
-    wrong_person: 'Wrong person', other: 'Other', not_recorded: 'Not recorded',
-  };
-  const stageLabel = (s) => (s === 'not_recorded' ? '(not recorded)' : s);
-
-  async function loadInsights(v, range) {
-    const out = $('insights-out');
-    out.textContent = '';
-    const { data, error } = await client.rpc('admin_loss_insights', {
-      p_institute: mySeat.institute_id, p_script_version_id: v.id, p_from: range.from, p_to: range.to,
-    });
-    if (error) { out.appendChild(el('p', { className: 'msg', text: 'Could not load insights: ' + error.message })); return; }
-    renderInsights(data || {}, v, range);
-  }
-
-  function renderInsights(d, v, range) {
-    const out = $('insights-out');
-    out.textContent = '';
-    out.appendChild(el('h2', { text: 'What went wrong on lost calls' }));
-    if (!d.calls) { out.appendChild(el('p', { className: 'muted', text: 'No calls for this version in the range.' })); return; }
-    const rate = d.lost_rate == null ? '' : ' (' + pct(d.lost_rate) + ')';
-    let line = d.lost + ' of ' + d.calls + ' calls lost' + rate + ' on v' + d.version + '.';
-    if (d.previous_version != null && d.previous_calls) {
-      line += ' v' + d.previous_version + ' lost ' + pct(d.previous_lost_rate) + ' of ' + d.previous_calls + ' calls.';
-    }
-    out.appendChild(el('p', { text: line }));
-    if (!d.enough_calls) out.appendChild(el('p', { className: 'muted', text: 'Suggestions appear after 10 calls on this version.' }));
-    out.appendChild(reportTable('Lost calls by reason', ['Reason', 'Calls'],
-      (d.reasons || []).map((r) => [REASON_LABEL[r.reason] || r.reason, r.calls])));
-    out.appendChild(reportTable('Where lost calls ended', ['Stage', 'Calls'],
-      (d.stages || []).map((r) => [stageLabel(r.stage), r.calls])));
-    out.appendChild(reportTable('Objections on lost calls', ['Objection', 'Calls'],
-      (d.objections || []).map((r) => [r.objection, r.calls])));
-
-    const block = el('div', { className: 'report-block' }, [el('h3', { text: 'Suggested changes' })]);
-    const sugg = d.suggestions || [];
-    if (!sugg.length) block.appendChild(el('p', { className: 'muted', text: 'No single change stands out yet.' }));
-    sugg.forEach((s) => {
-      const row = el('div', { className: 'suggestion' }, [el('p', { text: s.text })]);
-      if (s.decision) {
-        const when = s.decided_at ? ' on ' + new Date(s.decided_at).toLocaleDateString() : '';
-        row.appendChild(el('p', { className: 'muted', text: pretty(s.decision) + when + '. Change the script in the editor, then publish a new version.' }));
-      }
-      const approve = el('button', { type: 'button', text: s.decision === 'approved' ? 'Approved' : 'Approve' });
-      const reject = el('button', { type: 'button', text: s.decision === 'rejected' ? 'Rejected' : 'Reject' });
-      approve.addEventListener('click', () => decideSuggestion(v, s.key, 'approved', range, s.text));
-      reject.addEventListener('click', () => decideSuggestion(v, s.key, 'rejected', range, s.text));
-      row.appendChild(el('div', { className: 'suggestion-actions' }, [approve, reject]));
-      block.appendChild(row);
-    });
-    out.appendChild(block);
-  }
-
-  async function decideSuggestion(v, key, decision, range, note) {
-    const { error } = await client.rpc('admin_decide_suggestion', {
-      p_institute: mySeat.institute_id, p_script_version_id: v.id, p_target_key: key, p_decision: decision, p_note: note,
-    });
-    if (error) { say('report-msg', 'Could not save the decision: ' + error.message, true); return; }
-    loadInsights(v, range);
-  }
-
-  function renderReport(d) {
-    const out = $('report-out');
-    out.textContent = '';
-    const total = Number(d.total_calls) || 0;
-    out.appendChild(el('p', {
-      text: total + (total === 1 ? ' call' : ' calls') + ' for ' + (d.script_name || 'this script') + ' v' + d.version + ' in the range.',
-    }));
-    if (!total) return;
-    out.appendChild(reportTable('Where calls ended', ['Step', 'Calls', 'Share'],
-      (d.steps || []).map((r) => [r.step || '(no end card logged)', r.calls, pct(r.share)])));
-    out.appendChild(reportTable('Objections raised', ['Objection', 'Calls'],
-      (d.objections || []).map((r) => [r.objection, r.calls])));
-    out.appendChild(reportTable('Outcomes', ['Outcome', 'Calls'],
-      (d.outcomes || []).map((r) => [pretty(r.outcome), r.calls])));
-  }
-
-  function reportTable(caption, headers, rows) {
-    const block = el('div', { className: 'scroll report-block' }, [el('h3', { text: caption })]);
-    block.appendChild(el('table', null, [
-      el('thead', null, [el('tr', null, headers.map((h, i) => el('th', { text: h, className: i ? 'num' : '' })))]),
-      el('tbody', null, rows.map((r) => el('tr', null, r.map((c, i) => cell(c, i ? 'num' : ''))))),
-    ]));
-    if (!rows.length) block.appendChild(el('p', { className: 'muted', text: 'None.' }));
-    return block;
-  }
-
-  function lastDays(n) {
-    const now = new Date();
-    const to = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const from = new Date(to.getFullYear(), to.getMonth(), to.getDate() - (n - 1));
-    return { from: ymd(from), to: ymd(to) };
-  }
-
-  if (typeof document !== 'undefined') {
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-    else init();
-  }
+  window.VectorScriptEditor = { mount, unmount, hasUnsaved };
 })();
