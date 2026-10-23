@@ -255,6 +255,9 @@ const camp = {
   list: [], features: null, seat: "", id: null, info: null, leads: [], lead: null, shownAt: 0,
   money: Object.create(null), pick: null, values: {}, begun: false, beganAt: 0, clock: StepClock.create(),
   outbox: [], failed: [], syncing: false, offline: false, msg: "", nextFree: true, resultsSig: "",
+  // Phase A: integration. waTemplates: approved WhatsApp templates (my_whatsapp_templates; [] when the institute
+  // has no connected number). practice: my_practice() rows, null when unknown or not on this plan.
+  waTemplates: [], practice: null,
 };
 function refreshPhoneFlags() { phoneCheck = sheet ? ImportCheck.checkPhones(sheet.rows.map((r) => r[sheet.cols.phone])) : null; }
 /* Sheets saved before the callback column existed get it here, so the cell index is never undefined. */
@@ -1645,6 +1648,7 @@ function campBegin(at) {
   camp.begun = true; camp.beganAt = at;
   if (ACTIVE !== NO_SCRIPT) camp.clock.enter(state.node, campRank(state.node), at);
   startClock();
+  campPresence();
 }
 /* How far into the script a step is: its stage, then its place in the saved script. */
 function campRank(id) {
@@ -1675,6 +1679,58 @@ async function campOnCloud(c) {
   campSync();
 }
 
+/* Phase A: integration. The practice page link (my_practice) and the institute's approved WhatsApp templates
+   (my_whatsapp_templates, through js/whatsapp-client.js). Both are optional: a missing function, no Scripts
+   add-on or no connected number just leaves them out. */
+async function campLoadExtras() {
+  const seat = camp.seat;
+  const p = await Cloud.myPractice();
+  if (seat !== camp.seat) return;
+  camp.practice = !p.error && Array.isArray(p.data) ? p.data : null;
+  const client = Cloud.client();
+  let list = [];
+  if (client && window.VectorWhatsApp) {
+    try { list = await window.VectorWhatsApp.loadTemplates(client); } catch (e) { list = []; }
+  }
+  if (seat !== camp.seat) return;
+  camp.waTemplates = Array.isArray(list) ? list : [];
+  render();
+}
+
+/* The approved template to offer after this result: one for this call type and ending (or any), with no blank
+   the caller must type. null when there is none. */
+function campWaOffer() {
+  const c = campCurrent();
+  if (!c || !camp.pick || !camp.waTemplates.length || !window.VectorWhatsApp) return null;
+  const W = window.VectorWhatsApp;
+  return W.forResult(camp.waTemplates, c.call_type_key, camp.pick).find((t) => !W.typedBlanks(t).length) || null;
+}
+
+/* Sends the WhatsApp templates asked for with results the server has now saved (the person's consent is then on
+   the lead). The server checks consent, do-not-call, the template and once a day again. */
+async function campSendWhatsapp(items) {
+  const client = Cloud.client();
+  if (!client || !window.VectorWhatsApp) return;
+  for (const it of items) {
+    if (!it.wa || (it.response && it.response.duplicate)) continue;
+    const out = await window.VectorWhatsApp.sendAfterCall(client, it.leadId, it.wa.key);
+    note(out && out.ok ? I18n.t("camp.waAppSent", { label: it.wa.label, name: it.leadName })
+      : I18n.t("camp.waAppFailed", { name: it.leadName, error: (out && out.error) || "" }));
+  }
+}
+
+/* Presence for the admin Home tab ("On a call", "Phone offline"): about once a minute, and when a call starts
+   or is saved. report_presence is from the admin tabs; an older database without it is left alone. */
+let presenceOff = false;
+async function campPresence() {
+  if (presenceOff || !Cloud.hasSeat() || document.hidden) return;
+  const live = callView && (callView.phase === "REQUESTED" || callView.phase === "OFFHOOK");
+  const onCall = !!(live || camp.begun);
+  const phoneOk = !PhoneLink.isPaired() || linkHealth === "ok" || linkHealth === "checking";
+  const r = await Cloud.reportPresence(onCall, phoneOk);
+  if (r.error && Cloud.missing(r.error)) presenceOff = true;
+}
+
 /* my_campaigns() and my_features(), with the last answer kept for offline use. */
 async function campLoadList() {
   const seat = camp.seat;
@@ -1689,6 +1745,7 @@ async function campLoadList() {
   else if (!fs.error.code) camp.features = cached.features === undefined ? null : cached.features;
   else camp.features = null;
   if (!cs.error) OfflineStore.set(key, { list: camp.list, features: camp.features });
+  campLoadExtras();
 
   let want = null;
   try { want = localStorage.getItem(CAMP_KEY); } catch (e) {}
@@ -1715,15 +1772,30 @@ function campPick(id) {
   loadPublishedScript();
 }
 
-/* The campaign's script: its published version when the plan has Scripts, kept on this device for offline use. */
+/* The campaign's script when the plan has Scripts, kept on this device for offline use.
+   campaign_script_version(campaign, lead) gives the version for the lead on the card: the published one, or the
+   lead's version A or B while a script test runs (so the call counts in the test: script_id and version are saved
+   with the result). An older database without that function: the published version (scriptById). */
 async function loadCampaignScript(mine) {
   const c = campCurrent();
+  const l = camp.lead;
   let got = null;
   if (c && c.script_id && campHasScripts()) {
     const key = "script:" + c.script_id;
-    got = await Cloud.scriptById(c.script_id);
-    if (got) OfflineStore.set(key, got);
-    else got = await OfflineStore.get(key);
+    const leadKey = l ? key + ":lead:" + l.id : null;
+    const r = await Cloud.campaignScript(c.campaign_id, l ? l.id : null);
+    if (!r.error) {
+      const row = Array.isArray(r.data) ? r.data[0] : r.data;
+      got = row && Array.isArray(row.steps) ? { scriptId: row.script_id, version: row.version, steps: row.steps, arm: row.arm || null } : null;
+      if (got) OfflineStore.set(got.arm && leadKey ? leadKey : key, got);
+    } else if (Cloud.missing(r.error)) {
+      got = await Cloud.scriptById(c.script_id);
+      if (got) OfflineStore.set(key, got);
+      else got = await OfflineStore.get(key);
+    } else {
+      // Offline, or the lead moved on: what this device saw last, the lead's test version first.
+      got = (leadKey && (await OfflineStore.get(leadKey))) || (await OfflineStore.get(key));
+    }
   }
   if (mine !== scriptFetch) return;
   const flow = got ? ScriptAdapter.adaptSteps(got.steps) : null;
@@ -1790,11 +1862,15 @@ async function campClaimNext() {
 }
 
 function campShow(lead) {
+  const was = camp.lead ? camp.lead.id : null;
   camp.lead = Object.assign({}, lead);
   camp.shownAt = Date.now();
   camp.pick = null; camp.values = {};
   resetCall();
   campMoney(lead.id);
+  // A script test gives each lead version A or B: ask again for the lead now on the card.
+  const c = campCurrent();
+  if (was !== lead.id && c && c.script_id && campHasScripts()) loadPublishedScript();
 }
 function campGoTo(id) {
   if (camp.lead && camp.lead.id === id) return;
@@ -1831,8 +1907,10 @@ async function campSave() {
   const rec = state.callId ? CallRecords.get(state.callId) : null;
   const id = crypto.randomUUID();
   const v = camp.values;
+  const offer = v.waApp && campWaAppShown() ? campWaOffer() : null;
   const item = {
     id: id, seatId: camp.seat, campaignId: c.campaign_id, leadId: l.id, leadName: l.name, label: result.label, savedAt: now,
+    wa: offer ? { key: offer.key, label: offer.label || offer.key } : null,   // sent once the server has the result
     callId: rec ? rec.sessionId : null,
     result: { key: result.key, needs_date: !!result.needs_date, needs_amount: !!result.needs_amount },
     values: { date: v.date || "", nextCallAt: ResultButtons.callAt(v.date, v.time), waConsent: v.waConsent, note: String(v.note || "").trim() },
@@ -1860,6 +1938,7 @@ async function campSave() {
   await campSync();
   if (!camp.lead) await campEnsureLead(true);
   render();
+  campPresence();
 }
 
 /* A laptop call's result waits up to 2 minutes for the phone's call log, so the connected time goes with it. */
@@ -1889,6 +1968,7 @@ async function campSync() {
     await OfflineStore.set(OfflineStore.keys.outbox(seat), camp.outbox);
     if (r.failed.length) await OfflineStore.set(OfflineStore.keys.failed(seat), camp.failed);
   } finally { camp.syncing = false; }
+  if (r && r.sent.length) campSendWhatsapp(r.sent);
   if (r && (r.sent.length || r.failed.length) && campOn()) await campRefresh({ claim: !camp.lead });
   else renderCampaign();
 }
@@ -1897,6 +1977,17 @@ async function campSync() {
 
 function campDate(at) { return new Date(at).toLocaleDateString("en-IN", { day: "numeric", month: "short" }); }
 function todayIsoIndia() { return new Date(Date.now() + 330 * 60e3).toISOString().slice(0, 10); }
+
+/* The practice page link: scripts the caller can practise (my_practice), with the ones an admin asked for. */
+function renderPracticeLink() {
+  const a = $("practice-link");
+  const rows = Cloud.hasSeat() && Array.isArray(camp.practice) ? camp.practice : [];
+  a.hidden = !rows.length;
+  if (!rows.length) return;
+  const todo = rows.filter((x) => x.assignment_id && !x.done_at);
+  a.textContent = todo.length ? I18n.t("camp.practiceToDo", { n: todo.length }) : I18n.t("camp.practice");
+  a.href = todo.length === 1 ? "practice.html?script=" + encodeURIComponent(todo[0].script_id) : "practice.html";
+}
 
 function renderCampaign() {
   const on = campOn();
@@ -1915,6 +2006,7 @@ function renderCampaign() {
     sel.disabled = leaveBlocked();
     sel.title = sel.disabled ? leaveMessage() : "";
   }
+  renderPracticeLink();
   document.querySelector(".work").classList.toggle("campaign", on);
   $("sheet-section").hidden = on;
   $("queue-panel").hidden = !on; $("camp-lead").hidden = !on; $("result-panel").hidden = !on;
@@ -2063,6 +2155,13 @@ function renderResults() {
   });
   actions.appendChild(wa);
   actions.appendChild(el("span", "hint", "")).id = "res-wa-hint";
+  // In-app WhatsApp from the institute's number (connected in Settings), next to the wa.me link.
+  const waApp = el("label", "wa-app"); waApp.id = "res-wa-app-row"; waApp.hidden = true;
+  const waBox = el("input"); waBox.type = "checkbox"; waBox.id = "res-wa-app"; waBox.checked = !!camp.values.waApp;
+  waBox.addEventListener("change", () => { camp.values.waApp = waBox.checked; });
+  waApp.appendChild(waBox);
+  waApp.appendChild(el("span", "", "")).id = "res-wa-app-label";
+  actions.appendChild(waApp);
   const save = el("button", "primary", I18n.t("camp.saveNext")); save.type = "button"; save.id = "res-save";
   save.addEventListener("click", campSave);
   actions.appendChild(save);
@@ -2147,6 +2246,15 @@ function campWaText() {
     date: v.date, amount: r && r.needs_amount ? ResultButtons.parseAmount(v.amount) : null });
 }
 
+/* The institute's-number option shows only when the person said yes (on this call or before) and may be messaged. */
+function campWaAppShown() {
+  const l = campLead();
+  if (!l || state.practice) return false;
+  const consent = camp.values.waConsent === true ? "yes" : camp.values.waConsent === false ? "no" : "";
+  if (!WaLink.allowed(l, consent, camp.pick)) return false;
+  return camp.values.waConsent === true || (camp.values.waConsent !== false && l.consent_whatsapp === true);
+}
+
 /* The WhatsApp link, its consent note and the save button, kept in step with the fields. */
 function campUpdateActions() {
   const wa = $("res-wa-send"), hint = $("res-wa-hint"), save = $("res-save");
@@ -2159,6 +2267,12 @@ function campUpdateActions() {
   if (href) wa.href = href; else wa.removeAttribute("href");
   hint.hidden = !href || !WaLink.needsAsking(l, consent);
   hint.textContent = I18n.t("camp.waAsk");
+  const appRow = $("res-wa-app-row");
+  if (appRow) {
+    const offer = campWaAppShown() ? campWaOffer() : null;
+    appRow.hidden = !offer;
+    if (offer) $("res-wa-app-label").textContent = I18n.t("camp.waApp", { label: offer.label || offer.key });
+  }
   save.disabled = !camp.pick || state.practice;
   save.title = state.practice ? I18n.t("practice.blocked") : !camp.pick ? I18n.t("camp.pickFirst") : "";
 }
@@ -2166,4 +2280,5 @@ function campUpdateActions() {
 $("camp-pick").addEventListener("change", (ev) => campPick(ev.target.value));
 window.addEventListener("online", () => { campSync(); if (campOn()) campRefresh(); });
 setInterval(campSync, 30000);
+setInterval(campPresence, 60000);   // Phase A: integration (admin Home "callers right now")
 setInterval(() => { if (campOn() && !document.hidden && !camp.begun && !camp.pick) campRefresh(); }, 60000);

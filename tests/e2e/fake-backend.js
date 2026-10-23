@@ -152,6 +152,23 @@ function createFakeBackend(world) {
   Object.assign(RPC, {
     my_features: (u) => json(200, u && seatOf(u.id) ? ['scripts', 'ai_drafts'] : null),
     admin_list_call_types: (u) => (adminSeat(u) ? json(200, CALL_TYPES) : pgErr(403, '42501', 'only an admin can manage call types')),
+    // Integration: the Callers tab moves a caller's open leads (same rules as 20261024100020, in short).
+    admin_move_leads: (u, a) => {
+      const s = adminSeat(u);
+      if (!s) return notAdmin();
+      const from = db.seats.find((x) => x.id === a.p_from_seat && x.institute_id === s.institute_id);
+      if (!from) return pgErr(403, '42501', 'caller not found');
+      if (a.p_to_seat && a.p_to_seat === a.p_from_seat) return pgErr(400, '22023', 'pick a different caller to move the leads to');
+      let n = 0;
+      db.leads.filter((l) => l.assigned_seat_id === from.id && isOpen(l) && (!a.p_campaign || l.campaign_id === a.p_campaign)).forEach((l) => {
+        const c = db.campaigns.find((x) => x.id === l.campaign_id);
+        if (!c || c.status === 'closed' || c.institute_id !== s.institute_id) return;
+        l.assigned_seat_id = a.p_to_seat || null;
+        n++;
+        if (a.p_to_seat && !db.members.some((m) => m.campaign_id === c.id && m.seat_id === a.p_to_seat)) db.members.push({ campaign_id: c.id, seat_id: a.p_to_seat });
+      });
+      return json(200, n);
+    },
     admin_campaign_list: (u) => {
       const s = adminSeat(u);
       if (!s) return notAdmin();
@@ -428,7 +445,7 @@ function createFakeBackend(world) {
   // offline: save_call_result answers as if the network were down (the request is aborted).
   // db.campaigns and db.leads are shared with the campaigns block above; db.features with the scripts block.
   // db.callerScripts: scripts by id for the caller screen (the scripts block keeps db.scripts as a list).
-  db.saved = []; db.callerScripts = {}; db.offline = false;
+  db.saved = []; db.callerScripts = {}; db.offline = false; db.presenceReports = [];
   // Members: addCampaign() campaigns carry c.members; campaigns made on the Campaigns tab use db.members.
   const membersOf = (c) => c.members || db.members.filter((m) => m.campaign_id === c.id).map((m) => m.seat_id);
   const memberOf = (u, c) => { const s = u && seatOf(u.id); return s && membersOf(c).includes(s.id) && ['running', 'paused'].includes(c.status) ? s : null; };
@@ -465,6 +482,30 @@ function createFakeBackend(world) {
       if (!l) return json(200, null);
       l.assigned_seat_id = s.id;
       return json(200, l.id);
+    },
+    // Integration: the campaign's script for a lead (20261024100026). c.scriptTest = { a: {version, steps},
+    // b: {...} } runs a test: leads get A and B in turn, and keep theirs.
+    campaign_script_version: (u, a) => {
+      const c = db.campaigns.find((x) => x.id === a.p_campaign);
+      const s = c && memberOf(u, c);
+      if (!s) return pgFail('42501', 'campaign not found');
+      const sc = c.script_id && db.callerScripts[c.script_id];
+      if (!sc || !featuresOf(s.institute_id).includes('scripts')) return json(200, []);
+      let arm = null, v = sc;
+      if (c.scriptTest && a.p_lead) {
+        const arms = c.scriptTest.arms = c.scriptTest.arms || {};
+        arm = arms[a.p_lead] || (Object.keys(arms).length % 2 ? 'b' : 'a');
+        arms[a.p_lead] = arm;
+        v = c.scriptTest[arm];
+      }
+      return json(200, [{ script_id: sc.id, script_name: sc.name || 'Script', version: v.version, steps: v.steps, test_id: arm ? 'test-1' : null, arm }]);
+    },
+    // Integration: presence for the admin Home tab (20261024100023), kept for tests.
+    report_presence: (u, a) => {
+      const s = u && seatOf(u.id);
+      if (!s) return pgFail('42501', 'no active seat for this login');
+      db.presenceReports.push({ seat_id: s.id, on_call: !!a.p_on_call, phone_ok: a.p_phone_ok !== false });
+      return json(200, null);
     },
     save_call_result: (u, a) => {
       const s = u && seatOf(u.id);
@@ -821,8 +862,11 @@ function createFakeBackend(world) {
     }
     if (name === 'whatsapp-send') {
       const s = seatOf(u.id);
-      const lead = waLead(body.lead_id);
-      if (!s || !lead || s.id !== world.seats.rep1) return json(403, { error: 'This lead is not assigned to you.' });
+      // Integration: a campaign lead (caller block) counts too: assigned to this seat, with consent on the lead.
+      const cl = (db.leads || []).find((x) => x.id === body.lead_id);
+      const lead = cl ? (s && cl.assigned_seat_id === s.id ? { consent: cl.consent_whatsapp === true } : null)
+        : (s && s.id === world.seats.rep1 ? waLead(body.lead_id) : null);
+      if (!s || !lead) return json(403, { error: 'This lead is not assigned to you.' });
       if (!lead.consent) return json(400, { error: 'This person has not agreed to WhatsApp messages.' });
       const t = wa.templates.find((x) => x.key === body.template_key && x.meta_status === 'approved');
       if (!t || !wa.account || wa.account.status !== 'connected') return json(400, { error: 'This message is not approved by WhatsApp yet.' });

@@ -295,6 +295,12 @@
     nextFreeLead: (campaignId) => call('next_free_lead', { p_campaign: campaignId }),
     leadMoney: (leadId) => call('lead_money', { p_lead: leadId }),
     saveCallResult: (args) => call('save_call_result', args),
+    // Phase A: integration. The campaign's script for this lead (a running script test picks version A or B),
+    // the caller's practice list, presence for the admin Home tab, and the signed-in client for WhatsApp.
+    campaignScript: (campaignId, leadId) => call('campaign_script_version', { p_campaign: campaignId, p_lead: leadId || null }),
+    myPractice: () => call('my_practice'),
+    reportPresence: (onCall, phoneOk) => call('report_presence', { p_on_call: !!onCall, p_phone_ok: phoneOk !== false }),
+    client: () => (client && session && seat ? client : null),
     missing,
     enqueue,
     cancel,

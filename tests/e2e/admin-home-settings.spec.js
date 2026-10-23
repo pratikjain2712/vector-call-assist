@@ -110,6 +110,29 @@ test('an owner edits a caller: campaigns, role and money access', async ({ page,
   await expect(page.locator('#caller-edit')).toBeHidden();
 });
 
+// Integration: "Move leads" uses the campaigns feature's admin_move_leads; the new caller joins the campaign.
+test('an owner moves a caller\'s open leads to another caller', async ({ page, backend }) => {
+  const E = env();
+  const k1 = backend.adminTabs.addCampaign(E.institutes.a, 'Oct fees', 'running');
+  backend.db.members.push({ campaign_id: k1, seat_id: E.seats.rep1 });
+  ['Lead A', 'Lead B'].forEach((name, i) => backend.db.leads.push({ id: 'cccccccc-0000-4000-8000-00000000000' + (i + 1), campaign_id: k1,
+    institute_id: E.institutes.a, name, phone: '+9198765000' + (10 + i), status: i ? 'callback' : 'new', assigned_seat_id: E.seats.rep1 }));
+  backend.db.leads.push({ id: 'cccccccc-0000-4000-8000-000000000003', campaign_id: k1, institute_id: E.institutes.a, name: 'Lead C',
+    phone: '+919876500012', status: 'done', assigned_seat_id: E.seats.rep1 });
+  await signInAdmin(page, '#callers');
+  const row = page.locator('#seat-body tr', { hasText: 'Rep 1' });
+  await row.getByRole('button', { name: 'Edit' }).click();
+  await page.locator('#move-to').selectOption({ label: 'Rep 2' });
+  await page.locator('#move-campaign').selectOption({ label: 'Oct fees' });
+  await page.locator('#move-go').click();
+  await expect(page.locator('#confirm')).toContainText('go to "Rep 2"');
+  await page.locator('#confirm-go').click();
+  await expect(page.locator('#status')).toContainText('2 leads moved from "Rep 1".');
+  const owner = (n) => backend.db.leads.find((l) => l.name === n).assigned_seat_id;
+  expect([owner('Lead A'), owner('Lead B'), owner('Lead C')]).toEqual([E.seats.rep2, E.seats.rep2, E.seats.rep1]);
+  expect(backend.db.members).toContainEqual({ campaign_id: k1, seat_id: E.seats.rep2 });
+});
+
 test('Settings: call types, institute, money switch, plan and the activity log', async ({ page, backend }) => {
   await page.setViewportSize({ width: 375, height: 800 });
   const errors = [];

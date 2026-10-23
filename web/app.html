@@ -265,11 +265,15 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
 .campbar select { font: inherit; font-size: 0.92rem; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; max-width: 240px; min-width: 0; }
 .camptoday { font-size: 0.9rem; white-space: nowrap; }
 .camptoday b { font-variant-numeric: tabular-nums; }
+.practicelink { font-size: 0.9rem; white-space: nowrap; }
+.wa-app { display: flex; align-items: center; gap: 8px; font-size: 0.92rem; flex: 1 1 260px; }
+.wa-app input { width: auto; margin: 0; }
 @media (max-width: 760px) {
   .topbar-in { flex-wrap: wrap; }
   .campbar { order: 5; flex: 1 1 100%; }
   .campbar select { flex: 1 1 auto; max-width: none; }
   .camptoday { order: 6; }
+  .practicelink { order: 7; }
 }
 .camplead .who { flex: 1 1 260px; }
 .camplead .who strong { font-size: 1.4rem; }
@@ -383,6 +387,8 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
       <!-- Phase A: caller. Which campaign the caller is calling for, and today's calls against the target. -->
       <label class="campbar" id="camp-bar" hidden><span class="label">Calling for</span><select id="camp-pick"></select></label>
       <span class="camptoday" id="camp-today" role="status" hidden></span>
+      <!-- Phase A: integration. Practice page (my_practice): shown when the plan has Scripts and a script is live. -->
+      <a class="plain practicelink" id="practice-link" href="practice.html" hidden></a>
       <label class="me"><span class="label">You</span><input id="me-name" type="text" autocomplete="off" value="Pratik" title="Your name, used in the script"></label>
       <details class="pill" id="cloud-panel">
         <summary><span id="cloud-summary">Synced</span></summary>
@@ -589,6 +595,7 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
 <script src="js/offline-store.js"></script>
 <script src="js/wa-link.js"></script>
 <script src="js/step-clock.js"></script>
+<script src="js/whatsapp-client.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

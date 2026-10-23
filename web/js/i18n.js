@@ -134,7 +134,13 @@
       "camp.noScriptPlan": "Guided scripts are part of the Scripts add-on. Talk to the lead, then pick how the call ended below.",
       "camp.scriptDone": "Script finished: {label}",
       "camp.pickBelow": "Now pick how the call ended below, then save.",
-      "camp.scriptBroken": "This campaign's script cannot be shown on the call page. Use the result buttons."
+      "camp.scriptBroken": "This campaign's script cannot be shown on the call page. Use the result buttons.",
+      // Phase A: integration (practice page link, WhatsApp from the institute's number)
+      "camp.practice": "Practise scripts",
+      "camp.practiceToDo": "Practise ({n} to do)",
+      "camp.waApp": "After saving, send \u201c{label}\u201d from the institute's WhatsApp",
+      "camp.waAppSent": "WhatsApp \u201c{label}\u201d sent to {name}.",
+      "camp.waAppFailed": "WhatsApp not sent to {name}: {error}"
     },
     hi: {
       "practice.start": "अभ्यास",
@@ -264,7 +270,13 @@
       "camp.noScriptPlan": "गाइडेड स्क्रिप्ट Scripts ऐड-ऑन में आती हैं। लीड से बात करें, फिर नीचे चुनें कि कॉल कैसे खत्म हुई।",
       "camp.scriptDone": "स्क्रिप्ट पूरी: {label}",
       "camp.pickBelow": "अब नीचे चुनें कि कॉल कैसे खत्म हुई, फिर सेव करें।",
-      "camp.scriptBroken": "इस कैंपेन की स्क्रिप्ट कॉल पेज पर नहीं दिख सकती। नतीजे के बटन इस्तेमाल करें।"
+      "camp.scriptBroken": "इस कैंपेन की स्क्रिप्ट कॉल पेज पर नहीं दिख सकती। नतीजे के बटन इस्तेमाल करें।",
+      // Phase A: integration (draft Hindi, needs a native speaker's review)
+      "camp.practice": "स्क्रिप्ट का अभ्यास",
+      "camp.practiceToDo": "अभ्यास ({n} बाकी)",
+      "camp.waApp": "सेव करने के बाद संस्थान के WhatsApp से \u201c{label}\u201d भेजें",
+      "camp.waAppSent": "{name} को WhatsApp \u201c{label}\u201d भेज दिया।",
+      "camp.waAppFailed": "{name} को WhatsApp नहीं गया: {error}"
     }
   };
   const LANGS = ["en", "hi"];
