@@ -3,29 +3,45 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- Content-Security-Policy: no inline scripts or styles. Scripts come from this site and jsDelivr (SRI on each). -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://*.supabase.co; object-src 'none'; base-uri 'self'; form-action 'none'">
+<!-- Content-Security-Policy: no inline scripts or styles. Scripts come from this site and jsDelivr (SRI on each);
+     fonts (Inter, Plus Jakarta Sans) from Google Fonts. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://*.supabase.co; object-src 'none'; base-uri 'self'; form-action 'none'">
 <meta name="robots" content="noindex">
 <title>Vector admin</title>
-<link rel="stylesheet" href="admin.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@700;800&display=swap">
+<link rel="stylesheet" href="css/admin.css">
+<!-- One file per tab (js/admin/<tab>.js), so each tab's styles can change without touching the others. -->
+<link rel="stylesheet" href="css/admin-home.css">
+<link rel="stylesheet" href="css/admin-insights.css">
+<link rel="stylesheet" href="css/admin-campaigns.css">
+<link rel="stylesheet" href="css/admin-scripts.css">
+<link rel="stylesheet" href="css/admin-callers.css">
+<link rel="stylesheet" href="css/admin-reports.css">
+<link rel="stylesheet" href="css/admin-settings.css">
 </head>
 <body>
 <header class="top">
-  <h1>Vector admin</h1>
-  <nav class="links"><a href="script-editor.html">Scripts</a></nav>
-  <div class="who">
-    <span id="who"></span>
-    <button id="signout" type="button">Sign out</button>
+  <div class="top-row">
+    <div class="brand">
+      <span class="mark" aria-hidden="true">V</span>
+      <span class="name">Vector admin</span>
+      <span id="institute" class="institute" hidden></span>
+    </div>
+    <div class="who">
+      <span id="who"></span>
+      <button id="signout" type="button">Sign out</button>
+    </div>
   </div>
+  <nav id="tabs" class="tabs" aria-label="Admin sections" hidden></nav>
 </header>
 
 <main>
-  <section id="off" hidden>
+  <section id="off" class="panel" hidden>
     <h2>Cloud is not set up</h2>
     <p>Cloud is not set up for this site, so there is nothing to show here. Results stay in each rep's browser.</p>
   </section>
 
-  <section id="gate" hidden>
+  <section id="gate" class="panel narrow" hidden>
     <h2>Sign in</h2>
     <p>Use the work email your institute admin invited. Sign in with your password, or leave it empty and we send a sign-in link.</p>
     <form id="gate-form" class="row">
@@ -37,167 +53,27 @@
     <p id="gate-msg" class="msg" role="status"></p>
   </section>
 
-  <section id="notadmin" hidden>
+  <section id="notadmin" class="panel narrow" hidden>
     <h2>No admin access</h2>
     <p>This login is not an active admin of an institute. Ask an admin of your institute to check your seat.</p>
   </section>
 
   <section id="app" hidden>
-    <div class="panel">
-      <form id="range-form" class="row">
-        <label>From <input id="from" type="date" required></label>
-        <label>To <input id="to" type="date" required></label>
-        <button type="submit">Show</button>
-        <button type="button" id="range-last7">Last 7 days</button>
-      </form>
-      <p id="range-msg" class="msg" role="status"></p>
-    </div>
-
-    <div class="panel">
-      <div class="row between">
-        <h2>Team activity</h2>
-        <button type="button" id="csv">Download CSV</button>
-      </div>
-      <div class="scroll">
-        <table>
-          <thead>
-            <tr><th>Rep</th><th>Day</th><th class="num">Calls</th><th class="num">Connected</th><th class="num">Connect rate</th><th class="num">Talk (s)</th><th>Last call</th></tr>
-          </thead>
-          <tbody id="team-body"></tbody>
-        </table>
-      </div>
-      <p id="team-empty" class="muted" hidden>No calls in this range.</p>
-    </div>
-
-    <div class="panel">
-      <h2>Results by outcome</h2>
-      <div class="scroll">
-        <table>
-          <thead><tr id="outcome-head"></tr></thead>
-          <tbody id="outcome-body"></tbody>
-        </table>
-      </div>
-      <p id="outcome-empty" class="muted" hidden>No outcomes in this range.</p>
-    </div>
-
-    <div class="panel" id="weekly">
-      <div class="row between">
-        <h2>Weekly summary</h2>
-        <button type="button" id="week-csv">Download CSV</button>
-      </div>
-      <form id="week-form" class="row">
-        <label>Week starting (Monday) <input id="week-start" type="date" required></label>
-        <button type="submit">Show week</button>
-      </form>
-      <p id="week-msg" class="msg" role="status"></p>
-      <div class="scroll">
-        <table class="stack" id="week-table" hidden>
-          <thead id="week-head"></thead>
-          <tbody id="week-body"></tbody>
-        </table>
-      </div>
-      <p id="week-empty" class="muted" hidden>No activity in this week.</p>
-    </div>
-
-    <div class="panel" id="progress">
-      <h2>Rep progress</h2>
-      <form id="progress-form" class="row">
-        <label>Day <input id="progress-day" type="date" required></label>
-        <button type="submit">Show day</button>
-      </form>
-      <p id="progress-msg" class="msg" role="status"></p>
-      <div class="scroll">
-        <table class="stack">
-          <thead><tr><th>Rep</th><th class="num">Calls</th><th class="num">Connected</th><th class="num">Talk (min)</th></tr></thead>
-          <tbody id="progress-body"></tbody>
-        </table>
-      </div>
-      <p id="progress-empty" class="muted" hidden>No reps yet.</p>
-
-      <h3>Not calling</h3>
-      <p id="idle-text" class="muted"></p>
-      <ul id="idle-list" class="plain"></ul>
-    </div>
-
-    <div class="panel" id="targets">
-      <h2>Daily targets</h2>
-      <p class="muted">Type a number in any box to change that target; blank boxes keep their current target. A target of 0 means no target. Each save asks you to confirm.</p>
-      <div class="scroll">
-        <table class="stack">
-          <thead><tr><th>Rep</th><th>Calls</th><th>Connected calls</th><th>Talk minutes</th><th>Save</th></tr></thead>
-          <tbody id="target-body"></tbody>
-        </table>
-      </div>
-      <p id="target-empty" class="muted" hidden>No active reps yet.</p>
-      <p id="target-msg" class="msg" role="status"></p>
-    </div>
-
-    <div class="panel" id="notes">
-      <h2>Supervisor notes</h2>
-      <form id="notes-form" class="row wrap">
-        <label>Rep <select id="notes-rep"></select></label>
-        <label>Day <input id="notes-day" type="date" required></label>
-        <button type="submit">Show notes</button>
-      </form>
-      <p id="notes-msg" class="msg" role="status"></p>
-      <ul id="notes-list" class="plain"></ul>
-      <p id="notes-empty" class="muted" hidden>No notes for this rep on this day.</p>
-
-      <form id="note-form" class="stackform">
-        <label>Add a note for the rep and day above
-          <textarea id="note-text" rows="3"></textarea></label>
-        <p id="note-count" class="muted small">0 of 1000 characters</p>
-        <div class="row"><button type="submit" id="note-add">Add note</button></div>
-      </form>
-      <p id="note-msg" class="msg" role="status"></p>
-    </div>
-
-    <div class="panel" id="login">
-      <h2>Your password</h2>
-      <p class="muted">Change it now while you are signed in, or email yourself a reset link.</p>
-      <div class="row"><a class="button-link" href="reset.html">Change your password</a> <button type="button" id="reset-send">Email me a reset link</button></div>
-      <p id="reset-msg" class="msg" role="status"></p>
-    </div>
-
-    <div class="panel">
-      <h2>Seats</h2>
-      <form id="invite-form" class="row wrap">
-        <label>Work email <input id="invite-email" type="email" autocomplete="off" required></label>
-        <label>Seat label <input id="invite-label" type="text" maxlength="60" placeholder="Rep 4" required></label>
-        <label>Role
-          <select id="invite-role">
-            <option value="rep">Rep</option>
-            <option value="admin">Admin</option>
-          </select>
-        </label>
-        <button type="submit">Add seat</button>
-      </form>
-      <p id="invite-msg" class="msg" role="status"></p>
-
-      <div class="scroll">
-        <table>
-          <thead>
-            <tr><th>Seat</th><th>Role</th><th>Status</th><th>Devices</th><th>Pairing</th><th>Last call</th><th>Actions</th></tr>
-          </thead>
-          <tbody id="seat-body"></tbody>
-        </table>
-      </div>
-      <p id="seat-empty" class="muted" hidden>No seats yet.</p>
-
-      <div id="confirm" class="confirm" role="alertdialog" aria-labelledby="confirm-title" aria-describedby="confirm-text" hidden>
-        <h3 id="confirm-title"></h3>
-        <p id="confirm-text"></p>
-        <label id="confirm-email-field" hidden><span id="confirm-email-label"></span>
-          <input id="confirm-email" type="email" autocomplete="off"></label>
-        <div class="row">
-          <button type="button" id="confirm-go"></button>
-          <button type="button" id="confirm-cancel">Cancel</button>
-        </div>
-        <p id="confirm-msg" class="msg" role="status"></p>
-      </div>
-    </div>
-
     <p id="status" class="msg" role="status"></p>
+    <!-- js/admin/shell.js adds one section per tab here, the first time the tab is opened. -->
+    <div id="panels"></div>
+
+    <div id="confirm" class="confirm" role="alertdialog" aria-labelledby="confirm-title" aria-describedby="confirm-text" hidden>
+      <h3 id="confirm-title"></h3>
+      <p id="confirm-text"></p>
+      <label id="confirm-email-field" hidden><span id="confirm-email-label"></span>
+        <input id="confirm-email" type="email" autocomplete="off"></label>
+      <div class="row">
+        <button type="button" id="confirm-go"></button>
+        <button type="button" id="confirm-cancel">Cancel</button>
+      </div>
+      <p id="confirm-msg" class="msg" role="status"></p>
+    </div>
   </section>
 </main>
 
@@ -205,5 +81,17 @@
 <script src="js/config.js"></script>
 <script src="js/admin.js"></script>
 <script src="js/admin-team.js"></script>
+<script src="js/script-model.js"></script>
+<script src="js/script-editor.js"></script>
+<script src="js/admin/shared.js"></script>
+<!-- The tabs, in any order (shared.js sorts them). Each registers itself; shell.js runs last. -->
+<script src="js/admin/home.js"></script>
+<script src="js/admin/insights.js"></script>
+<script src="js/admin/campaigns.js"></script>
+<script src="js/admin/scripts.js"></script>
+<script src="js/admin/callers.js"></script>
+<script src="js/admin/reports.js"></script>
+<script src="js/admin/settings.js"></script>
+<script src="js/admin/shell.js"></script>
 </body>
 </html>

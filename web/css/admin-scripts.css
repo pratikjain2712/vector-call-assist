@@ -1,0 +1,33 @@
+/* Scripts tab (js/admin/scripts.js, the editor in js/script-editor.js). Moved from script-editor.css. */
+.tab-scripts .layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gap); }
+.tab-scripts .main-col { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+@media (min-width: 900px) {
+  .tab-scripts .layout { grid-template-columns: 260px minmax(0, 1fr); align-items: start; }
+}
+.tab-scripts .row { align-items: center; }
+.tab-scripts .compare { align-items: flex-end; margin-top: 12px; }
+.tab-scripts .field { width: 100%; margin: 10px 0; }
+.tab-scripts .field input, .tab-scripts .field textarea, .tab-scripts .opt input { width: 100%; }
+.tab-scripts label.check { flex-direction: row; align-items: center; gap: 8px; font-weight: 500; }
+.tab-scripts .plain { display: flex; flex-direction: column; gap: 6px; }
+.tab-scripts .plain li { padding: 0; border: 0; }
+.tab-scripts .plain button { width: 100%; text-align: left; overflow-wrap: anywhere; }
+.tab-scripts .plain button.current { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.tab-scripts td { overflow-wrap: anywhere; }
+.tab-scripts .published-tag { color: var(--ok); font-weight: 600; }
+.tab-scripts .problems { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: var(--radius-button);
+  padding: 10px 14px; margin: 10px 0; }
+.tab-scripts .problems h3 { color: var(--warn); }
+.tab-scripts .problems ul { margin: 0; padding-left: 18px; }
+.tab-scripts .step { border: 1px solid var(--line); border-radius: var(--radius-button); padding: 12px 14px; margin: 10px 0; min-width: 0; }
+.tab-scripts .step legend { padding: 0 6px; font-weight: 600; color: var(--heading); }
+.tab-scripts .grid2 { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+@media (min-width: 600px) { .tab-scripts .grid2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.tab-scripts .grid2 .field { margin: 0; }
+.tab-scripts .opt { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; border-top: 1px dashed var(--line);
+  padding-top: 8px; margin-top: 8px; }
+@media (min-width: 600px) { .tab-scripts .opt { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; } }
+.tab-scripts .opt .field { margin: 0; }
+.tab-scripts .confirm { position: static; box-shadow: none; max-width: none; margin-top: 12px; border-width: 2px; }
+.tab-scripts .test-lines { padding-left: 20px; margin: 12px 0; display: flex; flex-direction: column; gap: 6px; overflow-wrap: anywhere; }
+.tab-scripts .diff p { margin: 6px 0; overflow-wrap: anywhere; }

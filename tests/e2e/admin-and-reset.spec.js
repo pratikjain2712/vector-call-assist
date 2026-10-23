@@ -10,12 +10,57 @@ test('admin signs in with a password and sees the team activity', async ({ page,
   if (backend) backend.addOutcome(row);
   else expect((await (await userDb('rep1')).from('call_outcomes').insert(row)).error).toBeNull();
 
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/admin.html');
   await page.locator('#gate-email').fill(env().users.admin.email);
   await page.locator('#gate-password').fill(env().password);
   await expect(page.locator('#gate-submit')).toHaveText('Sign in');
   await page.locator('#gate-submit').click();
+
+  // The admin app opens on Home. Team activity is on the Callers tab.
+  await expect(page.locator('#tab-link-home')).toHaveAttribute('aria-current', 'page');
+  await expect(page).toHaveURL(/#home$/);
+  await page.locator('#tab-link-callers').click();
+  await expect(page).toHaveURL(/#callers$/);
+  await expect(page.locator('#tab-link-callers')).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('#team-body')).toContainText('Rep 1');
+
+  // Results by outcome are on the Reports tab, and the back button returns to Callers.
+  await page.locator('#tab-link-reports').click();
+  await expect(page).toHaveURL(/#reports$/);
+  await expect(page.locator('#outcome-body')).toContainText('Rep 1');
+  await expect(page.locator('#team-body')).toBeHidden();
+  await page.goBack();
+  await expect(page.locator('#team-body')).toBeVisible();
+  await expect(page.locator('#outcome-body')).toBeHidden();
+  expect(errors).toEqual([]);
+
+  // The script editor lives in the Scripts tab, and the old page sends people there.
+  await page.goto('/script-editor.html');
+  await expect(page).toHaveURL(/admin\.html#scripts$/);
+  await expect(page.locator('#new-script')).toBeVisible();
+});
+
+test('the admin tabs fit a phone screen', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 740 });
+  await page.goto('/admin.html#callers');
+  await page.locator('#gate-email').fill(env().users.admin.email);
+  await page.locator('#gate-password').fill(env().password);
+  await page.locator('#gate-submit').click();
+  // A linked tab opens directly after sign-in.
+  await expect(page.locator('#tab-link-callers')).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('#seat-body')).toContainText('Rep 1');
+  // Every tab can be reached (the tab row scrolls sideways), and the page itself never scrolls sideways.
+  for (const id of ['home', 'insights', 'campaigns', 'scripts', 'callers', 'reports', 'settings']) {
+    await page.locator('#tab-link-' + id).click();
+    await expect(page.locator('#tab-' + id)).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+  }
+  // Keyboard: Tab reaches the tab links and Enter opens one.
+  await page.locator('#tab-link-home').focus();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/#home$/);
 });
 
 test('a signed-in user changes their password on reset.html', async ({ page, backend }) => {

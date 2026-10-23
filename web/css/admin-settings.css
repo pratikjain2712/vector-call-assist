@@ -1,0 +1,2 @@
+/* Settings tab (js/admin/settings.js). Scope every rule under .tab-settings. */
+.tab-settings .row { align-items: center; }
