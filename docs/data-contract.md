@@ -226,9 +226,9 @@ An export with ₹ columns: call `log_money_export(inst, 'fees_report', rowCount
 
 Caller lead card: read the lead's plain columns from `leads`, then `lead_money(lead.id)` for the amount due; show "Hidden" when `money_hidden`.
 
-## Not built here (for the feature agents)
+## Built in Phase A (round 2)
 
-Campaign create / edit / pause / close, adding and removing members, lead upload and moving leads, the caller queue order, reports, insights, WhatsApp. Each needs its own checked functions following the rules above.
+Campaign create / edit / pause / close, members, lead upload and moving leads, the caller queue, reports, insights, script tests, practice and WhatsApp are built: each feature's section follows, and "Phase A integration" at the end says which page calls what.
 
 <!-- Phase A: campaigns -->
 ## Campaigns: admin functions
@@ -294,7 +294,7 @@ _Migration `20261024100021_caller_screen.sql`. Tests: `supabase/tests/caller_scr
 
 Lead mapping in `save_call_result`: `do_not_call` → do_not_call; `wrong_number` → wrong_number; `no_answer` / `busy` → try again in 2 h / 30 min (new becomes callback); result with date and amount → promised (`promised_date`, `promised_amount`, next call on that date); result with a date → callback on that date (`p_next_call_at` or 10:00 India); legacy `callback` result without a date (Will think) → callback in 2 days; anything else → done. `p_consent_whatsapp` sets `consent_whatsapp` when not null. The browser mirrors this in `web/js/campaign-queue.js` (`applyResult`) for its offline copy.
 
-`next_free_lead(p_campaign uuid)` (campaigns feature) is called by the caller page when a `next_free` campaign has nothing waiting; the page accepts a lead id, a lead row or a list of rows, and works without it.
+`next_free_lead(p_campaign uuid)` (campaigns feature, 0020; returns 0 or 1 row with `lead_id`) is called by the caller page when a `next_free` campaign has nothing waiting; the page also accepts a lead id or a list of rows, and works without it.
 <!-- end Phase A: caller -->
 
 <!-- Phase A: admin -->
@@ -370,3 +370,37 @@ Details and the email schedule: `docs/weekly-brief.md`. Tables `script_tests`, `
 
 Migration `20261024100027_whatsapp.sql`; details, RPCs and setup in `docs/whatsapp-setup.md`. Tables `whatsapp_accounts`, `whatsapp_templates`, `whatsapp_messages`, `whatsapp_brief_recipients` (browser read-only, RLS: admins of the institute; callers see approved templates and the messages of their own leads) and `whatsapp_secrets` (no browser access at all). Message bodies are stored with amounts masked (`₹…`); `whatsapp_messages.cost_inr` is not granted to the browser and `admin_whatsapp_overview()` returns the cost only when `can_see_money()`. Send only when `leads.consent_whatsapp` and not `do_not_call`; a STOP reply sets `consent_whatsapp = false`.
 <!-- end Phase A: whatsapp -->
+
+<!-- Phase A: integration -->
+## Phase A integration (round 2)
+
+_Migration `20261024100030_phase_a_integration.sql`. All eight feature branches merged; this is who calls what._
+
+**Fixes in 0030**
+- `wa_claim_briefs` flattens the `text[]` that `admin_weekly_brief` returns, so the WhatsApp brief has 4 lines, not one nested array.
+- `campaign_check_script(p_institute, p_script, p_call_type)`: the script must be of the campaign's call type or untyped (saved before 0022), as the `campaigns_check_script` trigger already required. The Campaigns tab offers only those scripts (`SCRIPT_TYPE_FILTER` on).
+
+**Caller page (`web/app.html`, `web/js/main.js`, `web/js/cloud.js`)**
+
+| Call | When | Notes |
+|---|---|---|
+| `my_campaigns()`, `my_features()` | sign-in, reload | kept on the device for offline use |
+| `my_call_queue(p_campaign)` | campaign picked, every minute while idle, after a sync | |
+| `next_free_lead(p_campaign)` | "whoever is free next" campaign with nothing waiting | |
+| `campaign_script_version(p_campaign, p_lead)` | campaign picked (lead null) and each new lead on the card | Script test arm per lead; `script_id::text` and `version` go into `save_call_result` (`p_script_id`, `p_script_version`). Missing function: the published version (`scripts` read). Offline: the device copy (`script:<id>:lead:<lead>` for a test version, else `script:<id>`). |
+| `lead_money(p_lead)` | lead on the card | memory only |
+| `save_call_result(...)` | Save (through the outbox) | a sync asked for while one runs runs right after it |
+| `my_practice()` | sign-in | top-bar link "Practise (N to do)" → `practice.html` or `practice.html?script=<id>` when one is assigned |
+| `my_whatsapp_templates()` (via `VectorWhatsApp.loadTemplates`) | sign-in | `[]` without a connected number |
+| Edge Function `whatsapp-send` (via `VectorWhatsApp.sendAfterCall`) | after the server has the result, when the caller ticked "After saving, send … from the institute's WhatsApp" | offered only for an approved template of this call type and ending with no typed blanks, and when the person said yes (on this call or before); the `wa.me` link stays beside it |
+| `report_presence(p_on_call, p_phone_ok)` | every minute, when a call starts, after a save | `p_phone_ok` false when the paired phone does not answer; stops calling if the function is missing |
+
+**Admin page (`web/admin.html`)**
+- Settings mounts `window.VectorSettingsWhatsApp` (`js/admin/settings-whatsapp.js`, loaded by `admin.html`) into `#settings-whatsapp`; shows `admin_ai_usage()` as "N of 20 AI drafts used this month".
+- Insights mounts `window.VectorInsightsExtra.mountWeeklyBrief` (`#insights-brief`) and `mountScriptTest` (`#insights-abtest`) on the tab's campaign and passes campaign changes on (`refresh(id)`, `setCampaign(id)`); "Send to practice mode" shows because `admin_assign_practice` exists.
+- Callers: Edit caller → campaigns with `admin_set_campaign_members`, "Move leads" with `admin_move_leads(p_from_seat, p_to_seat, p_campaign)`.
+- Home links "Promises due today" to `#reports?report=fees`.
+
+**Browser RPC names checked**: every `rpc('…')` and `Cloud` call in `web/` and `supabase/functions/` names a function in `supabase/migrations/` with matching argument names.
+<!-- end Phase A: integration -->
+

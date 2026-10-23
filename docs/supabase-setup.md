@@ -59,6 +59,27 @@ supabase functions deploy seat-admin
 
 The function sends invitation emails with the service role key. Supabase gives deployed functions `SUPABASE_SERVICE_ROLE_KEY` automatically, so there is no secret to create by hand; the Supabase CLI does not allow secrets whose names start with `SUPABASE_`. Never add that key to `config.js` or to the repo. If the function answers "The server is not configured for seat changes", redeploy it and check its logs.
 
+## 6. Phase A: new migrations, Edge Functions and secrets
+
+Apply the new migrations (`20261024100020` to `20261024100030`) with `supabase db push` after `supabase link`. Then deploy the Edge Functions and set their secrets (`supabase secrets set NAME=value`, never in the repo or in chat):
+
+| Function | Secrets | Details |
+|---|---|---|
+| `ai-script-draft` | `ANTHROPIC_API_KEY`; optional `ANTHROPIC_MODEL_DRAFT`, `ANTHROPIC_MODEL_FALLBACK` | `docs/data-contract.md` (Scripts), `docs/ai-draft-quality.md` |
+| `weekly-brief` | `RESEND_API_KEY`, `BRIEF_FROM_EMAIL`, `BRIEF_CRON_SECRET`; optional `BRIEF_APP_URL`, `BRIEF_EMAIL_PROVIDER` | `docs/weekly-brief.md` (Monday pg_cron job, 02:30 UTC) |
+| `whatsapp-admin`, `whatsapp-send`, `whatsapp-webhook`, `whatsapp-reminders` | `WHATSAPP_TOKEN_KEY`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_CRON_SECRET`; optional `WHATSAPP_PLATFORM_TOKEN`, `WHATSAPP_GRAPH_VERSION` | `docs/whatsapp-setup.md` (Meta app, webhook, daily pg_cron job) |
+
+```
+supabase functions deploy ai-script-draft
+supabase functions deploy weekly-brief
+supabase functions deploy whatsapp-admin
+supabase functions deploy whatsapp-send
+supabase functions deploy whatsapp-webhook --no-verify-jwt
+supabase functions deploy whatsapp-reminders --no-verify-jwt
+```
+
+Check `docs/whatsapp-setup.md` for the exact flags of each WhatsApp function (Meta and the schedule call the webhook and the reminders without a Supabase login). The two schedules (weekly brief, WhatsApp reminders) need the project URL and a Vault secret, so they are set up by hand from those docs, not by a migration.
+
 ## How it behaves
 
 - **Order of screens:** sign in (emailed link) → pair the phone → calling workspace.

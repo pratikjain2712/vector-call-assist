@@ -83,7 +83,7 @@
         key: 'promises',
         text: plural(due.count, 'fee promise is', 'fee promises are') + ' due today.',
         detail: amount ? amount + ' in total, ' + S.REPORTED_BY_CALLER + '.' : '',
-        tab: 'reports', params: { view: 'fees' }, link: 'See list',
+        tab: 'reports', params: { report: 'fees' }, link: 'See list',
       });
     }
     (sm.callers || []).forEach((c) => {

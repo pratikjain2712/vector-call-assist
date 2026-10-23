@@ -66,7 +66,7 @@ test('needs attention: the four rules in order, with links', () => {
   assert.deepStrictEqual(items.map((i) => i.key), ['promises', 'phone-s1', 'script-sc1', 'idle-s2']);
   assert.strictEqual(items[0].text, '6 fee promises are due today.');
   assert.strictEqual(items[0].detail, '₹54,000 in total, reported by caller.');
-  assert.deepStrictEqual([items[0].tab, items[0].params], ['reports', { view: 'fees' }]);
+  assert.deepStrictEqual([items[0].tab, items[0].params], ['reports', { report: 'fees' }]);
   assert.strictEqual(items[1].text, 'Sana\'s phone is offline.');
   assert.ok(/Calls cannot start\.$/.test(items[1].detail));
   assert.deepStrictEqual([items[1].tab, items[1].params], ['callers', { seat: 's1' }]);

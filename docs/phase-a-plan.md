@@ -70,81 +70,90 @@ Pilot and checks:
 - Scripts add-on: guided scripts, editor, templates, AI script maker (20 drafts a month per institute), script test, step coaching, where calls end. ₹299 a seat a month (₹239 yearly).
 - Same volume discounts as the website today. Trial: everything on for 5 days.
 - AI top-up later only if the cost log shows need (e.g. ₹299 for 50 drafts). WhatsApp: pass-through or the institute's own Meta account (decision open).
-- [ ] S · Per-institute feature switches `scripts` and `ai_drafts`, checked on the server (AI function, script publishing) and in the UI ("Add Scripts to use this"); trial turns both on
-- [ ] S · Website pricing section updated once prices are confirmed (after the pilot)
+- [x] S · Per-institute feature switches `scripts` and `ai_drafts`, checked on the server (AI function, script publishing) and in the UI ("Add Scripts to use this"); trial turns both on
+- [ ] S · Website pricing section updated once prices are confirmed (after the pilot) _(open: prices are not confirmed yet)_
 
 ## Sprint 7: Data foundation (cloud)
-- [ ] M · `call_types` and `call_type_results` tables (key, label, needs date / amount / reason, counts as good result), seeded with the list above; admin-only write
-- [ ] M · `campaigns` (type, script, dates, status, daily target) and `campaign_members` (seat ↔ campaign)
-- [ ] L · `leads` in the cloud: name, phone, extra fields (student, class, amount due…), campaign, assigned seat, status, next call date, consent; RLS: a caller sees only leads assigned to them
-- [ ] M · `call_outcomes`: add campaign, lead, result key (checked against the call type), promised date, amount, step times; keep the old `outcome` column working for old data
-- [ ] M · Money rules: roles, "can see money", "hide money", money only through checked functions; audit money exports
-- [ ] S · SQL tests for every new table and rule (same style as `supabase/tests`)
+- [x] M · `call_types` and `call_type_results` tables (key, label, needs date / amount / reason, counts as good result), seeded with the list above; admin-only write
+- [x] M · `campaigns` (type, script, dates, status, daily target) and `campaign_members` (seat ↔ campaign)
+- [x] L · `leads` in the cloud: name, phone, extra fields (student, class, amount due…), campaign, assigned seat, status, next call date, consent; RLS: a caller sees only leads assigned to them
+- [x] M · `call_outcomes`: add campaign, lead, result key (checked against the call type), promised date, amount, step times; keep the old `outcome` column working for old data
+- [x] M · Money rules: roles, "can see money", "hide money", money only through checked functions; audit money exports
+- [x] S · SQL tests for every new table and rule (same style as `supabase/tests`)
 
 ## Sprint 8: Campaigns and the caller screen
-- [ ] L · Admin: campaigns list, 4-step "New campaign" (details, script, leads, callers), pause and close, add leads
-- [ ] M · Lead upload to the cloud: reuse `import-check.js` (bad numbers, repeats), column matching for extra fields
-- [ ] M · Share leads: equal parts or "whoever is free next"; move leads between callers
-- [ ] L · Caller: campaign picker, cloud lead queue (callbacks and promises due first, then new), lead card with campaign fields, offline copy in IndexedDB and sync
-- [ ] M · Caller: result buttons from the call type, with date and ₹ fields
-- [ ] S · Caller page loads the campaign's script (replace `publishedScript()` "newest for institute")
+- [x] L · Admin: campaigns list, 4-step "New campaign" (details, script, leads, callers), pause and close, add leads
+- [x] M · Lead upload to the cloud: reuse `import-check.js` (bad numbers, repeats), column matching for extra fields
+- [x] M · Share leads: equal parts or "whoever is free next"; move leads between callers
+- [x] L · Caller: campaign picker, cloud lead queue (callbacks and promises due first, then new), lead card with campaign fields, offline copy in IndexedDB and sync
+- [x] M · Caller: result buttons from the call type, with date and ₹ fields
+- [x] S · Caller page loads the campaign's script (replace `publishedScript()` "newest for institute")
 
 ## Sprint 9: Scripts and the AI script maker
-- [ ] S · Script type on each script; only scripts of the same type can be used in a campaign
-- [ ] M · Editor: link every ending to a result; pushback buttons per script (closes the two open Sprint 4 items)
-- [ ] S · 3 starter templates: Fees reminder, Course sales, Admission follow-up (also used as examples in the AI prompt, which helps Haiku)
-- [ ] L · AI draft server function (Supabase Edge Function; key stays on the server; Haiku 5.5, Sonnet 5.5 fallback): form → script JSON in the `script-model.js` format, checked by the same validator
-- [ ] M · Safety checks: facts only from the form, "Check this" marks block publishing, no threats or false urgency, "do not call again" exit, easy-to-read score
-- [ ] S · "Make simpler" (one line or whole script), "Try again"
-- [ ] S · Usage limit 20 a month per institute; log tokens, model and cost per request; show usage in Settings
-- [ ] S · Quality check: 10 test briefs (fees, sales, admission), compare Haiku and Sonnet drafts side by side before the pilot
+- [x] S · Script type on each script; only scripts of the same type can be used in a campaign
+- [x] M · Editor: link every ending to a result; pushback buttons per script (closes the two open Sprint 4 items)
+- [x] S · 3 starter templates: Fees reminder, Course sales, Admission follow-up (also used as examples in the AI prompt, which helps Haiku)
+- [x] L · AI draft server function (Supabase Edge Function; key stays on the server; Haiku 5.5, Sonnet 5.5 fallback): form → script JSON in the `script-model.js` format, checked by the same validator
+- [x] M · Safety checks: facts only from the form, "Check this" marks block publishing, no threats or false urgency, "do not call again" exit, easy-to-read score
+- [x] S · "Make simpler" (one line or whole script), "Try again"
+- [x] S · Usage limit 20 a month per institute; log tokens, model and cost per request; show usage in Settings
+- [x] S · Quality check: 10 test briefs (fees, sales, admission), compare Haiku and Sonnet drafts side by side before the pilot
 
 ## Sprint 10: New admin app
-- [ ] M · One admin page with top tabs (Home, Insights, Campaigns, Scripts, Callers, Reports, Settings); merge `admin.html` and `script-editor.html`; keep the CSP and no inline scripts
-- [ ] M · Home: today's numbers, callers right now, needs attention, campaign progress
-- [ ] M · Callers: seats plus campaigns per caller, target, phone status, move leads
-- [ ] M · Reports: Fees view (due, paid, promised, broken promises, due this week → send back to callers), Sales funnel, existing reports moved over
-- [ ] S · Excel export (closes the open Sprint 3 item), with money rules
-- [ ] S · Settings: call types, money switches, plan and AI usage, WhatsApp usage
-- [ ] S · Browser test at 375px and desktop
+- [x] M · One admin page with top tabs (Home, Insights, Campaigns, Scripts, Callers, Reports, Settings); merge `admin.html` and `script-editor.html`; keep the CSP and no inline scripts
+- [x] M · Home: today's numbers, callers right now, needs attention, campaign progress
+- [x] M · Callers: seats plus campaigns per caller, target, phone status, move leads
+- [x] M · Reports: Fees view (due, paid, promised, broken promises, due this week → send back to callers), Sales funnel, existing reports moved over
+- [x] S · Excel export (closes the open Sprint 3 item), with money rules
+- [x] S · Settings: call types, money switches, plan and AI usage, WhatsApp usage
+- [x] S · Browser test at 375px and desktop
 
 ## Sprint 11: Insights, Phase A
-- [ ] M · Caller page records time spent on each script step (needed for coaching and drop-off)
-- [ ] M · Forecast per campaign: pace + promise-kept rate, low–high range, target; "not enough data" under 50 calls
-- [ ] S · What-if sliders (same model, in the browser)
-- [ ] M · Best time to call heatmap (day × hour) per campaign and caller; "Set call hours" saves to the campaign
-- [ ] S · Where calls end, by step (extend the existing script report)
-- [ ] S · Promises kept, by days away
-- [ ] M · Caller coaching: results vs team average, steps skipped, time per step; buttons for a note or practice mode
-- [ ] M · Script A/B test: split calls between two versions, winner with "how sure" (needs enough calls)
-- [ ] M · Weekly brief: 4 plain lines from rules, shown on Insights and sent by email (WhatsApp in Sprint 12)
-- [ ] M · Charts: hover tooltips, table view for each chart, dark mode, phone width
+- [x] M · Caller page records time spent on each script step (needed for coaching and drop-off)
+- [x] M · Forecast per campaign: pace + promise-kept rate, low–high range, target; "not enough data" under 50 calls
+- [x] S · What-if sliders (same model, in the browser)
+- [x] M · Best time to call heatmap (day × hour) per campaign and caller; "Set call hours" saves to the campaign
+- [x] S · Where calls end, by step (extend the existing script report)
+- [x] S · Promises kept, by days away
+- [x] M · Caller coaching: results vs team average, steps skipped, time per step; buttons for a note or practice mode
+- [x] M · Script A/B test: split calls between two versions, winner with "how sure" (needs enough calls)
+- [ ] M · Weekly brief: 4 plain lines from rules, shown on Insights and sent by email (WhatsApp in Sprint 12) _(open: built and shown on Insights; the Monday email needs an email sender account, the `weekly-brief` deploy and the pg_cron job in `docs/weekly-brief.md`)_
+- [x] M · Charts: hover tooltips, table view for each chart, dark mode, phone width
 
 ## Sprint 12: WhatsApp
-- [ ] S · Quick win (free): "Send on WhatsApp" opens the caller's own WhatsApp with the message filled in (`wa.me` link)
-- [ ] M · Per-institute WhatsApp Business number setup: Meta business verification, connect in Settings
-- [ ] M · Message templates per call-type ending (fees reminder, promise due, course details); submit for approval from the app
-- [ ] L · Send from the app after a call, with consent check; delivery and read status; replies shown on the lead; STOP = do not message again
-- [ ] S · Automatic reminder a day before a promised payment date (utility)
-- [ ] S · Weekly brief to the admin on WhatsApp
-- [ ] S · Message count and cost per institute in Settings
+- [x] S · Quick win (free): "Send on WhatsApp" opens the caller's own WhatsApp with the message filled in (`wa.me` link)
+- [ ] M · Per-institute WhatsApp Business number setup: Meta business verification, connect in Settings _(open: connect and disconnect in Settings are built and tested on the fake backend only; Meta business verification and a real number are not done)_
+- [ ] M · Message templates per call-type ending (fees reminder, promise due, course details); submit for approval from the app _(open: built (Settings), but submitting and the approval check have never run against Meta)_
+- [ ] L · Send from the app after a call, with consent check; delivery and read status; replies shown on the lead; STOP = do not message again _(open: sending after a saved result is wired on the caller page with the consent check; delivery and read status, replies and STOP come through `whatsapp-webhook`, never run against Meta; replies are not shown on the lead card yet)_
+- [ ] S · Automatic reminder a day before a promised payment date (utility) _(open: `whatsapp-reminders` is built; needs the deploy and the daily pg_cron job in `docs/whatsapp-setup.md`)_
+- [ ] S · Weekly brief to the admin on WhatsApp _(open: built (lines fixed in migration 0030); needs the deploy and the Monday job, never run against Meta)_
+- [x] S · Message count and cost per institute in Settings
 
 ## From the mockup review (24 Oct)
 Decisions on the open items: "Compare with" and "Apply plan" are built in Sprint 11; Home numbers refresh every minute (polling, not Realtime); practice mode is built; the three Phase B cards (Call these first, script suggestion, Ask about your calls) stay out of the Insights tab until Phase B.
 
-- [ ] S · Home: day (Today, Yesterday, This week) and campaign filters; refresh every minute
-- [ ] S · Home: "Needs your attention" rules (promises due today, phone offline, a step where many calls end, a caller idle 45 min)
-- [ ] S · Callers: role (Owner, Manager, Caller) and "Can see money" switch on Edit caller; a caller can be on more than one campaign
-- [ ] S · Settings: all 8 call types, add a new type and its results; "Hide money everywhere"; WhatsApp connection, message count and cost; admin activity log page
-- [ ] S · Money labels: "reported by caller" on every paid amount; managers without money access see counts only, and their Excel export has no ₹ columns
-- [ ] S · New campaign: the type list comes from `call_types` (all 8, not 3)
-- [ ] M · Caller screen: the waiting lead list (callbacks and promises due first), with the call card beside it
-- [ ] S · Caller screen: "Send on WhatsApp" opens WhatsApp with the message filled in (replaces "Copy WhatsApp message")
-- [ ] M · Practice mode: a caller walks a script with a pretend lead; nothing is dialled or counted; the admin can send a caller to it from coaching
-- [ ] S · Insights: "Compare with" (last 7 days or an earlier campaign)
-- [ ] S · Insights: "What closes the gap" list with "Apply plan" (sets the What-if values on the campaign: callers, daily target, call hours)
-- [ ] S · Sales funnel needs the step each call reached ("heard the pitch" = reached the pitch step)
-- [ ] S · Design canvas: remove the empty "Artboard 1" on Page 2
+- [x] S · Home: day (Today, Yesterday, This week) and campaign filters; refresh every minute
+- [x] S · Home: "Needs your attention" rules (promises due today, phone offline, a step where many calls end, a caller idle 45 min)
+- [x] S · Callers: role (Owner, Manager, Caller) and "Can see money" switch on Edit caller; a caller can be on more than one campaign
+- [x] S · Settings: all 8 call types, add a new type and its results; "Hide money everywhere"; WhatsApp connection, message count and cost; admin activity log page
+- [x] S · Money labels: "reported by caller" on every paid amount; managers without money access see counts only, and their Excel export has no ₹ columns
+- [x] S · New campaign: the type list comes from `call_types` (all 8, not 3)
+- [x] M · Caller screen: the waiting lead list (callbacks and promises due first), with the call card beside it
+- [x] S · Caller screen: "Send on WhatsApp" opens WhatsApp with the message filled in (replaces "Copy WhatsApp message")
+- [x] M · Practice mode: a caller walks a script with a pretend lead; nothing is dialled or counted; the admin can send a caller to it from coaching
+- [x] S · Insights: "Compare with" (last 7 days or an earlier campaign)
+- [x] S · Insights: "What closes the gap" list with "Apply plan" (sets the What-if values on the campaign: callers, daily target, call hours)
+- [x] S · Sales funnel needs the step each call reached ("heard the pitch" = reached the pitch step)
+- [ ] S · Design canvas: remove the empty "Artboard 1" on Page 2 _(open: design artifact, not in this repo)_
+
+## Left open after the Phase A integration
+- [ ] S · Server check of the Scripts add-on in `admin_script_report` and `admin_loss_insights` ("Why calls are lost" is locked only in the screen)
+- [ ] S · Results by outcome: filter by campaign on the server (the old function has no campaign argument; the tab says so)
+- [ ] S · Script editor: mark the pitch step (`"pitch": true`); until then the funnel uses the middle step and says so
+- [ ] S · Caller page: WhatsApp replies on the lead card (`VectorWhatsApp.leadMessages`), and templates with blanks the caller types (only templates without typed blanks are offered now)
+- [ ] S · Weekly summary report: follow the campaign and caller filters (it keeps its own week picker)
+- [ ] S · Live-Supabase run of the new browser tests (they ran on the fake backend only) and two callers asking `next_free_lead` at the same moment
+- [ ] S · Native Hindi review of the new caller strings (`camp.*` in `web/js/i18n.js`, drafts) and of the AI Hindi/Hinglish output
 
 ## Before release
 - [ ] Pilot with one institute on a fees campaign (2 callers, 1 week)

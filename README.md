@@ -37,3 +37,9 @@ It will be live at https://pratikjain2712.github.io/vector-call-assist/.
 - [Phase 2 test plan](docs/phase2-test-plan.md): what to run on the phone and what to send back
 - [Permissions](docs/permissions.md): every permission, why it's needed, and how to grant it
 - [Architecture and decisions](docs/architecture.md)
+- [Phase A plan](docs/phase-a-plan.md): campaigns, scripts, new admin, Insights, WhatsApp: what is done and what is open
+- [Data contract](docs/data-contract.md): tables, money rules and every database function the pages call
+- [Supabase setup](docs/supabase-setup.md): connecting the website to Supabase and applying the migrations
+- [AI script drafts: quality check](docs/ai-draft-quality.md): Haiku and Sonnet drafts compared, cost per draft
+- [Weekly brief](docs/weekly-brief.md): the Monday email, its Edge Function and schedule
+- [WhatsApp setup](docs/whatsapp-setup.md): Meta account, connecting a number, templates, secrets and the daily jobs
