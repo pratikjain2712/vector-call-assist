@@ -1,1 +1,39 @@
-/* Home tab (js/admin/home.js). Scope every rule under .tab-home. */
+/* Home tab (js/admin/home.js): filters, number tiles, callers right now, needs your attention and campaign
+   progress. Scope every rule under .tab-home. */
+.tab-home .home-filters label { min-width: 160px; }
+.tab-home #home-msg:empty { display: none; }
+.tab-home .home-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.tab-home .home-tile { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-card);
+  padding: 14px 16px; min-width: 0; }
+.tab-home .home-tile-label { font-size: 13px; color: var(--muted); font-weight: 600; }
+.tab-home .home-tile-value { font-family: var(--font-display); font-size: 28px; font-weight: 800; color: var(--heading);
+  line-height: 1.2; margin-top: 4px; overflow-wrap: anywhere; }
+.tab-home .home-tile-sub { font-size: 13px; color: var(--text); margin-top: 2px; }
+.tab-home .row.between h2 { margin: 0; }
+.tab-home .home-status { font-weight: 600; white-space: nowrap; }
+.tab-home .home-status::before { content: "● "; }
+.tab-home .home-status.ok { color: var(--ok); }
+.tab-home .home-status.warn { color: var(--warn); }
+.tab-home .home-status.warn::before { content: "▲ "; }
+.tab-home .home-status.danger { color: var(--danger); }
+.tab-home .home-status.danger::before { content: "■ "; }
+.tab-home .home-status.muted { color: var(--muted); }
+.tab-home .home-split { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); }
+.tab-home .home-alert { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; }
+.tab-home .home-alert button { flex: none; padding: 5px 10px; font-size: 13px; }
+.tab-home .home-campaign { padding: 10px 0; }
+.tab-home .home-bar { height: 8px; background: var(--line-soft); border-radius: 4px; overflow: hidden; margin: 6px 0 4px; }
+.tab-home .home-bar-fill { height: 100%; background: var(--chart-2); }
+@media (max-width: 899px) {
+  .tab-home .home-split { grid-template-columns: 1fr; }
+}
+@media (max-width: 699px) {
+  .tab-home .home-tiles { grid-template-columns: 1fr 1fr; }
+  .tab-home .home-tile-value { font-size: 22px; }
+  .tab-home .home-alert { flex-direction: column; align-items: stretch; }
+  /* One caller per card, label and value on one line, so the list stays short on a phone. */
+  .tab-home table.stack td { display: flex; justify-content: space-between; gap: 12px; text-align: right; }
+  .tab-home table.stack td::before { display: inline; flex: none; text-align: left; }
+  .tab-home .row.between { flex-wrap: nowrap; }
+  .tab-home .row.between > * { flex: 0 1 auto; }
+}

@@ -296,3 +296,24 @@ Lead mapping in `save_call_result`: `do_not_call` → do_not_call; `wrong_number
 
 `next_free_lead(p_campaign uuid)` (campaigns feature) is called by the caller page when a `next_free` campaign has nothing waiting; the page accepts a lead id, a lead row or a list of rows, and works without it.
 <!-- end Phase A: caller -->
+
+<!-- Phase A: admin -->
+## Admin Home, Callers and Settings
+
+_Sprint 10. Migration `20261024100023_admin_home_settings.sql`, tests `supabase/tests/admin_home_settings_test.sql`. Screens: `web/js/admin/home.js`, `callers.js`, `settings.js`._
+
+New column `institutes.time_zone` (text, default `Asia/Kolkata`; Home counts "today" in it; set with `admin_set_institute`). New table `seat_presence` (one row per seat; no browser access).
+
+| Function | Returns | Who | What |
+|---|---|---|---|
+| `report_presence(p_on_call boolean default false, p_phone_ok boolean default true)` | void | any active seat | **For the caller screen:** call about once a minute and when a call starts or ends. Feeds Home's "On a call", "Ready", "No calls for N min" and "Phone offline" (seen in the last 3 minutes). |
+| `admin_home_summary(p_day text default 'today', p_campaign uuid default null)` | jsonb | admin | `p_day` `today` / `yesterday` / `week`. Tiles (calls, same stretch before, picked up, talk, sales joined / interested, fees paid / promised counts; `paid_amount`, `promised_amount` null unless `can_see_money`), callers right now with `now {status, since, idle_minutes}`, `promises_due_today {count, amount}`, `script_ends` (Scripts add-on only: a step where > 35% of a script's picked-up calls in 7 days end, ≥ 10 calls), running campaign progress, campaign filter choices. |
+| `admin_callers(p_institute uuid)` | table `(seat_id, label, access_role, can_see_money, status, campaigns jsonb, calls_today, calls_target, now_status jsonb)` | admin | Adds roles, campaigns (not closed) and "now" to `admin_seat_list`. No emails, no money. |
+| `admin_institute_settings()` | jsonb | admin | name, time_zone, hide_money, status, trial_ends_at, trial_days_left, seat_limit, seats_used, features (`my_features`), is_owner, access_role. |
+| `admin_set_institute(p_name text default null, p_time_zone text default null)` | void | owner | Null keeps a value. Audit `institute.changed` (`name`, `time_zone` or both). |
+| `admin_audit_log(p_limit int default 25, p_offset int default 0)` | table `(id, created_at, action, target, actor_label, target_label, target_rest, total_rows)` | admin | Newest first, 1–100 rows a page. `target_label` names a seat, campaign, call type, result or script when the target starts with its id. |
+
+Internal (granted to nobody): `home_seat_status`, `home_calls` (latest correction applied, includes `amount`: check money before returning it), `institute_tz`, `home_admin_seat`.
+
+Callers tab uses `admin_set_campaign_members` and `admin_move_leads` (campaign functions) and shows "not available yet" without them. Settings reads `admin_ai_usage()` when the scripts feature has it, and loads `web/js/admin/settings-whatsapp.js` (an ES module exporting `mount(section, ctx)` and optionally `unmount()`) into `#settings-whatsapp` when the file exists.
+<!-- /Phase A: admin -->
