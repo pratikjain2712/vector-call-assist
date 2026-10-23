@@ -1,6 +1,6 @@
 # Connecting the website to Supabase
 
-The website syncs **call outcomes** to Supabase: outcome, end card reached, last objection, dial time, connected seconds and phone session ID. **Lead names and phone numbers never leave the browser.** With `web/js/config.js` left empty, the site runs exactly as before, local only.
+The website syncs **call outcomes** to Supabase: outcome, end card reached, last objection, dial time, connected seconds and phone session ID. **Lead names and phone numbers from a sheet opened on the laptop never leave the browser.** From Phase A (Sprint 7), leads uploaded to a **campaign** are stored in the cloud so they can be shared between callers; see `docs/data-contract.md` for who can read them and the money rules. With `web/js/config.js` left empty, the site runs exactly as before, local only.
 
 ## 1. Create the tables
 
