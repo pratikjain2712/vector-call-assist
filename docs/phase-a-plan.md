@@ -121,6 +121,23 @@ Pilot and checks:
 - [ ] S · Weekly brief to the admin on WhatsApp
 - [ ] S · Message count and cost per institute in Settings
 
+## From the mockup review (24 Oct)
+Decisions on the open items: "Compare with" and "Apply plan" are built in Sprint 11; Home numbers refresh every minute (polling, not Realtime); practice mode is built; the three Phase B cards (Call these first, script suggestion, Ask about your calls) stay out of the Insights tab until Phase B.
+
+- [ ] S · Home: day (Today, Yesterday, This week) and campaign filters; refresh every minute
+- [ ] S · Home: "Needs your attention" rules (promises due today, phone offline, a step where many calls end, a caller idle 45 min)
+- [ ] S · Callers: role (Owner, Manager, Caller) and "Can see money" switch on Edit caller; a caller can be on more than one campaign
+- [ ] S · Settings: all 8 call types, add a new type and its results; "Hide money everywhere"; WhatsApp connection, message count and cost; admin activity log page
+- [ ] S · Money labels: "reported by caller" on every paid amount; managers without money access see counts only, and their Excel export has no ₹ columns
+- [ ] S · New campaign: the type list comes from `call_types` (all 8, not 3)
+- [ ] M · Caller screen: the waiting lead list (callbacks and promises due first), with the call card beside it
+- [ ] S · Caller screen: "Send on WhatsApp" opens WhatsApp with the message filled in (replaces "Copy WhatsApp message")
+- [ ] M · Practice mode: a caller walks a script with a pretend lead; nothing is dialled or counted; the admin can send a caller to it from coaching
+- [ ] S · Insights: "Compare with" (last 7 days or an earlier campaign)
+- [ ] S · Insights: "What closes the gap" list with "Apply plan" (sets the What-if values on the campaign: callers, daily target, call hours)
+- [ ] S · Sales funnel needs the step each call reached ("heard the pitch" = reached the pitch step)
+- [ ] S · Design canvas: remove the empty "Artboard 1" on Page 2
+
 ## Before release
 - [ ] Pilot with one institute on a fees campaign (2 callers, 1 week)
 - [ ] Check AI and WhatsApp cost logs after the pilot; set plan prices
