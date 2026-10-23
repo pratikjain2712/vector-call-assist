@@ -106,6 +106,8 @@ The existing six sheet columns keep working as the per-lead summary. A **new cal
 
 All durations are computed from ISO timestamps, which include the +05:30 offset.
 
+_Update 24 Oct 2026:_ this local call log is still used for calls from a laptop lead sheet. Campaign calls (Phase A) also store the lead, the campaign and the result key in the cloud; see section 10.
+
 ## 6. Results download (one workbook)
 **Download results (.xlsx)** writes one file, `<name>-called.xlsx`, with two tabs. The separate CSV export was removed.
 - **Leads** (first tab, so uploading the file again still reads it as the lead list): the uploaded sheet with the six result columns, plus `Outcome code`, `Answered`, `Connected time (s)` and `Session ID` from the lead's latest call. These four are filled at download time, because the phone's call log answers after the outcome is tapped. A row with no call record keeps what the file already had.
@@ -172,3 +174,13 @@ web/  android/  docs/  .github/workflows/{android-apk.yml, pages.yml}
 - Pages deploys `web/` via GitHub Actions; the APK is a workflow artifact.
 - **Shared origin:** v1 and v2 are both on `pratikjain2712.github.io`, so they share localStorage. v2 must use its own keys (`vca2-*`) and offer a one-time "Import from v1" that reads `vcg-sheet` / `vcg-me` without changing them.
 - The companion's CORS allowlist origin stays `https://pratikjain2712.github.io`.
+
+## 10. Cloud data, Phase A (24 Oct 2026)
+
+Decision 1 of `docs/phase-a-plan.md` changes the earlier rule that lead names and numbers stay on the laptop:
+- **Leads uploaded to a campaign are stored in Supabase** (`leads`: name, phone as `+91` and 10 digits, extra sheet fields, assigned seat, status, next call date, consent). A caller reads and updates only the leads assigned to their own active seat; admins read their institute's leads. A sheet opened on the laptop without a campaign still stays in the browser.
+- **Call types are data** (`call_types`, `call_type_results`), not code: 8 built-in types plus 5 common results, and each institute can add its own. A campaign has one type; the caller's result buttons come from it.
+- **`call_outcomes`** gains `campaign_id`, `lead_id`, `result_key`, `promised_date`, `amount`, `result_reason`, `rating`, `step_times`, `reached_step`. The old `outcome` column is still filled (from the result), so the existing reports keep working.
+- **Roles and money:** `seats.role` stays `admin` / `rep`; `seats.admin_kind` splits admins into owner and manager (`seats.access_role` = owner / manager / caller). Money columns are never readable directly from the browser; they come only through functions that check `can_see_money()` (owner, or manager with "Can see money", and "Hide money everywhere" off) or, for a caller, `lead_money()` of one assigned lead. Money exports are written to the audit log.
+
+Tables, columns, functions and the rules every feature must follow are in `docs/data-contract.md`. Migrations: `supabase/migrations/20261024100012_call_types_campaigns_leads.sql`, `20261024100013_money_rules.sql`.
