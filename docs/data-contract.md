@@ -364,3 +364,9 @@ Details and the email schedule: `docs/weekly-brief.md`. Tables `script_tests`, `
 
 "Picked up" (script test, brief) = the call's result is not No answer, Busy or Wrong number and its outcome is not no_answer, busy or dropped_network. "Good" = the result's `counts_as_good` (old rows: outcome `won`).
 <!-- /Phase A: insights-extra -->
+
+<!-- Phase A: whatsapp -->
+## WhatsApp (Sprint 12)
+
+Migration `20261024100027_whatsapp.sql`; details, RPCs and setup in `docs/whatsapp-setup.md`. Tables `whatsapp_accounts`, `whatsapp_templates`, `whatsapp_messages`, `whatsapp_brief_recipients` (browser read-only, RLS: admins of the institute; callers see approved templates and the messages of their own leads) and `whatsapp_secrets` (no browser access at all). Message bodies are stored with amounts masked (`₹…`); `whatsapp_messages.cost_inr` is not granted to the browser and `admin_whatsapp_overview()` returns the cost only when `can_see_money()`. Send only when `leads.consent_whatsapp` and not `do_not_call`; a STOP reply sets `consent_whatsapp = false`.
+<!-- end Phase A: whatsapp -->
