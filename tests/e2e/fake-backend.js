@@ -5,6 +5,7 @@
 // It cannot test row-level security in Postgres itself: tests/e2e/access-rules.spec.js needs the real stack.
 const crypto = require('node:crypto');
 const CampaignQueue = require('../../web/js/campaign-queue.js');   // Phase A: caller: the lead update after a result
+const { createFakeInsights } = require('./fake-insights');   // Phase A: insights
 
 const b64url = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
 function jwt(user) {
@@ -305,6 +306,10 @@ function createFakeBackend(world) {
   }
   // End of Phase A: reports.
   const ADMIN_EMPTY = ['admin_weekly_summary', 'admin_rep_progress', 'list_supervisor_notes'];
+  // Phase A: insights (canned answers in fake-insights.js)
+  const insights = createFakeInsights(world, { requireAdmin, json, pgErr });
+  Object.assign(RPC, insights.RPC);
+  // /Phase A: insights
 
   // Phase A: scripts. The Scripts tab: typed scripts with pushbacks, the add-ons (db.features, all on by default,
   // like a trial), the AI usage and the ai-script-draft Edge Function (a canned draft from the fees template).
@@ -760,6 +765,7 @@ function createFakeBackend(world) {
     async attach(page, origin) { await page.route(origin + '/**', handle); },
     rowsFor: (seatId) => db.outcomes.filter((r) => r.seat_id === seatId),
     addOutcome: (row) => db.outcomes.push({ id: crypto.randomUUID(), uploaded_at: new Date().toISOString(), corrects_id: null, ...row }),
+    insights,   // Phase A: insights
     passwordOf: (who) => (db.users.find((x) => x.email === world.users[who].email) || {}).password,
     addCampaign,   // Phase A: caller
     adminTabs,   // Phase A: admin (addCampaign, setPresence, setPromisesDue)
