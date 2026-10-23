@@ -259,6 +259,71 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
 .tplrow { display: flex; }
 .tpl { width: auto; max-width: 100%; }
 .cbfield { display: flex; flex-direction: column; gap: 4px; max-width: 280px; }
+/* ---- Phase A: campaign calling. "Calling for" picker, the waiting leads beside the call card, the lead card,
+   and the result buttons of the campaign's call type. ---- */
+.campbar { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.campbar select { font: inherit; font-size: 0.92rem; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; max-width: 240px; min-width: 0; }
+.camptoday { font-size: 0.9rem; white-space: nowrap; }
+.camptoday b { font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) {
+  .topbar-in { flex-wrap: wrap; }
+  .campbar { order: 5; flex: 1 1 100%; }
+  .campbar select { flex: 1 1 auto; max-width: none; }
+  .camptoday { order: 6; }
+}
+.camplead .who { flex: 1 1 260px; }
+.camplead .who strong { font-size: 1.4rem; }
+@media (max-width: 540px) { .camplead .calls { flex: 1 1 100%; } .camplead .calls > * { flex: 1 1 0; } }
+.leadfacts { display: flex; flex-wrap: wrap; gap: 2px 14px; margin: 2px 0 0; padding: 0; list-style: none; font-size: 0.95rem; }
+.leadfacts li { overflow-wrap: anywhere; }
+.leadfacts .k { color: var(--muted); }
+.money b { font-variant-numeric: tabular-nums; }
+.lastcall { margin: 0; color: var(--muted); font-size: 0.92rem; overflow-wrap: anywhere; }
+.queuepanel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.queuepanel h2, .queuepanel h3 { margin: 0; font-family: var(--util); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.queuepanel h3 { margin-top: 4px; }
+.queuelist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.queuelist .leadrow .sub { grid-column: 1; font-size: 0.86rem; color: var(--muted); overflow-wrap: anywhere; }
+.leadrow .leadstate.promise { color: var(--yes); font-weight: 700; }
+.queuemore { margin: 0; }
+.resultpanel { border-top: 1px solid var(--line); padding: 16px 20px 18px; display: flex; flex-direction: column; gap: 12px; }
+.resultpanel h2 { margin: 0; font-size: 1.05rem; }
+.resgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.resbtn { font: inherit; font-weight: 700; min-height: 52px; padding: 10px 12px; border: 1px solid var(--line); background: var(--surface); border-radius: 10px; color: var(--fg); text-align: center; }
+.resbtn.good { color: var(--yes); }
+.resbtn.bad { color: var(--no); }
+.resbtn[aria-pressed="true"] { border: 2px solid var(--accent); background: var(--bg); color: var(--fg); }
+.rescommon { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.rescommon .resbtn { font-weight: 400; min-height: 40px; padding: 7px 12px; font-size: 0.92rem; }
+.resfields { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.resfields .field { flex: 1 1 160px; }
+.resfields .field.wide { flex: 2 1 240px; }
+.resfields input, .resfields select { font: inherit; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 9px 10px; width: 100%; }
+.resfields input:focus-visible, .resfields select:focus-visible, .campbar select:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.rating { display: flex; gap: 6px; border: 0; margin: 0; padding: 0; min-width: 0; }
+.rating legend { padding: 0; margin-bottom: 4px; }
+.rating label { display: inline-flex; }
+.rating input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.rating span { display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: pointer; font-weight: 700; }
+.rating input:checked + span { border: 2px solid var(--accent); color: var(--accent); }
+.rating input:focus-visible + span { outline: 3px solid var(--accent); outline-offset: 2px; }
+.resactions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; align-items: center; }
+.resactions .primary, .resactions .plain { padding: 11px 16px; border-radius: 8px; }
+.reported { color: var(--muted); font-size: 0.85rem; }
+.outboxline { margin: 0; font-size: 0.92rem; color: var(--maybe); }
+.outboxline:empty { display: none; }
+.noscript { margin: 0; color: var(--muted); }
+@media (max-width: 540px) {
+  .resultpanel { padding: 14px 16px 16px; }
+  .resgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .resactions > * { flex: 1 1 100%; text-align: center; }
+}
+@media (min-width: 1100px) {
+  .work.campaign { grid-template-columns: minmax(260px, .42fr) minmax(0, 1fr); grid-template-rows: auto 1fr; }
+  .work.campaign .queuepanel { grid-column: 1; grid-row: 1 / span 2; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; }
+  .work.campaign .workmain { grid-column: 2; grid-row: 1; }
+  .work.campaign .myresults { grid-column: 2; grid-row: 2; }
+}
 </style>
 
 </head>
@@ -315,6 +380,9 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
   <header class="topbar">
     <div class="topbar-in">
       <h1 class="brand">Vector <span>call guide</span></h1>
+      <!-- Phase A: caller. Which campaign the caller is calling for, and today's calls against the target. -->
+      <label class="campbar" id="camp-bar" hidden><span class="label">Calling for</span><select id="camp-pick"></select></label>
+      <span class="camptoday" id="camp-today" role="status" hidden></span>
       <label class="me"><span class="label">You</span><input id="me-name" type="text" autocomplete="off" value="Pratik" title="Your name, used in the script"></label>
       <details class="pill" id="cloud-panel">
         <summary><span id="cloud-summary">Synced</span></summary>
@@ -384,6 +452,7 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
         <label class="field grow"><span class="label">Calling</span><input id="lead-name" type="text" autocomplete="off" placeholder="Lead's name"></label>
         <label class="plain filebtn" for="sheet-file">Load lead sheet</label>
       </div>
+      <div class="callhead camplead" id="camp-lead" hidden></div>
       <section class="callpanel" id="call-panel" hidden></section>
       <div class="callmode" id="call-mode" role="group" aria-label="Call type">
         <button type="button" data-mode="intro" aria-pressed="true"><b>Intro call</b> <span>2 to 5 min</span></button>
@@ -394,6 +463,7 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
         <div class="clock" aria-label="Call time"><span id="clock">00:00</span><small id="clock-aim">aim 2 to 5 min</small></div>
       </div>
       <main id="stage" aria-live="polite"></main>
+      <section class="resultpanel" id="result-panel" aria-labelledby="result-title" hidden></section>
       <div class="cardfoot">
         <button class="plain" id="back" type="button" title="Back one step (Space)" data-i18n="btn.back">‹ Back one step</button>
         <button class="plain" id="practice-start" type="button" data-i18n="practice.start">Practice</button>
@@ -402,6 +472,8 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
     </article>
     <p class="hint" id="sheet-msg" role="status"></p>
     </div>
+
+    <aside class="queuepanel" id="queue-panel" aria-labelledby="queue-title" hidden></aside>
 
     <aside class="helpcol" id="help-col" aria-labelledby="help-title">
       <label class="help-search" for="help-search"><span class="vh">Search every answer</span><input id="help-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search answers, e.g. offer"><kbd title="Press / or Ctrl+K">/</kbd></label>
@@ -425,7 +497,7 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
       <div id="my-results-body"></div>
     </section>
 
-    <section class="sheetbar">
+    <section class="sheetbar" id="sheet-section">
       <div id="sheet-load" class="sheetload">
         <label class="plain filebtn" for="sheet-file" data-i18n="btn.loadSheet">Load a lead sheet</label>
         <input id="sheet-file" class="vh" type="file" accept=".xlsx,.xls,.csv">
@@ -512,6 +584,11 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
 <script src="js/access-settings.js"></script>
 <script src="js/onboarding.js"></script>
 <script src="js/script-adapter.js"></script>
+<script src="js/campaign-queue.js"></script>
+<script src="js/result-buttons.js"></script>
+<script src="js/offline-store.js"></script>
+<script src="js/wa-link.js"></script>
+<script src="js/step-clock.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

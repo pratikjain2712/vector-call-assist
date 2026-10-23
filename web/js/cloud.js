@@ -3,7 +3,9 @@
    - an invited seat is linked to the login once per sign-in, with claim_my_invite()
    - the rep's active seat, from my_active_seat()
    - an upload queue for call_outcomes rows, kept in this browser until the upload succeeds
-   Only outcomes and timings leave the browser: never lead names or phone numbers. */
+   For a lead sheet, only outcomes and timings leave the browser: never lead names or phone numbers.
+   Campaign calling (Phase A) reads the caller's cloud leads and saves results through checked functions
+   (supabase/migrations/20261024100021_caller_screen.sql); its offline copy is in js/offline-store.js. */
 (function () {
   const cfg = window.VECTOR_CONFIG || {};
   const enabled = !!(cfg.supabaseUrl && cfg.supabaseAnonKey && window.supabase && window.supabase.createClient);
@@ -31,6 +33,7 @@
     return Object.assign({ enabled }, state, {
       email: session && session.user ? session.user.email : '',
       seatLabel: seat ? seat.label : '',
+      seatId: seat ? seat.id : '',
       role: seat ? seat.role : '',
       instituteId: seat ? seat.institute_id : '',
     });
@@ -246,6 +249,35 @@
     } catch (e) { return null; }
   }
 
+  // Phase A: caller. Campaign calling: each resolves { data, error } and never rejects; error.code is empty
+  // when the network or the cloud cannot be reached (the page then works from its offline copy).
+  async function call(name, args) {
+    try {
+      if (!client || !session || !seat) return { data: null, error: { code: '', message: 'Not signed in to the Vector cloud.' } };
+      const res = await client.rpc(name, args || {});
+      return { data: res.data, error: res.error || null };
+    } catch (e) { return { data: null, error: { code: '', message: (e && e.message) || 'Network error' } }; }
+  }
+  /* The function is not on the server (an older database): the page falls back without it. */
+  const missing = (error) => !!error && (error.code === 'PGRST202' || error.code === '42883');
+
+  /* The published version of one script (a campaign's script): { scriptId, version, steps }, or null. */
+  async function scriptById(scriptId) {
+    try {
+      if (!client || !session || !seat || !scriptId) return null;
+      const { data, error } = await client
+        .from('scripts')
+        .select('id, script_versions!inner(version, steps, published)')
+        .eq('id', scriptId)
+        .eq('script_versions.published', true)
+        .limit(1);
+      if (error || !Array.isArray(data) || !data[0]) return null;
+      const v = Array.isArray(data[0].script_versions) ? data[0].script_versions[0] : data[0].script_versions;
+      if (!v || !Array.isArray(v.steps)) return null;
+      return { scriptId: data[0].id, version: v.version, steps: v.steps };
+    } catch (e) { return null; }
+  }
+
   window.Cloud = {
     enabled,
     init,
@@ -255,6 +287,15 @@
     signOut,
     rpc,
     publishedScript,
+    // Phase A: caller
+    scriptById,
+    myCampaigns: () => call('my_campaigns'),
+    myFeatures: () => call('my_features'),
+    callQueue: (campaignId) => call('my_call_queue', { p_campaign: campaignId }),
+    nextFreeLead: (campaignId) => call('next_free_lead', { p_campaign: campaignId }),
+    leadMoney: (leadId) => call('lead_money', { p_lead: leadId }),
+    saveCallResult: (args) => call('save_call_result', args),
+    missing,
     enqueue,
     cancel,
     flush,

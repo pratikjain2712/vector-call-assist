@@ -297,6 +297,32 @@ test("sign-out clears the claim, so the next sign-in claims again", async () => 
   assert.equal(calls.filter((n) => n === "claim_my_invite").length, 2);
 });
 
+// Phase A: caller. Campaign calling functions resolve { data, error } and never reject.
+test("campaign calls: signed out answers a no-network error; signed in passes the arguments", async () => {
+  const seen = [];
+  const h = load({ rpc: async (name, args) => {
+    seen.push([name, args]);
+    if (name === "my_active_seat") return { data: [SEAT], error: null };
+    if (name === "save_call_result") throw new Error("Failed to fetch");
+    if (name === "next_free_lead") return { data: null, error: { code: "PGRST202", message: "not found" } };
+    return { data: { ok: name }, error: null };
+  } });
+  await h.Cloud.init();
+  const out = await h.Cloud.callQueue("c1");
+  assert.equal(out.error.code, "");
+  await signIn(h);
+  assert.equal(h.Cloud.info().seatId, "seat-1");
+  assert.equal(JSON.stringify((await h.Cloud.callQueue("c1")).data), JSON.stringify({ ok: "my_call_queue" }));
+  assert.equal(JSON.stringify(seen.find((x) => x[0] === "my_call_queue")[1]), JSON.stringify({ p_campaign: "c1" }));
+  await h.Cloud.leadMoney("l1");
+  assert.equal(JSON.stringify(seen.find((x) => x[0] === "lead_money")[1]), JSON.stringify({ p_lead: "l1" }));
+  const saved = await h.Cloud.saveCallResult({ p_client_record_id: "r1" });
+  assert.equal(saved.error.code, "", "a network failure is an error with no code, not a rejection");
+  const nf = await h.Cloud.nextFreeLead("c1");
+  assert.equal(h.Cloud.missing(nf.error), true);
+  assert.equal(h.Cloud.missing({ code: "23514" }), false);
+});
+
 test("with no Supabase config, nothing is claimed", async () => {
   const calls = [];
   const h = load({ enabled: false, rpc: claimRpc(calls, async () => ({ data: null, error: null })) });
