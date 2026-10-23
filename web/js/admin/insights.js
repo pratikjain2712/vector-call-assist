@@ -123,15 +123,30 @@
 
   // ---------- the other agent's cards (weekly brief, script test) ----------
 
-  // insights-extra.js exports mountWeeklyBrief(box, ctx) and mountScriptTest(box, ctx). A missing file is fine.
-  // Mounted once, after the campaigns are loaded. Their ctx is the shell's plus ctx.insights: campaign() (the
-  // picked campaign, null when the institute has none), features(), money(), tab. A campaign
-  // change fires 'insights:campaign' on the tab ({ detail: { campaign } }).
+  // insights-extra.js (window.VectorInsightsExtra, loaded by admin.html before this file) gives
+  // mountWeeklyBrief(box, ctx, { campaignId }) -> { refresh(id), unmount } and
+  // mountScriptTest(box, ctx, { campaignId }) -> { setCampaign(id), refresh, unmount }. Mounted once, after the
+  // campaigns are loaded, on this tab's campaign (so the script test shows no picker of its own). Their ctx is
+  // the shell's plus ctx.insights: campaign(), features(), money(), tab. A campaign change fires
+  // 'insights:campaign' on the tab ({ detail: { campaign } }) and is passed on to both cards. A missing file is fine.
+  let extraCards = [];
+  function extraApi() {
+    if (window.VectorInsightsExtra) return Promise.resolve(window.VectorInsightsExtra);
+    if (!EXTRA_URL) return Promise.resolve(null);
+    // Not on the page: load it once (it is a classic script that sets window.VectorInsightsExtra).
+    return new Promise((resolve) => {
+      const tag = document.createElement('script');
+      tag.src = EXTRA_URL;
+      tag.onload = () => resolve(window.VectorInsightsExtra || null);
+      tag.onerror = () => resolve(null);
+      document.head.appendChild(tag);
+    });
+  }
   function loadExtras() {
-    if (!EXTRA_URL || extras) return;
+    if (extras) return;
     extras = 'loading';
-    import(EXTRA_URL).then((mod) => {
-      if (!box) return;
+    extraApi().then((mod) => {
+      if (!box || !mod) { extras = null; return; }
       extras = mod;
       const x = Object.assign({}, ctx, { insights: {
         campaign: () => campaign,
@@ -139,12 +154,20 @@
         money: () => !!(setup && setup.money),
         tab: box,
       } });
+      const opts = { campaignId: campaign ? campaign.id : null };
+      const cards = [];
       if (typeof mod.mountWeeklyBrief === 'function') {
-        try { mod.mountWeeklyBrief($('insights-brief'), x); } catch (err) { /* that card only */ }
+        try { cards.push({ card: mod.mountWeeklyBrief($('insights-brief'), x, opts), set: 'refresh' }); } catch (err) { /* that card only */ }
       }
-      if (typeof mod.mountScriptTest === 'function') {
-        try { mod.mountScriptTest($('insights-abtest'), x); } catch (err) { /* that card only */ }
+      // Without a campaign the script test shows its own picker (it then has nothing to follow).
+      if (typeof mod.mountScriptTest === 'function' && campaign) {
+        try { cards.push({ card: mod.mountScriptTest($('insights-abtest'), x, opts), set: 'setCampaign' }); } catch (err) { /* that card only */ }
       }
+      extraCards = cards.filter((c) => c.card);
+      box.addEventListener('insights:campaign', (e) => {
+        const id = e.detail && e.detail.campaign ? e.detail.campaign.id : null;
+        extraCards.forEach((c) => { try { if (typeof c.card[c.set] === 'function') c.card[c.set](id); } catch (err) { /* that card only */ } });
+      });
     }).catch(() => { extras = null; });
   }
 
@@ -730,7 +753,8 @@
     unmount() {
       loadSeq++;
       ctx = null; box = null; setup = null; campaign = null; fc = null; base = null; plan = null; grid = null;
-      coachRows = []; extras = null;
+      extraCards.forEach((c) => { try { if (typeof c.card.unmount === 'function') c.card.unmount(); } catch (err) { /* gone anyway */ } });
+      coachRows = []; extras = null; extraCards = [];
     },
   });
 })();

@@ -1,7 +1,7 @@
 // WhatsApp (Sprint 12): the Settings panel (js/admin/settings-whatsapp.js) and the caller helper
 // (js/whatsapp-client.js), against the fake backend (Meta is never called; the Edge Functions are faked in
-// tests/e2e/fake-backend.js). Until js/admin/settings.js mounts the panel itself, the test mounts it the same
-// way: VectorSettingsWhatsApp.mount(<section id="settings-whatsapp">, ctx).
+// tests/e2e/fake-backend.js). The Settings tab mounts the panel itself in <section id="settings-whatsapp">,
+// with the shell's context (its confirm dialog asks before a disconnect).
 const { test, expect, env, signInOnApp } = require('./fixtures');
 
 test.skip(({ backend }) => !backend, 'needs the fake backend (the Edge Functions are not deployed on the local stack)');
@@ -14,28 +14,9 @@ async function adminSignIn(page) {
   await expect(page.locator('#tab-link-settings')).toHaveAttribute('aria-current', 'page');
 }
 
-// Mounts the panel in the Settings tab with a context like the shell's (a signed-in client, rpc, confirm).
+// The Settings tab mounts the panel (settings.js -> VectorSettingsWhatsApp.mount); wait until it has loaded.
 async function mountPanel(page) {
-  await page.addScriptTag({ url: '/js/admin/settings-whatsapp.js' });
-  await page.evaluate(async () => {
-    const cfg = window.VECTOR_CONFIG;
-    const client = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
-    await client.auth.getSession();
-    const rpc = async (name, args) => {
-      const { data, error } = await client.rpc(name, args);
-      if (error) throw Object.assign(new Error(error.message), { code: error.code });
-      return data;
-    };
-    const ctx = {
-      client, rpc, helpers: window.VectorAdminShared, canSeeMoney: true,
-      isMissing: (e) => !!e && e.code === 'PGRST202',
-      // The shell's confirmation asks first; here the test's "yes" is immediate.
-      confirm: async (job) => { await job.run(); if (job.reload) await job.reload(); },
-    };
-    const box = window.VectorAdminShared.el('section', { id: 'settings-whatsapp' });
-    document.getElementById('tab-settings').appendChild(box);
-    await window.VectorSettingsWhatsApp.mount(box, ctx);
-  });
+  await expect(page.locator('#settings-whatsapp #wa-connection')).toBeVisible();
 }
 
 test('an owner connects WhatsApp, writes a message from a starter and submits it for approval', async ({ page, backend }) => {
@@ -94,6 +75,8 @@ test('an owner connects WhatsApp, writes a message from a starter and submits it
 
   // Disconnect.
   await panel.getByRole('button', { name: 'Disconnect' }).click();
+  await expect(page.locator('#confirm')).toContainText('Disconnect WhatsApp?');   // the shell asks first
+  await page.locator('#confirm-go').click();
   await expect(panel.locator('#wa-connection')).toContainText('Not connected');
   expect(errors).toEqual([]);
 });

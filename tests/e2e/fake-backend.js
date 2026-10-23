@@ -325,6 +325,9 @@ function createFakeBackend(world) {
     ];
   })();
   db.features = ['scripts', 'ai_drafts'];
+  // Integration: one add-on list for every block. db.features is the default; db.ix.features[institute] (set by the
+  // insights-extra tests) overrides it for one institute.
+  const featuresOf = (inst) => (db.ix && db.ix.features && db.ix.features[inst]) || db.features;
   db.scripts = [];          // { id, institute_id, name, call_type_id, created_at }
   db.scriptVersions = [];   // { id, script_id, institute_id, version, steps, pushbacks, change_note, published, created_at }
   db.aiRequests = [];       // { institute_id, kind, ok }
@@ -341,7 +344,7 @@ function createFakeBackend(world) {
       check_marks: latest ? (latest.steps || []).filter((x) => x.check && x.check.length).length + (latest.pushbacks || []).filter((x) => x.check && x.check.length).length : 0 };
   };
   Object.assign(RPC, {
-    my_features: (u) => json(200, u && seatOf(u.id) ? db.features : null),
+    my_features: (u) => { const s = u && seatOf(u.id); return json(200, s ? featuresOf(s.institute_id) : null); },
     admin_list_call_types: (u) => {
       const s = u && seatOf(u.id);
       if (!s || s.role !== 'admin') return pgErr(403, '42501', 'only an admin can manage call types');
@@ -684,7 +687,7 @@ function createFakeBackend(world) {
   // defines are kept.
   const IX_CAMPAIGN = '7e570000-0000-4000-8000-000000000001';
   db.ix = {
-    features: { [world.institutes.a]: ['scripts', 'ai_drafts'], [world.institutes.b]: ['scripts', 'ai_drafts'] },
+    features: {},   // per-institute overrides of db.features (see featuresOf in the scripts block)
     brief: [
       'E2E fees: 40 of 82 leads have a good result so far. At this speed it will be 69 by 3 Nov.',
       'People pick up most on weekdays 7–9 pm (68%). Rep 1 calls mostly at 11 am (31% of their calls).',
@@ -703,10 +706,10 @@ function createFakeBackend(world) {
     log: [],   // [name, args] of every write
   };
   const ixSeat = (u) => (u && seatOf(u.id)) || null;
-  const ixHas = (s) => !!s && (db.ix.features[s.institute_id] || []).includes('scripts');
+  const ixHas = (s) => !!s && featuresOf(s.institute_id).includes('scripts');
   const ixAdmin = (u) => { const s = ixSeat(u); return s && s.role === 'admin' ? s : null; };
   const IX_RPC = {
-    my_features: (u) => { const s = ixSeat(u); return json(200, s ? (db.ix.features[s.institute_id] || []) : null); },
+    my_features: (u) => { const s = ixSeat(u); return json(200, s ? featuresOf(s.institute_id) : null); },
     admin_weekly_brief: (u) => (ixAdmin(u) ? json(200, db.ix.brief) : pgErr(403, '42501', 'only an admin can see the weekly brief')),
     admin_script_test: (u, a) => {
       const s = ixAdmin(u);

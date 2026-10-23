@@ -120,3 +120,16 @@ test('Insights fits a phone and works in dark mode', async ({ page }) => {
   const bg = await page.locator('#ins-forecast').evaluate((n) => getComputedStyle(n).backgroundColor);
   expect(bg).toBe('rgb(23, 29, 43)');
 });
+
+// Integration: the Insights tab itself mounts the weekly brief and the script test (js/admin/insights-extra.js)
+// on its picked campaign; the script test follows the tab's campaign picker and shows no picker of its own.
+test('the tab shows the weekly brief and the script test of the picked campaign', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await openInsights(page);
+  await expect(page.locator('#insights-brief #ix-brief-title')).toHaveText('This week in 4 lines');
+  await expect(page.locator('#insights-brief #ix-brief-lines li')).toHaveCount(4);
+  await expect(page.locator('#insights-abtest #ix-test-title')).toHaveText('Script test');
+  await expect(page.locator('#insights-abtest #ix-test-campaign')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});

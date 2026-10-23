@@ -9,8 +9,8 @@
    admin_upsert_call_type, admin_upsert_call_type_result, admin_set_institute, admin_set_hide_money. The database
    checks every call; the page only hides what a manager cannot do. Each section loads on its own, so one
    missing function leaves the others working.
-   settings-whatsapp.js contract: an ES module exporting mount(section, ctx) (or a default function) and,
-   optionally, unmount(). It is loaded with a dynamic import; when the file is missing nothing is shown.
+   The WhatsApp section is filled by js/admin/settings-whatsapp.js (window.VectorSettingsWhatsApp: mount(section,
+   ctx), unmount()); an ES module exporting mount (or a default function) also works. Missing: nothing is shown.
    The pure helpers below are also loaded by tests/web/admin-settings.test.js (Node, no DOM). */
 (function () {
   const S = (typeof window !== 'undefined' && window.VectorAdminShared) || require('./shared.js');
@@ -531,7 +531,9 @@
   async function loadWhatsapp() {
     const section = $('settings-whatsapp');
     try {
-      const mod = await import(new URL('js/admin/settings-whatsapp.js', document.baseURI).href);
+      // settings-whatsapp.js is a classic script (admin.html loads it) that sets window.VectorSettingsWhatsApp;
+      // an ES module with mount/default export is still accepted.
+      const mod = window.VectorSettingsWhatsApp || await import(new URL('js/admin/settings-whatsapp.js', document.baseURI).href);
       const mount = mod && (typeof mod.mount === 'function' ? mod.mount : mod.default);
       if (typeof mount !== 'function' || !ctx || !section.isConnected) return;
       waModule = mod;
