@@ -3,6 +3,9 @@
 // Never run these against the live project: global-setup deletes and recreates its test data.
 const { defineConfig, devices } = require('@playwright/test');
 
+// PW_PORT lets two checkouts run their tests at the same time without sharing a server.
+const PORT = process.env.PW_PORT || '8123';
+
 module.exports = defineConfig({
   testDir: 'tests/e2e',
   globalSetup: require.resolve('./tests/e2e/global-setup.js'),
@@ -13,7 +16,7 @@ module.exports = defineConfig({
   // list: results in the terminal. html: playwright-report/index.html (open with npx playwright show-report).
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: 'http://127.0.0.1:8123',
+    baseURL: `http://127.0.0.1:${PORT}`,
     ...devices['Desktop Chrome'],
     // Kept for every test, pass or fail, and shown in the HTML report: a step-by-step trace,
     // a screenshot at the end of each test, and a video of the whole test.
@@ -22,8 +25,8 @@ module.exports = defineConfig({
     video: 'on',
   },
   webServer: {
-    command: 'python -m http.server 8123 --bind 127.0.0.1 --directory web',
-    url: 'http://127.0.0.1:8123/app.html',
+    command: `python -m http.server ${PORT} --bind 127.0.0.1 --directory web`,
+    url: `http://127.0.0.1:${PORT}/app.html`,
     reuseExistingServer: true,
     timeout: 30_000,
   },
