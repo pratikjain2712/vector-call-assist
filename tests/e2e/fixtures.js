@@ -37,6 +37,8 @@ async function pointAtTestStack(page, backend) {
     'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js': '@supabase/supabase-js/dist/umd/supabase.js',
     'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js': 'jsqr/dist/jsQR.js',
     'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js': 'xlsx/dist/xlsx.full.min.js',
+    // Phase A: campaigns. The admin Campaigns tab loads the same file from jsDelivr (the admin page's CSP).
+    'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js': 'xlsx/dist/xlsx.full.min.js',
     'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js': 'three/build/three.module.js',
   };
   for (const [url, file] of Object.entries(CDN)) {
