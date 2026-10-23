@@ -198,8 +198,10 @@ reset role;
 
 select pg_temp.as_user(:'u_a', 'a@i.test');
 set role authenticated;
-select pg_temp.val_is('hide money: caller gets its lead money hidden', format($q$select money_hidden::text from lead_money(%L)$q$, :'l_a'), 'true');
-select pg_temp.val_is('hide money: caller gets no amount', format($q$select coalesce(amount_due::text,'null') from lead_money(%L)$q$, :'l_a'), 'null');
+-- Phase A: caller (20261024100021): the caller of the lead still sees its money when money is hidden.
+select pg_temp.val_is('hide money: caller still sees its lead money', format($q$select money_hidden::text from lead_money(%L)$q$, :'l_a'), 'false');
+select pg_temp.val_is('hide money: caller still gets the amount due', format($q$select coalesce(amount_due::int::text,'null') from lead_money(%L)$q$, :'l_a'), '12000');
+select pg_temp.fails('hide money: caller still cannot read another caller''s lead money', format($q$select * from lead_money(%L)$q$, :'l_b'));
 reset role;
 
 select pg_temp.as_user(:'u_o', 'owner@i.test');

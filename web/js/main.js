@@ -233,6 +233,9 @@ const MODE_KEY = "vca2-call-mode";
 let callMode = (() => { try { return own(CALL_MODES, localStorage.getItem(MODE_KEY)) ? localStorage.getItem(MODE_KEY) : "intro"; } catch (e) { return "intro"; } })();
 const BUILTIN = { flow: FLOW, start: CALL_MODES[callMode].start, scriptId: null, version: null };   // the built-in script: the fallback
 let ACTIVE = BUILTIN;   // the script being walked; see useWanted()
+// Phase A: caller. A campaign with no script, or a plan without the Scripts add-on: no steps on screen, only
+// the lead card and the result buttons.
+const NO_SCRIPT = { flow: { none: { stage: 0, say: [], opts: [], none: true } }, start: "none", scriptId: null, version: null };
 // Every script question that has a real choice, in script order. Each gets its own column in the Calls tab.
 const QUESTIONS = Object.keys(FLOW).filter((k) => LABEL[k]).map((k) => ({ key: k, label: LABEL[k] }));
 const RESULT_COLS = ["Call outcome", "Called at", "Call duration", "Answers", "Objections raised", "Notes", "Callback date", "Consent", "Consent date"];
@@ -247,6 +250,12 @@ let sheet = null;
 let phoneCheck = null;   // ImportCheck result for the sheet: flags per lead and counts. Worked out on load, never saved.
 let lastOutcome = null;  // the outcome just saved on the end card, for Undo. Cleared when the lead or call changes.
 const CALLBACK_OUTCOMES = { end_callback: 1, end_followup: 1, end_noanswer: 1, end_techcall: 1 };   // these keep a callback date
+/* Phase A: caller. Campaign calling state (see "Campaign calling" below). Lead money is kept in memory only. */
+const camp = {
+  list: [], features: null, seat: "", id: null, info: null, leads: [], lead: null, shownAt: 0,
+  money: Object.create(null), pick: null, values: {}, begun: false, beganAt: 0, clock: StepClock.create(),
+  outbox: [], failed: [], syncing: false, offline: false, msg: "", nextFree: true, resultsSig: "",
+};
 function refreshPhoneFlags() { phoneCheck = sheet ? ImportCheck.checkPhones(sheet.rows.map((r) => r[sheet.cols.phone])) : null; }
 /* Sheets saved before the callback column existed get it here, so the cell index is never undefined. */
 function ensureResultCols(s) {
@@ -321,7 +330,7 @@ function note(text) { $("sheet-msg").textContent = text || ""; $("gate-msg").tex
 function persist() { return sheet ? Vault.set("sheet", sheet) : Vault.remove("sheet"); }   // IndexedDB, never localStorage
 function leadName() { return sheet ? String(sheet.rows[sheet.idx][sheet.cols.name]).trim() : ""; }
 
-function names() { return { me: $("me-name").value.trim(), name: $("lead-name").value.trim() }; }
+function names() { return { me: $("me-name").value.trim(), name: campOn() ? (campLead() ? campLead().name : "") : $("lead-name").value.trim() }; }
 function plain(text) { const n = names(); return text.replace(/\{name\}/g, n.name || "there").replace(/\{me\}/g, n.me || "your caller"); }
 function fillInto(parent, text) {
   const n = names();
@@ -342,9 +351,12 @@ function startClock() { if (state.timer) return; state.started = Date.now() - st
 function stopClock() { tick(); clearInterval(state.timer); state.timer = null; state.started = null; }
 
 function go(to, pick) {
+  if (campOn() && !camp.begun) campBegin(Math.max(camp.shownAt, Date.now() - 120000));   // Phase A: caller
   state.history.push({ node: state.node, trail: state.trail.length });
   if (pick && pick.k !== "next") state.trail.push(pick);
   state.node = to; state.objection = null;
+  // Phase A: caller. A campaign call is saved with the result buttons, not at the script's end card.
+  if (FLOW[to].end && campOn()) { startClock(); render(); return; }
   if (FLOW[to].end) {
     stopClock();
     if (state.practice) { render(); return; }   // practice: the end card shows and nothing is written
@@ -409,8 +421,8 @@ function back() {
   if (state.history.length) startClock();
   render();
 }
-function resetCall() { stopClock(); state.callId = null; state.node = ACTIVE.start; state.history = []; state.trail = []; state.objs = []; state.objection = null; state.elapsed = 0; tick(); }
-function restart() { lastOutcome = null; resetCall(); if (!sheet) $("lead-name").value = ""; render(); }
+function resetCall() { campResetCall(); stopClock(); state.callId = null; state.node = ACTIVE.start; state.history = []; state.trail = []; state.objs = []; state.objection = null; state.elapsed = 0; tick(); }
+function restart() { lastOutcome = null; camp.pick = null; camp.values = {}; resetCall(); if (!sheet) $("lead-name").value = ""; render(); }
 function loadLead(i) {
   if (state.practice) { note(leaveMessage()); return; }
   lastOutcome = null; sheet.idx = i; $("lead-name").value = leadName(); resetCall(); persist(); render(); window.scrollTo({ top: 0, behavior: "auto" }); }
@@ -475,6 +487,7 @@ const TOUCH = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
 
 function renderSheet() {
   const bar = $("sheet-bar"), tools = $("sheet-tools");
+  if (campOn()) { $("sheet-empty").hidden = true; bar.hidden = true; return; }   // Phase A: caller
   $("sheet-empty").hidden = !!sheet; bar.hidden = !sheet;
   $("sheet-load").hidden = !!sheet; tools.hidden = !sheet;
   bar.textContent = ""; tools.textContent = "";
@@ -508,22 +521,34 @@ function renderSheet() {
   nx.classList.add("next");
   bar.appendChild(nx);
 
+  const calls = callButtons(phone, name);
+  if (calls.childNodes.length) bar.appendChild(calls);
+
+  // Sheet card: name, progress, and the download.
+  sheetCard(tools, n, done);
+}
+
+/* The call buttons for a number: "Call on this device" (a tel: link) on phones and tablets, and the call through
+   the paired phone. Used by the lead sheet and by the campaign lead card. */
+function callButtons(phone, name) {
   const calls = el("div", "calls");
   if (phone && TOUCH && !state.practice && TermsGate.allowed()) {
     const a = el("a", PhoneLink.isPaired() ? "plain" : "primary", "Call on this device");
     a.href = "tel:" + phone.replace(/[^\d+]/g, ""); a.id = "call-link"; calls.appendChild(a);
+    a.addEventListener("click", () => campBegin(Date.now()));   // Phase A: caller: the call starts now
   }
   if (phone && PhoneLink.isPaired() && !state.practice) {
-    const first = name.split(/\s+/)[0];
+    const first = String(name || "").split(/\s+/)[0];
     const cb = tool("call-laptop", TOUCH ? I18n.t("btn.callPhone") : (first ? I18n.t("btn.call", { first: first }) : I18n.t("btn.callPlain")), callFromLaptop, "primary");
     cb.disabled = !(linkHealth === "ok" || linkHealth === "checking") || !TermsGate.allowed();
     cb.title = cb.disabled ? "The phone is not reachable. See the banner at the top of the page." : "Dial this lead on your paired phone (C)";
     if (!TOUCH) cb.appendChild(el("kbd", "btnkey", "C"));
     calls.appendChild(cb);
   }
-  if (calls.childNodes.length) bar.appendChild(calls);
+  return calls;
+}
 
-  // Sheet card: name, progress, and the download.
+function sheetCard(tools, n, done) {
   const info = el("div", "sheetinfo");
   const top = el("div", "top");
   top.appendChild(el("p", "fname", sheet.fileName));
@@ -577,17 +602,29 @@ function setCallSummary(sessionId, text) {
 function finishCall(sessionId, patch, summary) {
   CallRecords.update(sessionId, patch);
   cloudSync(sessionId);
+  campSync();   // Phase A: caller: a campaign result may be waiting for this call's connected time
   setCallSummary(sessionId, summary);
   note(summary);
 }
 
+/* The lead to dial: the campaign lead on the card (Phase A: caller), or the sheet row on screen. */
+function dialTarget() {
+  if (campOn()) {
+    const l = campLead();
+    return l ? { raw: l.phone, name: l.name, rowIndex: null, sheetName: null, leadId: l.id, campaignId: camp.id, notes: "" } : null;
+  }
+  if (!sheet) return null;
+  const r = sheet.rows[sheet.idx];
+  return { raw: String(r[sheet.cols.phone]).trim(), name: leadName(), rowIndex: sheet.idx, sheetName: sheet.fileName, leadId: null, campaignId: null, notes: String(r[sheet.cols.notes] || "") };
+}
+
 async function callFromLaptop() {
-  if (!sheet) return;
+  const t = dialTarget();
+  if (!t) return;
   if (state.practice) return;
   if (!TermsGate.allowed()) { note(I18n.t("call.blockedTerms")); return; }
   if (callView && (callView.phase === "REQUESTED" || callView.phase === "OFFHOOK")) { note("A call is already in progress."); return; }
-  const r = sheet.rows[sheet.idx];
-  const raw = String(r[sheet.cols.phone]).trim();
+  const raw = t.raw;
   const number = PhoneLink.toE164(raw);
   if (!number) { note("This number cannot be dialled as it is. Check it, or add the country code, for example +91."); return; }
   note("Dialling " + number + " through the phone…");
@@ -596,11 +633,13 @@ async function callFromLaptop() {
   catch (e) { note("Could not dial: " + e.message); return; }
   if (!res.ok) { note("Could not dial: " + res.error); return; }
   CallRecords.add({
-    sessionId: res.session, source: "laptop", sheetName: sheet.fileName, leadName: leadName(), phone: raw, phoneE164: number, rowIndex: sheet.idx,
+    sessionId: res.session, source: "laptop", sheetName: t.sheetName, leadName: t.name, phone: raw, phoneE164: number, rowIndex: t.rowIndex,
+    leadId: t.leadId, campaignId: t.campaignId,
     dialWallMs: res.dialWallMs, offhookWallMs: 0, endWallMs: 0, connectedSeconds: null, answered: null,
     detection: "", callStatus: "dialling", outcome: "", objections: "",
-    notes: String(r[sheet.cols.notes] || ""), saveStatus: "awaiting-outcome", updatedAt: Date.now(),
+    notes: t.notes, saveStatus: "awaiting-outcome", updatedAt: Date.now(),
   });
+  campBegin(res.dialWallMs || Date.now());   // Phase A: caller
   state.callId = res.session;
   callView = { sessionId: res.session, phase: "REQUESTED", offhookWallMs: 0, endWallMs: 0, final: false, summary: "" };
   renderCallPanel();
@@ -727,10 +766,11 @@ function renderCallMode() {
     b.setAttribute("aria-pressed", String(on));
     b.disabled = !on && !idle;
   });
-  $("clock-aim").textContent = ACTIVE === BUILTIN ? CALL_MODES[callMode].aim : "aim 10 to 12 min";
+  $("clock-aim").textContent = ACTIVE === BUILTIN ? CALL_MODES[callMode].aim : campOn() ? "" : "aim 10 to 12 min";
 }
 async function loadPublishedScript() {
   const mine = ++scriptFetch;
+  if (campOn()) { await loadCampaignScript(mine); return; }   // Phase A: caller
   const got = await Cloud.publishedScript();   // null: cloud off, signed out, nothing published, or a read error
   if (mine !== scriptFetch) return;            // a later check has started, and its answer counts
   const flow = got ? ScriptAdapter.adaptSteps(got.steps) : null;
@@ -836,7 +876,7 @@ function renderCloud(c) {
     lines.push(waiting ? c.pending + " call result(s) waiting to upload; they upload automatically when the connection is back." : "All call results are uploaded.");
   }
   if (c.failed) lines.push(c.failed + " could not be uploaded.");
-  lines.push("Lead names and numbers never leave this browser.");
+  lines.push(campOn() ? "Campaign leads come from your institute's Vector cloud. Your own lead sheet never leaves this browser." : "Lead names and numbers never leave this browser.");
   $("cloud-status").textContent = lines.join(" ");
 }
 
@@ -1032,9 +1072,12 @@ function forgetPhone() {
 
 /* After a reload: pick up a laptop call that was still open for the lead on screen. */
 function resumeLastCall() {
-  if (!PhoneLink.isPaired() || !sheet) return;
+  if (!PhoneLink.isPaired()) return;
+  const lead = campOn() ? campLead() : null;
+  if (!lead && !sheet) return;
+  const mine = (r) => (lead ? r.leadId === lead.id : !r.leadId && r.rowIndex === sheet.idx);
   const open = CallRecords.all()
-    .filter((r) => r.saveStatus === "awaiting-outcome" && !CALL_FINAL[r.callStatus] && r.rowIndex === sheet.idx)
+    .filter((r) => r.saveStatus === "awaiting-outcome" && !CALL_FINAL[r.callStatus] && mine(r))
     .sort((a, b) => b.dialWallMs - a.dialWallMs)[0];
   if (!open) return;
   state.callId = open.sessionId;
@@ -1107,10 +1150,11 @@ function callbackField() {
 function leaveBlocked() {
   const live = callView && (callView.phase === "REQUESTED" || callView.phase === "OFFHOOK");
   const midScript = state.history.length > 0 && !FLOW[state.node].end;
-  return !!(live || midScript || state.practice);
+  return !!(live || midScript || state.practice || (campOn() && camp.begun));   // Phase A: caller: save the call first
 }
 function leaveMessage() {
-  return state.practice ? I18n.t("practice.blocked") : "Finish or restart this call before moving to another lead.";
+  if (state.practice) return I18n.t("practice.blocked");
+  return campOn() && camp.begun ? I18n.t("camp.saveFirst") : "Finish or restart this call before moving to another lead.";
 }
 function goToLead(i) {
   if (leaveBlocked()) { note(leaveMessage()); return; }
@@ -1133,8 +1177,8 @@ function leadRow(i) {
 /* Leads panel: search by name or number, and a filter. "Today's queue" is the default: due callbacks, then no-answer retries, then new leads. */
 function renderLeads() {
   const panel = $("leads-panel");
-  panel.hidden = !sheet;
-  if (!sheet) return;
+  panel.hidden = !sheet || campOn();   // Phase A: caller: campaign leads are in the waiting list
+  if (panel.hidden) return;
   const list = $("leads-list");
   list.textContent = "";
   const status = $("lead-filter").value;
@@ -1150,11 +1194,14 @@ function renderLeads() {
 function render() {
   useWanted();
   const node = FLOW[state.node];
+  campTrackStep();      // Phase A: caller
+  renderCampaign();
   renderSheet();
   renderPractice();
   renderCallMode();
   renderHelp();
   const rail = $("rail"); rail.textContent = "";
+  rail.hidden = !!node.none;
   STAGES.forEach((s, i) => { const li = el("li", i < node.stage ? "done" : i === node.stage ? "now" : "", s); if (i === node.stage) li.setAttribute("aria-current", "step"); rail.appendChild(li); });
 
   const stage = $("stage"); stage.textContent = "";
@@ -1181,6 +1228,13 @@ function render() {
       wrap.appendChild(mk("no", "No", "Still a no, close the call", () => go(o.exit)));
     } else wrap.appendChild(mk("next", "Back to the script", "Returns to the line you were on", resume));
     card.appendChild(wrap);
+  } else if (node.none) {
+    // Phase A: caller. No script steps for this campaign: talk to the lead, then pick the result below.
+    card.appendChild(el("span", "label", I18n.t("camp.noScriptTitle")));
+    card.appendChild(el("p", "noscript", campHasScripts() ? I18n.t("camp.noScript") : I18n.t("camp.noScriptPlan")));
+  } else if (node.end && campOn()) {
+    card.appendChild(el("span", "outcome mid", I18n.t("camp.scriptDone", { label: node.end.label })));
+    card.appendChild(el("p", "heard", I18n.t("camp.pickBelow")));
   } else if (node.end) {
     const e = node.end;
     card.appendChild(el("span", "outcome " + e.tone, "Call ended: " + e.label));
@@ -1418,7 +1472,7 @@ document.addEventListener("keydown", (ev) => {
   if (tag === "INPUT" || tag === "TEXTAREA" || ev.metaKey || ev.ctrlKey || ev.altKey) return;
   const k = ev.key.toLowerCase();
   const map = { "1": "yes", "2": "no", "3": "maybe" };
-  if ((ev.key === "ArrowLeft" || ev.key === "ArrowRight") && sheet) {
+  if ((ev.key === "ArrowLeft" || ev.key === "ArrowRight") && sheet && !campOn()) {
     if (leaveBlocked()) { note(leaveMessage()); return; }
     const to = sheet.idx + (ev.key === "ArrowLeft" ? -1 : 1);
     if (to >= 0 && to < sheet.rows.length) { ev.preventDefault(); note(""); loadLead(to); }
@@ -1461,6 +1515,7 @@ Promise.all([Vault.ready, PhoneLink.ready]).then(() => {
   resumeLastCall();
   checkPhone();
   loadPublishedScript();
+  campOnCloud(Cloud.info());   // Phase A: caller
 });
 let cloudStatus = "";
 Cloud.onChange((c) => {
@@ -1468,6 +1523,7 @@ Cloud.onChange((c) => {
   if (c.status !== cloudStatus) {
     cloudStatus = c.status;
     if (c.status === "ready") cloudSweep();   // catch up after signing in
+    if (appReady) campOnCloud(c);              // Phase A: caller
     // Signing in or out changes which script the rep gets. Going offline keeps the script in use.
     if (appReady && (c.status === "ready" || c.status === "signed_out" || c.status === "no_seat")) loadPublishedScript();
   }
@@ -1553,3 +1609,561 @@ Feedback.init();
 SessionTimeout.init();
 Onboarding.init();
 AccessSettings.init({ onChange: () => render() });   // before the first render, so the chosen language applies
+
+/* ---- Campaign calling (Phase A: caller) ----
+   With the cloud on and the caller's seat on a running or paused campaign (my_campaigns()), the page calls cloud
+   leads instead of a lead sheet:
+   - "Calling for" picks the campaign (remembered in this browser); "My lead sheet" keeps the old page;
+   - the waiting leads sit beside the call card: call backs and promises that are due, then new leads
+     (js/campaign-queue.js). A "whoever is free next" campaign takes a lead with next_free_lead() when none is waiting;
+   - the lead card shows the sheet's extra fields, the amount due (lead_money(), memory only) and the last call;
+   - the script is the campaign's own (campaigns.script_id) when the plan has Scripts; otherwise no steps;
+   - the result buttons come from the campaign's call type (js/result-buttons.js); "Save and call next" puts the
+     result in the outbox in IndexedDB first (js/offline-store.js), then sends it with save_call_result(), now or
+     when the connection is back. The time on each script step and the furthest step go with it (js/step-clock.js);
+   - "Send on WhatsApp" opens the caller's own WhatsApp with the message filled in (js/wa-link.js).
+   With no campaigns, or the cloud off, nothing here shows and the lead sheet works exactly as before. */
+const CAMP_KEY = "vca2-campaign";   // the picked campaign id ("" = my lead sheet). A per-browser convenience.
+
+function campOn() { return !!camp.id && Cloud.hasSeat() && camp.list.some((c) => c.campaign_id === camp.id); }
+function campCurrent() { return camp.list.find((c) => c.campaign_id === camp.id) || null; }
+/* Unknown (an older database, or never loaded): scripts stay on, as before the add-on existed. */
+function campHasScripts() { return !Array.isArray(camp.features) || camp.features.includes("scripts"); }
+function campPending() { return camp.outbox.filter((i) => i.campaignId === camp.id); }
+/* The queue as this device knows it: the server's copy with the results not sent yet laid over it. */
+function campView() { return CampaignQueue.withPending(camp.leads, campPending()); }
+function campLead() {
+  if (!camp.lead) return null;
+  return campView().find((l) => l.id === camp.lead.id) || camp.lead;
+}
+function campResult(key) { const c = campCurrent(); return c && Array.isArray(c.results) ? c.results.find((r) => r.key === key) || null : null; }
+
+function campResetCall() { camp.begun = false; camp.beganAt = 0; camp.clock.reset(); }
+/* The call has started (dialled, or the first answer tapped): the call timer and the step clock run. */
+function campBegin(at) {
+  if (!campOn() || camp.begun || state.practice || !camp.lead) return;
+  camp.begun = true; camp.beganAt = at;
+  if (ACTIVE !== NO_SCRIPT) camp.clock.enter(state.node, campRank(state.node), at);
+  startClock();
+}
+/* How far into the script a step is: its stage, then its place in the saved script. */
+function campRank(id) {
+  const n = FLOW[id];
+  const i = ACTIVE.order ? ACTIVE.order.indexOf(id) : -1;
+  return ((n && n.stage) || 0) * 1000 + Math.max(0, i);
+}
+function campTrackStep() {
+  if (!campOn() || !camp.begun || state.practice || ACTIVE === NO_SCRIPT) return;
+  if (camp.clock.current() !== state.node) camp.clock.enter(state.node, campRank(state.node), Date.now());
+}
+
+/* The cloud signed in, went offline or signed out. */
+async function campOnCloud(c) {
+  if (!c.enabled || !(c.status === "ready" || c.status === "offline") || !c.seatId) {
+    if (c.status === "signed_out" || c.status === "no_seat" || c.status === "off") {
+      camp.list = []; camp.id = null; camp.lead = null; camp.leads = []; camp.info = null; camp.money = Object.create(null);
+      camp.seat = ""; render();
+    }
+    return;
+  }
+  if (camp.seat !== c.seatId) {
+    camp.seat = c.seatId; camp.lead = null; camp.leads = []; camp.info = null; camp.money = Object.create(null);
+    camp.outbox = (await OfflineStore.get(OfflineStore.keys.outbox(c.seatId))) || [];
+    camp.failed = (await OfflineStore.get(OfflineStore.keys.failed(c.seatId))) || [];
+  }
+  await campLoadList();
+  campSync();
+}
+
+/* my_campaigns() and my_features(), with the last answer kept for offline use. */
+async function campLoadList() {
+  const seat = camp.seat;
+  const key = OfflineStore.keys.campaigns(seat);
+  const [cs, fs] = await Promise.all([Cloud.myCampaigns(), Cloud.myFeatures()]);
+  if (seat !== camp.seat) return;
+  const cached = (await OfflineStore.get(key)) || {};
+  if (!cs.error) camp.list = Array.isArray(cs.data) ? cs.data : [];
+  else if (!cs.error.code) camp.list = cached.list || [];   // offline: the campaigns seen last time
+  else camp.list = [];                                      // e.g. an older database without campaigns
+  if (!fs.error) camp.features = Array.isArray(fs.data) ? fs.data : [];
+  else if (!fs.error.code) camp.features = cached.features === undefined ? null : cached.features;
+  else camp.features = null;
+  if (!cs.error) OfflineStore.set(key, { list: camp.list, features: camp.features });
+
+  let want = null;
+  try { want = localStorage.getItem(CAMP_KEY); } catch (e) {}
+  const was = camp.id;
+  if (want === "" && camp.list.length) camp.id = "";
+  else if (camp.list.some((c) => c.campaign_id === want)) camp.id = want;
+  else camp.id = camp.list.length ? camp.list[0].campaign_id : null;
+  if (camp.id !== was) { camp.lead = null; camp.leads = []; camp.info = null; }
+  if (campOn()) await campRefresh();
+  loadPublishedScript();
+  render();
+  if (campOn()) resumeLastCall();
+}
+
+/* "Calling for": a campaign, or "" for my lead sheet. Not while a call is open. */
+function campPick(id) {
+  if (leaveBlocked()) { note(leaveMessage()); render(); return; }
+  try { localStorage.setItem(CAMP_KEY, id); } catch (e) {}
+  camp.id = id; camp.lead = null; camp.leads = []; camp.info = null; camp.pick = null; camp.values = {}; camp.msg = "";
+  note("");
+  resetCall();
+  render();
+  if (campOn()) campRefresh();
+  loadPublishedScript();
+}
+
+/* The campaign's script: its published version when the plan has Scripts, kept on this device for offline use. */
+async function loadCampaignScript(mine) {
+  const c = campCurrent();
+  let got = null;
+  if (c && c.script_id && campHasScripts()) {
+    const key = "script:" + c.script_id;
+    got = await Cloud.scriptById(c.script_id);
+    if (got) OfflineStore.set(key, got);
+    else got = await OfflineStore.get(key);
+  }
+  if (mine !== scriptFetch) return;
+  const flow = got ? ScriptAdapter.adaptSteps(got.steps) : null;
+  if (got && !flow) note(I18n.t("camp.scriptBroken"));
+  wanted = flow
+    ? { flow: flow, start: ScriptAdapter.startStepId(got.steps), scriptId: got.scriptId, version: got.version, order: got.steps.map((x) => x.id) }
+    : NO_SCRIPT;
+  useWanted();
+  render();
+}
+
+/* The caller's queue from the server (my_call_queue), or the copy on this device when offline. */
+async function campRefresh(opts) {
+  const o = opts || {};
+  if (!campOn()) return;
+  const id = camp.id, seat = camp.seat;
+  const key = OfflineStore.keys.queue(seat, id);
+  const res = await Cloud.callQueue(id);
+  if (id !== camp.id || seat !== camp.seat) return;
+  if (!res.error && res.data) {
+    const d = res.data;
+    camp.info = { status: d.status, share_mode: d.share_mode, daily_target: d.daily_target, my_calls_today: d.my_calls_today || 0, team_calls_today: d.team_calls_today || 0, at: Date.now() };
+    camp.leads = Array.isArray(d.leads) ? d.leads : [];
+    camp.offline = false; camp.msg = "";
+    Object.keys(camp.money).forEach((k) => { if (camp.money[k] && camp.money[k].offline) delete camp.money[k]; });
+    OfflineStore.set(key, { info: camp.info, leads: camp.leads });
+  } else {
+    const cached = await OfflineStore.get(key);
+    if (id !== camp.id) return;
+    if (cached) { camp.info = cached.info; camp.leads = cached.leads || []; }
+    camp.offline = !res.error || !res.error.code;
+    camp.msg = camp.offline ? I18n.t("camp.offline") : I18n.t("camp.loadError", { error: res.error.message || res.error.code });
+  }
+  await campEnsureLead(o.claim !== false);
+  render();
+}
+
+/* Keeps the lead on the card while a call is open; otherwise shows the first lead to call. In a "whoever is free
+   next" campaign with nothing waiting, asks next_free_lead() for one. */
+async function campEnsureLead(claim) {
+  const view = campView();
+  const now = Date.now();
+  if (camp.lead && (camp.begun || state.history.length || camp.pick)) return;
+  if (camp.lead && view.some((l) => l.id === camp.lead.id && CampaignQueue.isOpen(l))) return;   // the caller may have picked a later lead
+  const next = CampaignQueue.callable(view, now)[0] || null;
+  if (next) { campShow(next); return; }
+  camp.lead = null;
+  if (claim && camp.info && camp.info.share_mode === "next_free" && camp.nextFree && !camp.offline) await campClaimNext();
+}
+
+/* next_free_lead(p_campaign) is built with the campaigns feature. Its answer may be a lead id, a lead row or a list
+   of rows; without the function the page just keeps the queue it has. */
+async function campClaimNext() {
+  const id = camp.id;
+  const r = await Cloud.nextFreeLead(id);
+  if (id !== camp.id) return;
+  if (r.error) { if (Cloud.missing(r.error)) camp.nextFree = false; return; }
+  const row = Array.isArray(r.data) ? r.data[0] : r.data;
+  const leadId = typeof row === "string" ? row : row && typeof row === "object" ? row.lead_id || row.id || row.next_free_lead : null;
+  if (!leadId) return;
+  await campRefresh({ claim: false });
+  const got = campView().find((l) => l.id === leadId);
+  if (got && !camp.begun) campShow(got);
+}
+
+function campShow(lead) {
+  camp.lead = Object.assign({}, lead);
+  camp.shownAt = Date.now();
+  camp.pick = null; camp.values = {};
+  resetCall();
+  campMoney(lead.id);
+}
+function campGoTo(id) {
+  if (camp.lead && camp.lead.id === id) return;
+  if (leaveBlocked()) { note(leaveMessage()); return; }
+  const l = campView().find((x) => x.id === id);
+  if (!l) return;
+  note("");
+  campShow(l);
+  render();
+  window.scrollTo({ top: 0, behavior: "auto" });
+}
+
+/* The amount due of the lead on the card, from lead_money(). Kept in memory for this page only. */
+async function campMoney(leadId) {
+  if (camp.money[leadId] !== undefined) return;
+  camp.money[leadId] = { loading: true };
+  const r = await Cloud.leadMoney(leadId);
+  const row = r.error ? null : (Array.isArray(r.data) ? r.data[0] : r.data);
+  camp.money[leadId] = r.error ? (r.error.code ? { error: true } : { offline: true }) : (row || { none: true });
+  if (camp.lead && camp.lead.id === leadId) renderCampaign();
+}
+
+/* ---- Saving ---- */
+
+async function campSave() {
+  if (state.practice) { $("res-msg").textContent = I18n.t("practice.blocked"); return; }
+  const c = campCurrent(), l = campLead();
+  if (!c || !l) return;
+  const result = campResult(camp.pick);
+  const probs = ResultButtons.problems(result, camp.values);
+  if (probs.length) { $("res-msg").textContent = probs.join(" "); return; }
+  const now = Date.now();
+  const steps = ACTIVE === NO_SCRIPT ? { times: {}, reached: null } : camp.clock.result(now);
+  const rec = state.callId ? CallRecords.get(state.callId) : null;
+  const id = crypto.randomUUID();
+  const v = camp.values;
+  const item = {
+    id: id, seatId: camp.seat, campaignId: c.campaign_id, leadId: l.id, leadName: l.name, label: result.label, savedAt: now,
+    callId: rec ? rec.sessionId : null,
+    result: { key: result.key, needs_date: !!result.needs_date, needs_amount: !!result.needs_amount },
+    values: { date: v.date || "", nextCallAt: ResultButtons.callAt(v.date, v.time), waConsent: v.waConsent, note: String(v.note || "").trim() },
+    args: ResultButtons.toArgs(result, v, {
+      id: id, leadId: l.id, stepTimes: steps.times, reachedStep: steps.reached,
+      scriptStep: ACTIVE === NO_SCRIPT ? null : state.node, scriptId: ACTIVE.scriptId, scriptVersion: ACTIVE.version,
+      dialledAt: (rec && rec.dialWallMs) || camp.beganAt || now,
+      connectedSeconds: rec ? rec.connectedSeconds : null, phoneSessionId: rec ? rec.sessionId : null,
+    }),
+  };
+  // On this device first: the result is never lost, whatever the network does next.
+  camp.outbox = OfflineStore.add(camp.outbox, item);
+  await OfflineStore.set(OfflineStore.keys.outbox(camp.seat), camp.outbox);
+  if (rec) CallRecords.update(rec.sessionId, { outcome: result.label, outcomeCode: result.key, outcomeAtMs: now, saveStatus: "campaign", notes: item.values.note });
+  logEntry("campaign-result", { result: result.key });   // no names or numbers
+  const savedId = l.id;
+  camp.pick = null; camp.values = {};
+  resetCall();
+  camp.lead = null;
+  const next = CampaignQueue.nextLead(campView(), Date.now(), savedId);
+  if (next) campShow(next);
+  note(I18n.t("camp.saved", { result: result.label, name: l.name }));
+  render();
+  window.scrollTo({ top: 0, behavior: "auto" });
+  await campSync();
+  if (!camp.lead) await campEnsureLead(true);
+  render();
+}
+
+/* A laptop call's result waits up to 2 minutes for the phone's call log, so the connected time goes with it. */
+function campReady(item) {
+  if (!item.callId) return item;
+  const rec = CallRecords.get(item.callId);
+  if (rec && !CALL_FINAL[rec.callStatus] && Date.now() - item.savedAt < 120000) return null;
+  if (!rec) return item;
+  const args = Object.assign({}, item.args);
+  if (rec.connectedSeconds != null) args.p_connected_seconds = Math.max(0, Math.round(rec.connectedSeconds));
+  if (rec.dialWallMs) args.p_dialled_at = new Date(rec.dialWallMs).toISOString();
+  return Object.assign({}, item, { args: args });
+}
+
+/* Sends the outbox. Items leave it only once the server has them, or refused them (then they are listed). */
+async function campSync() {
+  if (camp.syncing || !camp.seat || !camp.outbox.length || !Cloud.hasSeat()) return;
+  camp.syncing = true;
+  const seat = camp.seat;
+  let r = null;
+  try {
+    r = await OfflineStore.sync(camp.outbox, [], (it) => Cloud.saveCallResult(it.args), campReady);
+    if (seat !== camp.seat) return;
+    const done = new Set(r.sent.concat(r.failed).map((x) => x.id));
+    camp.outbox = camp.outbox.filter((i) => !done.has(i.id));   // items added while sending stay
+    if (r.failed.length) camp.failed = camp.failed.concat(r.failed).slice(-100);
+    await OfflineStore.set(OfflineStore.keys.outbox(seat), camp.outbox);
+    if (r.failed.length) await OfflineStore.set(OfflineStore.keys.failed(seat), camp.failed);
+  } finally { camp.syncing = false; }
+  if (r && (r.sent.length || r.failed.length) && campOn()) await campRefresh({ claim: !camp.lead });
+  else renderCampaign();
+}
+
+/* ---- Drawing ---- */
+
+function campDate(at) { return new Date(at).toLocaleDateString("en-IN", { day: "numeric", month: "short" }); }
+function todayIsoIndia() { return new Date(Date.now() + 330 * 60e3).toISOString().slice(0, 10); }
+
+function renderCampaign() {
+  const on = campOn();
+  const bar = $("camp-bar"), sel = $("camp-pick");
+  bar.hidden = !camp.list.length || !Cloud.hasSeat();
+  if (!bar.hidden) {
+    const opts = camp.list.map((c) => [c.campaign_id, c.name + (c.status === "paused" ? " (paused)" : "") + " · " + I18n.t("camp.due", { n: Number(c.my_leads_due) || 0 })])
+      .concat([["", I18n.t("camp.sheetOption")]]);
+    const sig = JSON.stringify(opts);
+    if (sel.dataset.sig !== sig) {
+      sel.textContent = "";
+      opts.forEach(([v, t]) => sel.appendChild(new Option(t, v)));
+      sel.dataset.sig = sig;
+    }
+    sel.value = on ? camp.id : "";
+    sel.disabled = leaveBlocked();
+    sel.title = sel.disabled ? leaveMessage() : "";
+  }
+  document.querySelector(".work").classList.toggle("campaign", on);
+  $("sheet-section").hidden = on;
+  $("queue-panel").hidden = !on; $("camp-lead").hidden = !on; $("result-panel").hidden = !on;
+  const today = $("camp-today");
+  today.hidden = !on || !camp.info;
+  if (!on) { camp.resultsSig = ""; return; }
+  if (camp.info) {
+    const mineToday = (camp.info.my_calls_today || 0) + campPending().filter((i) => i.savedAt >= (camp.info.at || 0)).length;
+    const team = (camp.info.team_calls_today || 0) + campPending().filter((i) => i.savedAt >= (camp.info.at || 0)).length;
+    today.textContent = "";
+    today.appendChild(document.createTextNode(I18n.t("camp.today") + " "));
+    today.appendChild(el("b", "", String(team)));
+    today.appendChild(document.createTextNode(camp.info.daily_target ? " " + I18n.t("camp.ofTarget", { n: camp.info.daily_target }) : " " + I18n.t("camp.calls")));
+    today.appendChild(document.createTextNode(" · " + I18n.t("camp.you", { n: mineToday })));
+  }
+  renderCampLead();
+  renderQueue();
+  renderResults();
+}
+
+function renderCampLead() {
+  const box = $("camp-lead");
+  box.textContent = "";
+  const c = campCurrent(), l = campLead();
+  const who = el("div", "who");
+  if (!l) {
+    who.appendChild(el("span", "label", I18n.t("camp.callingFor") + " " + (c ? c.name : "")));
+    who.appendChild(el("strong", "", I18n.t("camp.noLeads")));
+    who.appendChild(el("p", "lastcall", camp.msg || I18n.t("camp.noLeadsHint")));
+    box.appendChild(who);
+    return;
+  }
+  who.appendChild(el("span", "label", I18n.t("camp.onCall")));
+  who.appendChild(el("strong", "", l.name));
+  const facts = el("ul", "leadfacts");
+  const fact = (k, v, cls) => { const li = el("li", cls || ""); if (k) li.appendChild(el("span", "k", k + ": ")); li.appendChild(document.createTextNode(v)); facts.appendChild(li); return li; };
+  fact("", l.phone, "phone");
+  CampaignQueue.extraFields(l.extra).forEach(([k, v]) => fact(k, v));
+  const m = camp.money[l.id];
+  if (m && m.loading) fact(I18n.t("camp.amountDue"), I18n.t("camp.checking"), "money");
+  else if (m && m.offline) fact(I18n.t("camp.amountDue"), I18n.t("camp.moneyOffline"), "money");
+  else if (m && m.money_hidden) fact(I18n.t("camp.amountDue"), I18n.t("camp.hidden"), "money");
+  else if (m && m.amount_due != null) {
+    const li = fact(I18n.t("camp.amountDue"), "", "money");
+    li.appendChild(el("b", "", WaLink.rupees(m.amount_due)));
+  }
+  if (m && !m.money_hidden && m.promised_amount != null && l.status === "promised") {
+    const li = fact(I18n.t("camp.promised"), "", "money");
+    li.appendChild(el("b", "", WaLink.rupees(m.promised_amount)));
+    if (l.promised_date) li.appendChild(document.createTextNode(" " + I18n.t("camp.by", { date: campDate(l.promised_date + "T12:00:00+05:30") })));
+    li.appendChild(el("span", "reported", " (" + I18n.t("camp.reported") + ")"));
+  }
+  const st = CampaignQueue.statusOf(l, Date.now());
+  fact("", st.label, "whostate");
+  who.appendChild(facts);
+  if (l.last_called_at) {
+    const r = campResult(l.last_result_key);
+    const bits = [I18n.t("camp.lastCall", { date: campDate(l.last_called_at) })];
+    if (r) bits.push(r.label);
+    let text = bits.join(" · ");
+    if (l.last_note) text += ": “" + l.last_note + "”";
+    who.appendChild(el("p", "lastcall", text));
+  }
+  box.appendChild(who);
+  const calls = callButtons(l.phone, l.name);
+  if (calls.childNodes.length) box.appendChild(calls);
+}
+
+function renderQueue() {
+  const panel = $("queue-panel");
+  panel.textContent = "";
+  const view = campView();
+  const g = CampaignQueue.groups(view, Date.now());
+  const total = g.due.length + g.fresh.length;
+  const h = el("h2", "", I18n.t("camp.queueTitle", { n: total })); h.id = "queue-title";
+  panel.appendChild(h);
+  if (camp.offline) panel.appendChild(el("p", "hint", I18n.t("camp.offline")));
+  const section = (title, list) => {
+    if (!list.length) return;
+    panel.appendChild(el("h3", "", title));
+    const ol = el("ol", "queuelist");
+    list.slice(0, 50).forEach((l) => {
+      const li = el("li");
+      const b = el("button", "leadrow" + (camp.lead && camp.lead.id === l.id ? " current" : "")); b.type = "button";
+      if (camp.lead && camp.lead.id === l.id) b.setAttribute("aria-current", "true");
+      b.appendChild(el("strong", "", l.name));
+      const extra = CampaignQueue.extraFields(l.extra).slice(0, 2).map((p) => p[1]).join(" · ");
+      if (extra) b.appendChild(el("span", "sub", extra));
+      const st = CampaignQueue.statusOf(l, Date.now());
+      b.appendChild(el("span", "leadstate " + st.kind, st.label));
+      b.addEventListener("click", () => campGoTo(l.id));
+      li.appendChild(b);
+      ol.appendChild(li);
+    });
+    panel.appendChild(ol);
+    if (list.length > 50) panel.appendChild(el("p", "hint queuemore", I18n.t("camp.more", { n: list.length - 50 })));
+  };
+  section(I18n.t("camp.groupDue"), g.due);
+  section(I18n.t("camp.groupNew"), g.fresh);
+  section(I18n.t("camp.groupLater"), g.later);
+  if (!view.some((l) => CampaignQueue.isOpen(l))) panel.appendChild(el("p", "hint", I18n.t("camp.noLeadsHint")));
+  const waiting = camp.outbox.length;
+  if (waiting) panel.appendChild(el("p", "outboxline", I18n.t("camp.waiting", { n: waiting })));
+  if (camp.failed.length) {
+    const last = camp.failed[camp.failed.length - 1];
+    panel.appendChild(el("p", "msgline", I18n.t("camp.failed", { n: camp.failed.length, error: last.error || "" })));
+  }
+}
+
+/* The result buttons and their fields. Drawn again only when the campaign, lead or picked result changes, so
+   typing in a field is never interrupted; the WhatsApp link and the message line update in place. */
+function renderResults() {
+  const panel = $("result-panel");
+  const c = campCurrent(), l = campLead();
+  const sig = [camp.id, l ? l.id : "", camp.pick, state.practice, I18n.lang(), c ? JSON.stringify(c.results) : ""].join("|");
+  if (sig === camp.resultsSig && panel.childNodes.length) { campUpdateActions(); return; }
+  camp.resultsSig = sig;
+  panel.textContent = "";
+  if (!c || !l) return;
+  const h = el("h2", "", I18n.t("camp.howEnded")); h.id = "result-title";
+  panel.appendChild(h);
+  const s = ResultButtons.split(c.results);
+  const btn = (r) => {
+    const b = el("button", "resbtn " + ResultButtons.tone(r), r.label); b.type = "button"; b.id = "res-" + r.key;
+    b.setAttribute("aria-pressed", String(camp.pick === r.key));
+    b.addEventListener("click", () => { camp.pick = camp.pick === r.key ? null : r.key; $("res-msg").textContent = ""; renderResults(); const again = $("res-" + r.key); if (again) again.focus(); });
+    return b;
+  };
+  const grid = el("div", "resgrid"); grid.setAttribute("role", "group"); grid.setAttribute("aria-labelledby", "result-title");
+  s.main.forEach((r) => grid.appendChild(btn(r)));
+  if (s.main.length) panel.appendChild(grid);
+  const common = el("div", "rescommon"); common.setAttribute("role", "group"); common.setAttribute("aria-label", I18n.t("camp.otherResults"));
+  common.appendChild(el("span", "hint", I18n.t("camp.or")));
+  s.common.forEach((r) => common.appendChild(btn(r)));
+  panel.appendChild(common);
+
+  const r = campResult(camp.pick);
+  if (r) panel.appendChild(campFields(r, l));
+
+  const actions = el("div", "resactions"); actions.id = "res-actions";
+  const wa = el("a", "plain", I18n.t("camp.sendWa")); wa.id = "res-wa-send"; wa.target = "_blank"; wa.rel = "noopener";
+  wa.addEventListener("click", (ev) => {
+    if (!WaLink.hasSender()) return;   // wa.me in a new tab
+    ev.preventDefault();
+    WaLink.send({ leadId: l.id, phone: l.phone, text: campWaText() }).then(() => { $("res-msg").textContent = I18n.t("camp.waSent"); }, (e) => { $("res-msg").textContent = e.message; });
+  });
+  actions.appendChild(wa);
+  actions.appendChild(el("span", "hint", "")).id = "res-wa-hint";
+  const save = el("button", "primary", I18n.t("camp.saveNext")); save.type = "button"; save.id = "res-save";
+  save.addEventListener("click", campSave);
+  actions.appendChild(save);
+  panel.appendChild(actions);
+  const msg = el("p", "msgline"); msg.id = "res-msg"; msg.setAttribute("role", "status");
+  panel.appendChild(msg);
+  campUpdateActions();
+}
+
+function campFields(r, l) {
+  const box = el("div", "resfields");
+  const v = camp.values;
+  const field = (labelText, input, wide) => {
+    const lab = el("label", "field" + (wide ? " wide" : ""));
+    lab.appendChild(el("span", "label", labelText));
+    lab.appendChild(input);
+    box.appendChild(lab);
+    return input;
+  };
+  const input = (id, type, value, onInput) => {
+    const i = el("input"); i.id = id; i.type = type; i.value = value || ""; i.autocomplete = "off";
+    i.addEventListener("input", () => { onInput(i.value); campUpdateActions(); });
+    return i;
+  };
+  if (r.needs_date) {
+    const d = input("res-date", "date", v.date, (x) => { v.date = x; });
+    d.min = todayIsoIndia();
+    field(r.needs_amount ? I18n.t("camp.promisedDate") : r.key === "call_back_later" ? I18n.t("camp.callBackOn") : I18n.t("camp.date"), d);
+    if (r.key === "call_back_later") field(I18n.t("camp.timeOptional"), input("res-time", "time", v.time, (x) => { v.time = x; }));
+  }
+  if (r.needs_amount) {
+    const a = input("res-amount", "text", v.amount, (x) => { v.amount = x; });
+    a.inputMode = "decimal";
+    const m = camp.money[l.id];
+    if (m && m.amount_due != null) a.placeholder = WaLink.rupees(m.amount_due).replace("₹", "");
+    field(r.needs_date ? I18n.t("camp.amount") : I18n.t("camp.amountPaid"), a);
+  }
+  if (r.needs_reason || (r.reason_choices && r.reason_choices.length)) {
+    let ri;
+    if (Array.isArray(r.reason_choices) && r.reason_choices.length) {
+      ri = el("select"); ri.id = "res-reason";
+      ri.appendChild(new Option(I18n.t("camp.pickReason"), ""));
+      r.reason_choices.forEach((x) => ri.appendChild(new Option(x, x)));
+      ri.value = v.reason || "";
+      ri.addEventListener("change", () => { v.reason = ri.value; campUpdateActions(); });
+    } else {
+      ri = input("res-reason", "text", v.reason, (x) => { v.reason = x; });
+      ri.maxLength = 300;
+    }
+    field(I18n.t("camp.reason"), ri, true);
+  }
+  if (r.needs_rating) {
+    const fs = el("fieldset", "rating");
+    fs.appendChild(el("legend", "label", I18n.t("camp.rating")));
+    [1, 2, 3, 4, 5].forEach((n) => {
+      const lab = el("label");
+      const i = el("input"); i.type = "radio"; i.name = "res-rating"; i.value = String(n); i.id = "res-rating-" + n;
+      i.checked = String(v.rating) === String(n);
+      i.addEventListener("change", () => { v.rating = n; campUpdateActions(); });
+      lab.appendChild(i);
+      lab.appendChild(el("span", "", String(n)));
+      lab.setAttribute("aria-label", I18n.t("camp.ratingOf", { n: n }));
+      fs.appendChild(lab);
+    });
+    box.appendChild(fs);
+  }
+  const note = input("res-note", "text", v.note, (x) => { v.note = x; });
+  note.maxLength = 300; note.placeholder = I18n.t("camp.notePlaceholder");
+  field(I18n.t("camp.note"), note, true);
+  const wa = el("select"); wa.id = "res-wa";
+  [["", I18n.t("camp.waNotAsked")], ["yes", I18n.t("camp.waYes")], ["no", I18n.t("camp.waNo")]].forEach(([val, t]) => wa.appendChild(new Option(t, val)));
+  wa.value = v.waConsent === true ? "yes" : v.waConsent === false ? "no" : "";
+  wa.addEventListener("change", () => { v.waConsent = wa.value === "yes" ? true : wa.value === "no" ? false : undefined; campUpdateActions(); });
+  field(I18n.t("camp.waConsent"), wa);
+  return box;
+}
+
+function campWaText() {
+  const l = campLead(), c = campCurrent(), r = campResult(camp.pick);
+  const v = camp.values;
+  return WaLink.message({ key: r ? r.key : "", name: l ? l.name : "", me: $("me-name").value, campaign: c ? c.name : "",
+    date: v.date, amount: r && r.needs_amount ? ResultButtons.parseAmount(v.amount) : null });
+}
+
+/* The WhatsApp link, its consent note and the save button, kept in step with the fields. */
+function campUpdateActions() {
+  const wa = $("res-wa-send"), hint = $("res-wa-hint"), save = $("res-save");
+  if (!wa || !save) return;
+  const l = campLead();
+  const consent = camp.values.waConsent === true ? "yes" : camp.values.waConsent === false ? "no" : "";
+  const ok = !!l && WaLink.allowed(l, consent, camp.pick) && !state.practice;
+  const href = ok ? WaLink.link(l.phone, campWaText()) : "";
+  wa.hidden = !href;
+  if (href) wa.href = href; else wa.removeAttribute("href");
+  hint.hidden = !href || !WaLink.needsAsking(l, consent);
+  hint.textContent = I18n.t("camp.waAsk");
+  save.disabled = !camp.pick || state.practice;
+  save.title = state.practice ? I18n.t("practice.blocked") : !camp.pick ? I18n.t("camp.pickFirst") : "";
+}
+
+$("camp-pick").addEventListener("change", (ev) => campPick(ev.target.value));
+window.addEventListener("online", () => { campSync(); if (campOn()) campRefresh(); });
+setInterval(campSync, 30000);
+setInterval(() => { if (campOn() && !document.hidden && !camp.begun && !camp.pick) campRefresh(); }, 60000);

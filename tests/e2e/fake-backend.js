@@ -4,6 +4,7 @@
 // pages and the real supabase-js talk to it over Playwright request routing; nothing leaves the machine.
 // It cannot test row-level security in Postgres itself: tests/e2e/access-rules.spec.js needs the real stack.
 const crypto = require('node:crypto');
+const CampaignQueue = require('../../web/js/campaign-queue.js');   // Phase A: caller: the lead update after a result
 
 const b64url = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
 function jwt(user) {
@@ -117,6 +118,9 @@ function createFakeBackend(world) {
   // is kept except amount_due on leads, returned only as the detail's total (can_see_money is false here).
   const CALL_TYPES = [['fees', 'Fees collection'], ['sales', 'Sales'], ['follow_up', 'Follow-up / appointment']]
     .map(([key, label], i) => ({ id: crypto.randomUUID(), key, label, sort_order: (i + 1) * 10, active: true, built_in: true, results: [] }));
+  // Any call type a page may be shown: this block's own list or the Scripts block's (whose admin_list_call_types
+  // answers last). Read at request time, so the later block's list is set by then.
+  const anyCallType = (id) => CALL_TYPES.find((x) => x.id === id) || (typeof SCRIPT_TYPES !== 'undefined' ? SCRIPT_TYPES.find((x) => x.id === id) : null);
   db.campaigns = [];
   db.members = [];
   db.leads = [];
@@ -135,7 +139,7 @@ function createFakeBackend(world) {
   }
   function campaignRow(c) {
     const leads = db.leads.filter((l) => l.campaign_id === c.id);
-    const t = CALL_TYPES.find((x) => x.id === c.call_type_id) || {};
+    const t = anyCallType(c.call_type_id) || {};
     const callers = db.members.filter((m) => m.campaign_id === c.id)
       .map((m) => db.seats.find((s) => s.id === m.seat_id)).filter(Boolean)
       .map((s) => ({ seat_id: s.id, label: s.label })).sort((a, b) => a.label.localeCompare(b.label));
@@ -156,7 +160,7 @@ function createFakeBackend(world) {
       if (!s) return notAdmin();
       const name = String(a.p_name || '').trim();
       if (!name) return pgErr(400, '22023', 'campaign name must be 1 to 120 characters');
-      if (!CALL_TYPES.some((t) => t.id === a.p_call_type)) return pgErr(400, '22023', 'pick a call type');
+      if (!anyCallType(a.p_call_type)) return pgErr(400, '22023', 'pick a call type');
       const c = { id: crypto.randomUUID(), institute_id: s.institute_id, name, call_type_id: a.p_call_type, script_id: a.p_script || null,
         start_date: a.p_start || null, end_date: a.p_end || null, daily_target: a.p_daily_target || null,
         share_mode: a.p_share_mode || 'equal', status: 'draft', created_at: new Date().toISOString() };
@@ -351,6 +355,80 @@ function createFakeBackend(world) {
     return null;
   }
   // Phase A: scripts (end)
+  // ---- Phase A: caller. Campaign calling (supabase/migrations/20261024100021_caller_screen.sql) ----
+  // Empty unless a test calls addCampaign(), so every other test sees an institute without campaigns.
+  // offline: save_call_result answers as if the network were down (the request is aborted).
+  // db.campaigns and db.leads are shared with the campaigns block above; db.features with the scripts block.
+  // db.callerScripts: scripts by id for the caller screen (the scripts block keeps db.scripts as a list).
+  db.saved = []; db.callerScripts = {}; db.offline = false;
+  // Members: addCampaign() campaigns carry c.members; campaigns made on the Campaigns tab use db.members.
+  const membersOf = (c) => c.members || db.members.filter((m) => m.campaign_id === c.id).map((m) => m.seat_id);
+  const memberOf = (u, c) => { const s = u && seatOf(u.id); return s && membersOf(c).includes(s.id) && ['running', 'paused'].includes(c.status) ? s : null; };
+  const pgFail = (code, message) => pgErr(400, code, message);
+  Object.assign(RPC, {
+    my_campaigns: (u) => json(200, db.campaigns.filter((c) => memberOf(u, c)).map((c) => {
+      const s = seatOf(u.id);
+      const mine = db.leads.filter((l) => l.campaign_id === c.id && l.assigned_seat_id === s.id);
+      return { campaign_id: c.id, name: c.name, status: c.status, call_type_key: c.type_key, call_type_label: c.type_label,
+        script_id: c.script_id || null, start_date: null, end_date: null, daily_target: c.daily_target || null, call_hours: null,
+        my_leads: mine.length, my_leads_due: mine.filter((l) => CampaignQueue.isDueNow(l, Date.now())).length, results: c.results || [] };
+    })),
+    my_call_queue: (u, a) => {
+      const c = db.campaigns.find((x) => x.id === a.p_campaign);
+      const s = c && memberOf(u, c);
+      if (!s) return pgFail('42501', 'campaign not found');
+      const today = (r) => new Date(r.saved_at).toDateString() === new Date().toDateString();
+      return json(200, { campaign_id: c.id, status: c.status, share_mode: c.share_mode || 'equal', daily_target: c.daily_target || null,
+        my_calls_today: db.saved.filter((r) => r.campaign_id === c.id && r.seat_id === s.id && today(r)).length,
+        team_calls_today: db.saved.filter((r) => r.campaign_id === c.id && today(r)).length,
+        leads: db.leads.filter((l) => l.campaign_id === c.id && l.assigned_seat_id === s.id && CampaignQueue.isOpen(l)) });
+    },
+    lead_money: (u, a) => {
+      const l = db.leads.find((x) => x.id === a.p_lead);
+      const s = u && seatOf(u.id);
+      if (!l || !s || l.assigned_seat_id !== s.id) return pgFail('42501', 'lead not found');
+      return json(200, [{ lead_id: l.id, amount_due: l.amount_due == null ? null : l.amount_due, promised_amount: l.promised_amount == null ? null : l.promised_amount, promised_date: l.promised_date || null, money_hidden: false }]);
+    },
+    next_free_lead: (u, a) => {
+      const c = db.campaigns.find((x) => x.id === a.p_campaign);
+      const s = c && memberOf(u, c);
+      if (!s) return pgFail('42501', 'campaign not found');
+      const l = db.leads.find((x) => x.campaign_id === c.id && !x.assigned_seat_id && CampaignQueue.isOpen(x));
+      if (!l) return json(200, null);
+      l.assigned_seat_id = s.id;
+      return json(200, l.id);
+    },
+    save_call_result: (u, a) => {
+      const s = u && seatOf(u.id);
+      if (!s) return pgFail('42501', 'no active seat for this login');
+      const dup = db.saved.find((r) => r.seat_id === s.id && r.p_client_record_id === a.p_client_record_id);
+      if (dup) return json(200, { outcome_id: dup.id, duplicate: true, lead_updated: false });
+      const l = db.leads.find((x) => x.id === a.p_lead);
+      const c = l && db.campaigns.find((x) => x.id === l.campaign_id);
+      if (!l || !c || !(l.assigned_seat_id === s.id || membersOf(c).includes(s.id))) return pgFail('42501', 'lead not found');
+      const r = (c.results || []).find((x) => x.key === a.p_result_key);
+      if (!r) return pgFail('23514', 'result ' + a.p_result_key + ' is not a result of this campaign\'s call type');
+      if (r.needs_date && !a.p_promised_date) return pgFail('23514', r.label + ' needs a date');
+      if (r.needs_amount && a.p_amount == null) return pgFail('23514', r.label + ' needs an amount');
+      if (r.needs_reason && !String(a.p_reason || '').trim()) return pgFail('23514', r.label + ' needs a reason');
+      const row = Object.assign({ id: crypto.randomUUID(), seat_id: s.id, campaign_id: c.id, saved_at: new Date().toISOString() }, a);
+      db.saved.push(row);
+      const updated = l.assigned_seat_id === s.id;
+      if (updated) Object.assign(l, CampaignQueue.applyResult(l, r, { date: a.p_promised_date, nextCallAt: a.p_next_call_at ? Date.parse(a.p_next_call_at) : null,
+        waConsent: a.p_consent_whatsapp, note: a.p_note }, Date.now()), r.needs_amount && r.needs_date ? { promised_amount: a.p_amount } : {});
+      return json(200, { outcome_id: row.id, duplicate: false, lead_updated: updated, lead_status: updated ? l.status : null });
+    },
+  });
+  /* A campaign for the given seats. results: the button list (my_campaigns shape); leads: lead rows (assigned_seat_id
+     set, money in amount_due). Returns the campaign. */
+  function addCampaign(c) {
+    const full = Object.assign({ id: crypto.randomUUID(), status: 'running', members: [], results: [], share_mode: 'equal' }, c);
+    db.campaigns.push(full);
+    (c.leads || []).forEach((l) => db.leads.push(Object.assign({ id: crypto.randomUUID(), campaign_id: full.id, status: 'new', next_call_at: null,
+      extra: {}, consent_whatsapp: false, created_at: new Date().toISOString(), calls: 0 }, l)));
+    return full;
+  }
+  // ---- end Phase A: caller ----
 
   async function handle(route) {
     const req = route.request();
@@ -390,9 +468,15 @@ function createFakeBackend(world) {
     const u = caller(req);
     if (p.startsWith('/rest/v1/rpc/')) {
       const name = p.slice('/rest/v1/rpc/'.length);
+      if (name === 'save_call_result' && db.offline) return route.abort('internetdisconnected');   // Phase A: caller
       if (RPC[name]) return send(RPC[name](u, body));
       if (ADMIN_EMPTY.includes(name)) return send(json(200, []));
       return send(pgErr(404, 'PGRST202', 'fake backend has no function ' + name));
+    }
+    // Phase A: caller: one script by id (a campaign's script).
+    if (p === '/rest/v1/scripts' && method === 'GET' && url.searchParams.get('id')) {
+      const sc = db.callerScripts[(url.searchParams.get('id') || '').replace(/^eq\./, '')];
+      return send(json(200, sc && u ? [{ id: sc.id, script_versions: [{ version: sc.version, steps: sc.steps, published: true }] }] : []));
     }
     if (p === '/rest/v1/scripts' && method === 'GET') {
       const inst = (url.searchParams.get('institute_id') || '').replace(/^eq\./, '');
@@ -428,6 +512,7 @@ function createFakeBackend(world) {
     rowsFor: (seatId) => db.outcomes.filter((r) => r.seat_id === seatId),
     addOutcome: (row) => db.outcomes.push({ id: crypto.randomUUID(), uploaded_at: new Date().toISOString(), corrects_id: null, ...row }),
     passwordOf: (who) => (db.users.find((x) => x.email === world.users[who].email) || {}).password,
+    addCampaign,   // Phase A: caller
   };
 }
 

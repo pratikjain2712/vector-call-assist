@@ -277,3 +277,22 @@ _Migration `20261024100022_script_types_ai.sql`, tests `supabase/tests/script_ty
 
 **Edge Function `ai-script-draft`** (POST, `Authorization: Bearer <admin access token>`): `{action:"draft", brief:{call_type, audience, language: simple_english|hinglish|hindi, purpose, facts, never_say}}` or `{action:"simplify", brief, script, target:{step, line}|{pushback}|null}`. Answers `{script, checks:{passed, failures, problems, marks, score:{score, label, long_lines}}, model, usage}`; errors `{error, code?}` with 401, 403 (`code: "no_feature"`), 429 (`code: "limit"`), 400, 500, 502. Secrets: `ANTHROPIC_API_KEY`; optional `ANTHROPIC_MODEL_DRAFT` (default `claude-haiku-5-5`), `ANTHROPIC_MODEL_FALLBACK` (default `claude-sonnet-5-5`).
 <!-- Phase A: scripts (end) -->
+
+<!-- Phase A: caller -->
+## Caller screen (Phase A: caller)
+
+_Migration `20261024100021_caller_screen.sql`. Tests: `supabase/tests/caller_screen_test.sql`._
+
+- **`lead_money()` change:** the caller the lead is assigned to sees its `amount_due` and `promised_amount` even when `hide_money` is on (decision 24 Oct: a caller cannot run a fees call without the amount due). Rule 4 above still holds for admins, reports and exports: `can_see_money()` is unchanged.
+- **`call_outcomes.note`** text ≤ 300, browser SELECT granted. The caller's note on a campaign call; shown to the next caller as "last call". No bank, card or UPI details.
+
+| Function | Returns | Who | What |
+|---|---|---|---|
+| `my_call_queue(p_campaign uuid)` | jsonb `{campaign_id, status, share_mode, daily_target, my_calls_today, team_calls_today, leads: [{id, name, phone, extra, status, next_call_at, promised_date, consent_whatsapp, created_at, calls, last_called_at, last_result_key, last_note}]}` | member seat of a running or paused campaign | The seat's open leads (new, callback, promised; not do-not-call; `consent_call`), due first, then new, then later; at most 500. Calls today use the India day. No money. |
+| `save_call_result(p_client_record_id text, p_lead uuid, p_result_key text, p_promised_date date, p_amount numeric, p_reason text, p_rating int, p_note text, p_step_times jsonb, p_reached_step text, p_script_step text, p_script_id text, p_script_version int, p_dialled_at timestamptz, p_connected_seconds int, p_phone_session_id text, p_next_call_at timestamptz, p_consent_whatsapp boolean)` (all after `p_result_key` default null) | jsonb `{outcome_id, duplicate, lead_updated, lead_status, next_call_at}` | seat of the lead, or a member of its campaign (lead moved while offline) | One transaction: inserts `call_outcomes` (checked by `call_outcomes_check`; fields the result does not need are dropped, except reason and note) and updates the lead with the mapping below. Same seat + `p_client_record_id` = saved once (`duplicate: true`). The lead changes only while it is still the seat's, not do-not-call, and no later call of it is saved. |
+| `india_day_start()` | timestamptz | any signed-in | Start of today in Asia/Kolkata. |
+
+Lead mapping in `save_call_result`: `do_not_call` → do_not_call; `wrong_number` → wrong_number; `no_answer` / `busy` → try again in 2 h / 30 min (new becomes callback); result with date and amount → promised (`promised_date`, `promised_amount`, next call on that date); result with a date → callback on that date (`p_next_call_at` or 10:00 India); legacy `callback` result without a date (Will think) → callback in 2 days; anything else → done. `p_consent_whatsapp` sets `consent_whatsapp` when not null. The browser mirrors this in `web/js/campaign-queue.js` (`applyResult`) for its offline copy.
+
+`next_free_lead(p_campaign uuid)` (campaigns feature) is called by the caller page when a `next_free` campaign has nothing waiting; the page accepts a lead id, a lead row or a list of rows, and works without it.
+<!-- end Phase A: caller -->
