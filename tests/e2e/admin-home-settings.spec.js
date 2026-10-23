@@ -156,7 +156,8 @@ test('Settings: call types, institute, money switch, plan and the activity log',
   // Plan: trial days and the add-ons; WhatsApp section is there for its own module.
   await expect(page.locator('#plan-text')).toHaveText('Trial: 4 days left · 3 of 10 seats used');
   await expect(page.locator('#plan-features')).toContainText('Scripts: On');
-  await expect(page.locator('#plan-ai')).toContainText('once the AI script maker is set up');
+  // admin_ai_usage (scripts) is there: the real count shows.
+  await expect(page.locator('#plan-ai')).toContainText('0 of 20 AI drafts used this month.');
   await expect(page.locator('#settings-whatsapp')).toHaveCount(1);
 
   // The activity log, newest first, in plain English.
