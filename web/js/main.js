@@ -257,7 +257,7 @@ const camp = {
   outbox: [], failed: [], syncing: false, offline: false, msg: "", nextFree: true, resultsSig: "",
   // Phase A: integration. waTemplates: approved WhatsApp templates (my_whatsapp_templates; [] when the institute
   // has no connected number). practice: my_practice() rows, null when unknown or not on this plan.
-  waTemplates: [], practice: null,
+  waTemplates: [], practice: null, syncAgain: false,
 };
 function refreshPhoneFlags() { phoneCheck = sheet ? ImportCheck.checkPhones(sheet.rows.map((r) => r[sheet.cols.phone])) : null; }
 /* Sheets saved before the callback column existed get it here, so the cell index is never undefined. */
@@ -1955,8 +1955,11 @@ function campReady(item) {
 
 /* Sends the outbox. Items leave it only once the server has them, or refused them (then they are listed). */
 async function campSync() {
-  if (camp.syncing || !camp.seat || !camp.outbox.length || !Cloud.hasSeat()) return;
-  camp.syncing = true;
+  // A call while a sync is running (e.g. the "online" event while an offline attempt is still failing) runs
+  // once more when that one ends, so it is never lost until the next 30-second retry.
+  if (camp.syncing) { camp.syncAgain = true; return; }
+  if (!camp.seat || !camp.outbox.length || !Cloud.hasSeat()) return;
+  camp.syncing = true; camp.syncAgain = false;
   const seat = camp.seat;
   let r = null;
   try {
@@ -1971,6 +1974,7 @@ async function campSync() {
   if (r && r.sent.length) campSendWhatsapp(r.sent);
   if (r && (r.sent.length || r.failed.length) && campOn()) await campRefresh({ claim: !camp.lead });
   else renderCampaign();
+  if (camp.syncAgain) { camp.syncAgain = false; campSync(); }
 }
 
 /* ---- Drawing ---- */
