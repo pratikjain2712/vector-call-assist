@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Content-Security-Policy: no inline scripts or styles. Scripts come from this site and jsDelivr (SRI on each);
+     fonts (Inter, Plus Jakarta Sans) from Google Fonts. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://*.supabase.co; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="robots" content="noindex">
+<title>Practice · Vector</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@700;800&display=swap">
+<link rel="stylesheet" href="css/admin.css">
+<link rel="stylesheet" href="css/practice.css">
+</head>
+<body class="practice">
+<header class="top">
+  <div class="top-row">
+    <div class="brand">
+      <span class="mark" aria-hidden="true">V</span>
+      <span class="name">Practice</span>
+    </div>
+    <div class="who">
+      <a href="app.html">Back to calling</a>
+      <span id="who"></span>
+      <button id="signout" type="button" hidden>Sign out</button>
+    </div>
+  </div>
+</header>
+
+<main class="pr-main">
+  <p class="pr-banner" role="note"><strong>Practice only.</strong> Nothing is dialled and nothing is saved as a call.</p>
+
+  <section id="off" class="panel" hidden>
+    <h2>Cloud is not set up</h2>
+    <p>Practice needs the Vector cloud, which is not set up for this site.</p>
+  </section>
+
+  <section id="gate" class="panel narrow" hidden>
+    <h2>Sign in</h2>
+    <p>Use your work email. Sign in with your password, or leave it empty and we send a sign-in link.</p>
+    <form id="gate-form" class="row">
+      <label>Work email <input id="gate-email" type="email" autocomplete="username" required></label>
+      <label>Password <input id="gate-password" type="password" autocomplete="current-password" placeholder="leave empty for an email link"></label>
+      <button type="submit" id="gate-submit">Send sign-in link</button>
+    </form>
+    <p id="gate-msg" class="msg" role="status"></p>
+  </section>
+
+  <section id="noseat" class="panel narrow" hidden>
+    <h2>No seat</h2>
+    <p>This login has no seat in an institute. Ask your institute admin to check your seat.</p>
+  </section>
+
+  <section id="addon" class="panel narrow" hidden>
+    <h2>Practice is part of Scripts</h2>
+    <p>Practice mode comes with the Scripts add-on. Ask your admin to add Scripts.</p>
+  </section>
+
+  <section id="pick" class="panel" aria-labelledby="pick-title" hidden>
+    <h2 id="pick-title">Choose a script to practise</h2>
+    <p class="muted">You read the script to a pretend person and pick their answers. Take your time.</p>
+    <ul id="pick-list" class="pr-list"></ul>
+    <p id="pick-msg" class="msg" role="status"></p>
+  </section>
+
+  <section id="walk" aria-labelledby="walk-step" hidden>
+    <div class="pr-walk">
+      <aside class="panel pr-lead" aria-label="Pretend lead">
+        <div class="pr-label">Pretend lead</div>
+        <div class="pr-lead-name" id="lead-name"></div>
+        <div id="lead-line"></div>
+        <div id="lead-due"></div>
+        <p class="pr-small muted">Made-up details, for practice only.</p>
+        <div class="pr-clock" aria-label="Timers">
+          <div><span class="pr-label">This step</span> <span id="clock-step" class="pr-time">0:00</span></div>
+          <div><span class="pr-label">Total</span> <span id="clock-total" class="pr-time">0:00</span></div>
+        </div>
+      </aside>
+      <div class="pr-script">
+        <div class="panel pr-step">
+          <div class="pr-label" id="walk-count"></div>
+          <h2 id="walk-step" tabindex="-1"></h2>
+          <div id="walk-say" class="pr-say"></div>
+          <p id="walk-tip" class="pr-tip" hidden></p>
+        </div>
+        <div class="panel">
+          <h3 id="walk-ask">What did they say?</h3>
+          <div id="walk-opts" class="pr-opts"></div>
+          <div class="row pr-walk-actions">
+            <button type="button" id="walk-back">Back one step</button>
+            <button type="button" id="walk-stop">Stop practice</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="summary" class="panel" aria-labelledby="summary-title" hidden>
+    <h2 id="summary-title" tabindex="-1">Well done</h2>
+    <p id="summary-total"></p>
+    <p id="summary-end"></p>
+    <div class="scroll">
+      <table class="pr-table">
+        <caption>Time on each step</caption>
+        <thead><tr><th scope="col">Step</th><th scope="col">Time</th></tr></thead>
+        <tbody id="summary-body"></tbody>
+      </table>
+    </div>
+    <p id="summary-tip"></p>
+    <p id="summary-msg" class="msg" role="status"></p>
+    <div class="row">
+      <button type="button" class="primary" id="summary-again">Practise again</button>
+      <button type="button" id="summary-other">Choose another script</button>
+    </div>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
+<script src="js/config.js"></script>
+<script src="js/practice.js"></script>
+</body>
+</html>

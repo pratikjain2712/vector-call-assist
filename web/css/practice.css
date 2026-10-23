@@ -1,0 +1,34 @@
+/* Practice page (web/practice.html, js/practice.js). Builds on css/admin.css for colours (light and dark),
+   type, buttons, panels and forms. Phone first: one column at 375px, the pretend lead above the script. */
+.practice .pr-main { display: flex; flex-direction: column; gap: 16px; }
+.practice .pr-main > .panel { margin: 0; }
+.practice .pr-banner { margin: 0; padding: 10px 14px; border-radius: var(--radius-control); background: var(--warn-soft);
+  color: var(--text); font-size: 14px; border: 1px solid var(--line); }
+.practice .pr-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.practice .pr-small { font-size: 12px; margin: 0; }
+
+.practice .pr-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.practice .pr-item { border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; gap: 12px;
+  align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.practice .pr-item.asked { border: 2px solid var(--accent); padding: 11px; }
+.practice .pr-item-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.practice .pr-item-name { font-weight: 600; color: var(--heading); }
+.practice .pr-item-note { font-size: 13px; color: var(--muted); }
+
+.practice .pr-walk { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.practice .pr-lead { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; margin: 0; }
+.practice .pr-lead-name { font-family: var(--font-display); font-weight: 800; font-size: 20px; color: var(--heading); overflow-wrap: anywhere; }
+.practice .pr-clock { display: flex; gap: 16px; flex-wrap: wrap; border-top: 1px solid var(--line-soft); padding-top: 8px; margin-top: 4px; }
+.practice .pr-time { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 18px; color: var(--heading); }
+.practice .pr-script { flex: 999 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.practice .pr-script > .panel { margin: 0; }
+.practice .pr-step h2 { margin: 4px 0 8px; outline: none; }
+.practice .pr-say p { margin: 0 0 8px; font-size: 19px; line-height: 1.5; color: var(--heading); overflow-wrap: anywhere; }
+.practice .pr-tip { margin: 4px 0 0; font-size: 14px; color: var(--muted); }
+.practice .pr-opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 8px 0 12px; }
+.practice .pr-opts button { min-height: 52px; font-weight: 600; }
+.practice .pr-walk-actions { gap: 8px; }
+.practice .pr-table td.pr-slow { font-weight: 700; color: var(--warn); }
+.practice #summary h2 { outline: none; }
+.practice #summary p { margin: 0 0 10px; }
+.practice .pr-table caption { text-align: left; font-weight: 600; padding: 4px 0 8px; color: var(--heading); }
