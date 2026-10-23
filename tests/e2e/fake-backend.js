@@ -4,6 +4,7 @@
 // pages and the real supabase-js talk to it over Playwright request routing; nothing leaves the machine.
 // It cannot test row-level security in Postgres itself: tests/e2e/access-rules.spec.js needs the real stack.
 const crypto = require('node:crypto');
+const { createFakeInsights } = require('./fake-insights');   // Phase A: insights
 
 const b64url = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
 function jwt(user) {
@@ -113,6 +114,10 @@ function createFakeBackend(world) {
     },
   };
   const ADMIN_EMPTY = ['admin_weekly_summary', 'admin_rep_progress', 'list_supervisor_notes'];
+  // Phase A: insights (canned answers in fake-insights.js)
+  const insights = createFakeInsights(world, { requireAdmin, json, pgErr });
+  Object.assign(RPC, insights.RPC);
+  // /Phase A: insights
 
   async function handle(route) {
     const req = route.request();
@@ -185,6 +190,7 @@ function createFakeBackend(world) {
     async attach(page, origin) { await page.route(origin + '/**', handle); },
     rowsFor: (seatId) => db.outcomes.filter((r) => r.seat_id === seatId),
     addOutcome: (row) => db.outcomes.push({ id: crypto.randomUUID(), uploaded_at: new Date().toISOString(), corrects_id: null, ...row }),
+    insights,   // Phase A: insights
     passwordOf: (who) => (db.users.find((x) => x.email === world.users[who].email) || {}).password,
   };
 }

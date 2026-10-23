@@ -229,3 +229,27 @@ Caller lead card: read the lead's plain columns from `leads`, then `lead_money(l
 ## Not built here (for the feature agents)
 
 Campaign create / edit / pause / close, adding and removing members, lead upload and moving leads, the caller queue order, reports, insights, WhatsApp. Each needs its own checked functions following the rules above.
+
+<!-- Phase A: insights -->
+## Insights (migration `20261024100025_insights.sql`, tests `supabase/tests/insights_test.sql`)
+
+New `campaigns` columns: `goal int null` (1–1000000, good results wanted by the end date, for types other than fees; fees aim at 90% of due) and `insights_plan jsonb null` (the last plan applied: `{ callers, calls_per_caller, evening_share, applied_at, applied_by }`; callers is a note only).
+
+`campaigns.call_hours` shape (written by Insights, read by the caller screen): `{ "tz": "Asia/Kolkata", "days": { "mon": [18, 19, 20], "sat": [10, 11] }, "source": "insights" }`. `days` keys are `mon` … `sun`, values distinct hours 0–23 local to `tz` (the hour that starts the slot). A day that is not listed has no preference; null = any time. Only these keys are accepted.
+
+Words: picked up = outcome not `no_answer` / `busy` / `dropped_network`; good = the result's `counts_as_good` (old rows: outcome `won`); promise = `will_pay_on` or `will_renew_on` with a date; kept = the same lead later got `paid` / `paid_part` / `already_paid` (fees) or `renewed` (renewal) on or before the date. A call is read as its latest correction.
+
+| Function | Returns | Who | What |
+|---|---|---|---|
+| `admin_insights_setup(p_institute)` | jsonb `{ money, features, practice_available, campaigns: [{ id, name, status, call_type_key, call_type_label, start_date, end_date, daily_target, call_hours, goal, plan, script_id, callers, calls, leads }] }` | admin | Starting data for the tab. `practice_available` = the database has `admin_assign_practice`. |
+| `admin_insights_forecast(p_institute, p_campaign, p_tz)` | jsonb | admin | Inputs for `web/js/insights-model.js`: `kind` (`amount` only for fees with `can_see_money`, else `count`), `money_hidden`, `today`, dates, `callers`, `leads`, `cap`, `target`, `stats`, `promises`, `open_promises`, `daily`, `hours`. Amounts only when `kind = 'amount'`. |
+| `admin_insights_summary(p_institute, p_campaign, p_from, p_to, p_tz)` | one row `(calls, picked, good, active_days, callers, promises_judged, promises_kept, talk_seconds)` | admin | "Compare with". Null range = whole campaign. |
+| `admin_insights_best_time(p_institute, p_campaign, p_seat, p_tz)` | rows `(dow 1–7, hour, calls, picked)` | admin | Heatmap; `p_seat` null = all callers. |
+| `admin_insights_call_ends(p_institute, p_campaign)` | rows `(step, step_label, step_order, calls)` | admin + Scripts add-on | Picked-up calls by `reached_step`, in script order. |
+| `admin_insights_promises(p_institute, p_campaign, p_tz)` | rows `(bucket, bucket_order, promises, kept, waiting)` | admin | Buckets 1–3, 4–7, 8–14, 15+ days away. Counts only. |
+| `admin_insights_coaching(p_institute, p_campaign)` | rows `(seat_id, label, calls, picked, good, talk_seconds)` | admin | Members and anyone who called. |
+| `admin_insights_step_coaching(p_institute, p_campaign)` | rows `(seat_id, label, step, step_label, step_order, timed_calls, calls_with_step, avg_seconds)` | admin + Scripts add-on | From `step_times`; `seat_id` null = team. |
+| `admin_set_call_hours(p_campaign, p_call_hours)` | void | admin | Not closed campaigns. Audit `campaign.call_hours_set`. |
+| `admin_apply_insights_plan(p_campaign, p_callers, p_calls_per_caller, p_evening_share, p_daily_target, p_call_hours default null)` | void | admin | Sets `daily_target`, `insights_plan` and (when given) `call_hours`. Audit `campaign.plan_applied`. |
+| `admin_set_campaign_goal(p_campaign, p_goal)` | void | admin | Null clears. Audit `campaign.goal_set`. |
+<!-- /Phase A: insights -->
