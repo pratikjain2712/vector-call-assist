@@ -112,6 +112,62 @@ function createFakeBackend(world) {
         seat_id: s.id, label: s.label, role: s.role, status: s.status, device_kinds: [], last_call_at: null, has_phone: false })));
     },
   };
+
+  // Phase A: reports. Fees collection, promises due, send back and the sales funnel for institute A, with the
+  // money rules of migration 20261024100024: amounts only when db.reports.money is true (a test sets it, like
+  // can_see_money on the real database), and every money export logged in db.reports.exports.
+  const reportsCampaign = crypto.randomUUID();
+  db.reports = {
+    money: false, exports: [], sentBack: [],
+    campaigns: [{ id: reportsCampaign, institute_id: world.institutes.a, name: 'Oct fees', status: 'running' }],
+    fees: { leads: 240, total_due: 4320000, paid_leads: 80, paid_calls: 85, paid_amount: 1440000, promised_leads: 50,
+      promised_amount: 900000, broken_promises: 14 },
+    promises: [
+      { lead_id: crypto.randomUUID(), name: 'Parent Late', extra: { Student: 'Asha', Class: '10-B' }, amount: 9000, days_late: 2, caller: 'Rep 2' },
+      { lead_id: crypto.randomUUID(), name: 'Parent Today', extra: { Student: 'Ravi', Class: '10-A' }, amount: 18000, days_late: 0, caller: 'Rep 1' },
+      { lead_id: crypto.randomUUID(), name: 'Parent Later', extra: {}, amount: 18000, days_late: -2, caller: 'Rep 1' },
+    ],
+    funnel: { called: 189, picked_up: 117, heard_pitch: 78, interested: 36, joined: 23, no_step: 0, pitch_guessed: true,
+      top_reason: { reason: 'price', calls: 12 } },
+  };
+  const reportsDay = (late) => { const d = new Date(); d.setDate(d.getDate() - late); return d.toISOString().slice(0, 10); };
+  const reportsDenied = () => pgErr(400, '42501', 'only an admin of this institute can view these reports');
+  Object.assign(RPC, {
+    admin_fees_report: (u, a) => {
+      if (!requireAdmin(u, a.p_institute)) return reportsDenied();
+      const m = db.reports.money, f = db.reports.fees;
+      return json(200, [{ ...f, total_due: m ? f.total_due : null, paid_amount: m ? f.paid_amount : null,
+        promised_amount: m ? f.promised_amount : null, money_hidden: !m }]);
+    },
+    admin_promises_due: (u, a) => {
+      if (!requireAdmin(u, a.p_institute)) return reportsDenied();
+      return json(200, db.reports.promises.map((p) => ({ ...p, amount: db.reports.money ? p.amount : null, money_hidden: !db.reports.money,
+        promised_date: reportsDay(p.days_late), seat_id: null, campaign_id: reportsCampaign, campaign: 'Oct fees', next_call_at: null })));
+    },
+    admin_send_back_leads: (u, a) => {
+      if (!requireAdmin(u, a.p_institute)) return reportsDenied();
+      db.reports.sentBack.push(...(a.p_leads || []));
+      return json(200, (a.p_leads || []).length);
+    },
+    admin_sales_funnel: (u, a) => {
+      if (!requireAdmin(u, a.p_institute)) return reportsDenied();
+      return json(200, db.reports.funnel);
+    },
+    log_money_export: (u, a) => {
+      if (!requireAdmin(u, a.p_institute) || !db.reports.money) return pgErr(400, '42501', 'you cannot export money for this institute');
+      db.reports.exports.push({ what: a.p_what, rows: a.p_rows });
+      return json(200, db.reports.exports.length);
+    },
+  });
+  if (!RPC.can_see_money) RPC.can_see_money = (u, a) => json(200, !!(requireAdmin(u, a.inst) && db.reports.money));
+  // The campaigns list for the report filters (admins read their institute's campaigns).
+  function reportsRoute(p, method, u) {
+    if (p !== '/rest/v1/campaigns' || method !== 'GET') return null;
+    const s = u && seatOf(u.id);
+    return json(200, s && s.role === 'admin' ? db.reports.campaigns.filter((c) => c.institute_id === s.institute_id) : []);
+  }
+  // End of Phase A: reports.
+
   const ADMIN_EMPTY = ['admin_weekly_summary', 'admin_rep_progress', 'list_supervisor_notes'];
 
   async function handle(route) {
@@ -177,6 +233,8 @@ function createFakeBackend(world) {
     if (p === '/rest/v1/call_outcomes' && method === 'GET') {
       return send(json(200, u ? db.outcomes.filter((r) => { const s = seatOf(u.id); return s && r.seat_id === s.id; }) : []));
     }
+    const reportsRes = reportsRoute(p, method, u);   // Phase A: reports
+    if (reportsRes) return send(reportsRes);
     return send(pgErr(404, 'PGRST000', 'fake backend has no route for ' + method + ' ' + p));
   }
 

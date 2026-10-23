@@ -1,4 +1,43 @@
-/* Reports tab (js/admin/reports.js): results tables, script results and the suggestions on lost calls. */
+/* Reports tab (js/admin/reports.js): the filter bar, the report picker, Fees collection cards and promises,
+   the sales funnel bars, results tables, script results and the suggestions on lost calls. */
+.tab-reports .filters .row { align-items: flex-end; }
+.tab-reports .filters #rp-excel { margin-left: auto; }
+.tab-reports .filters .msg:empty { display: none; }
+
+/* report picker: pill buttons, the open one filled */
+.tab-reports .picker { display: flex; gap: 8px; flex-wrap: wrap; }
+.tab-reports .picker button { border-radius: var(--radius-pill); padding: 8px 14px; }
+.tab-reports .picker button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.tab-reports .picker button[aria-pressed="true"]:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+/* Fees collection */
+.tab-reports .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-top: 12px; }
+.tab-reports .card { border: 1px solid var(--line); border-radius: var(--radius-card); padding: 14px 16px; background: var(--panel); min-width: 0; }
+.tab-reports .card-label { font-size: 13px; color: var(--muted); }
+.tab-reports .card-value { font-family: var(--font-display); font-weight: 800; font-size: 26px; color: var(--heading);
+  overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.tab-reports .card.good .card-value { color: var(--ok); }
+.tab-reports .card.bad .card-value { color: var(--danger); }
+.tab-reports .card-sub { font-size: 12px; color: var(--muted); }
+.tab-reports .subpanel { margin-top: 20px; }
+.tab-reports .subpanel h3 { margin: 0; }
+.tab-reports .subpanel p.small { margin: 4px 0 8px; }
+.tab-reports td.status { font-weight: 600; }
+.tab-reports td.status.due { color: var(--warn); }
+.tab-reports td.status.late { color: var(--danger); }
+.tab-reports td.status.later { color: var(--muted); font-weight: 400; }
+.tab-reports .locked { padding: 12px 14px; border: 1px dashed var(--line); border-radius: var(--radius-button); background: var(--panel-soft); }
+
+/* Sales funnel: one bar per step, as wide as its share of calls */
+.tab-reports .funnel { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
+.tab-reports .funnel li { display: grid; grid-template-columns: 130px 1fr 110px; align-items: center; gap: 12px; }
+.tab-reports .f-bar { height: 22px; background: var(--line-soft); border-radius: 6px; overflow: hidden; }
+.tab-reports .f-bar .fill { height: 100%; background: var(--chart-2); border-radius: 6px; min-width: 2px; }
+.tab-reports .f-bar .fill.last { background: var(--ok); }
+.tab-reports .f-num { text-align: right; font-variant-numeric: tabular-nums; color: var(--heading); }
+.tab-reports .notes p { margin: 10px 0 0; font-size: 14px; color: var(--muted); }
+
+/* script results and suggestions */
 .tab-reports .report-block { margin-top: 14px; }
 .tab-reports .report-block h4 { margin-top: 10px; }
 .tab-reports #report-out { max-width: 100%; }
@@ -9,3 +48,10 @@
   background: var(--panel-soft); }
 .tab-reports .suggestion p { margin: 0 0 6px; }
 .tab-reports .suggestion-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+@media (max-width: 699px) {
+  .tab-reports .filters #rp-excel { margin-left: 0; }
+  .tab-reports .funnel li { grid-template-columns: 1fr auto; gap: 4px 12px; }
+  .tab-reports .f-bar { grid-column: 1 / -1; grid-row: 2; }
+  .tab-reports .card-value { font-size: 22px; }
+}
