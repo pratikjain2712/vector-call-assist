@@ -6,7 +6,7 @@
    Sign-out unmounts every tab.
    The admin signs in by password or emailed link, like cloud.js. Reports are read with admin_* RPCs, which
    the database checks. Seat changes go through the seat-admin Edge Function (supabase/functions/seat-admin).
-   Money: ctx.canSeeMoney comes from the my_money_access RPC; a database without it (or any error) gives false,
+   Money: ctx.canSeeMoney comes from the can_see_money RPC; a database without it (or any error) gives false,
    so ₹ stays hidden unless the server says yes. */
 (function () {
   const S = window.VectorAdminShared;
@@ -175,9 +175,9 @@
   // Whether this admin may see ₹ amounts. Only the server decides; anything but a clear true is false.
   async function loadMoneyAccess(seat) {
     try {
-      const data = await rpc('my_money_access', { p_institute: seat.institute_id });
+      const data = await rpc('can_see_money', { inst: seat.institute_id });
       const v = Array.isArray(data) ? data[0] : data;
-      return v === true || (v && v.my_money_access === true);
+      return v === true || (v && v.can_see_money === true);
     } catch (err) {
       return false;
     }

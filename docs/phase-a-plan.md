@@ -65,6 +65,14 @@ Pilot and checks:
 - **AI drafts, default Haiku 5.5** ($0.10 in / $0.50 out per million tokens, prompts up to 100K tokens). A full draft is about 6k tokens in and 12k out ≈ $0.007 ≈ ₹0.60. 20 drafts ≈ ₹12 a month per institute. Sonnet 5.5 fallback ($2 / $10) ≈ ₹11–12 per draft, used only when Haiku fails the checks. Prompt caching cuts the repeated instructions further. Log tokens and cost per request; review after 1 month.
 - **WhatsApp** (Meta India rates, June 2026, before GST and provider fee): utility ₹0.115, marketing ₹0.86, authentication ₹0.115 per message. Fee reminders and promise reminders are utility. Course details with an offer are likely marketing. Example: 5 callers × 120 messages a day × 26 days ≈ 3,100 messages ≈ ₹360 as utility, ≈ ₹2,700 as marketing, plus GST and the provider's fee.
 
+## Packaging and prices (suggested 24 Oct, not final)
+- Basic: calling, campaigns, cloud leads, result buttons, Home, Reports, Fees and Sales views, Excel, Insights that do not need a script. ₹499 a seat a month (₹399 yearly).
+- Scripts add-on: guided scripts, editor, templates, AI script maker (20 drafts a month per institute), script test, step coaching, where calls end. ₹299 a seat a month (₹239 yearly).
+- Same volume discounts as the website today. Trial: everything on for 5 days.
+- AI top-up later only if the cost log shows need (e.g. ₹299 for 50 drafts). WhatsApp: pass-through or the institute's own Meta account (decision open).
+- [ ] S · Per-institute feature switches `scripts` and `ai_drafts`, checked on the server (AI function, script publishing) and in the UI ("Add Scripts to use this"); trial turns both on
+- [ ] S · Website pricing section updated once prices are confirmed (after the pilot)
+
 ## Sprint 7: Data foundation (cloud)
 - [ ] M · `call_types` and `call_type_results` tables (key, label, needs date / amount / reason, counts as good result), seeded with the list above; admin-only write
 - [ ] M · `campaigns` (type, script, dates, status, daily target) and `campaign_members` (seat ↔ campaign)
