@@ -251,7 +251,7 @@ All are `security definer`; "admin" means owner or manager of the campaign's ins
 
 Internal (granted to nobody): `campaign_for_admin`, `campaign_admin_seat`, `lead_is_open`, `lead_is_uncalled`, `campaign_check_script`, `campaign_share_equal`, `campaign_share_next_free`.
 
-When `scripts.call_type_id` exists (scripts feature), `campaign_check_script` and `SCRIPT_TYPE_FILTER` in `web/js/admin/campaigns.js` should also require the script's type to match (marked TODO in both).
+Script type rule (integration, 0030): `campaign_check_script` requires the script to be of the campaign's type or untyped (saved before 0022), like the `campaigns_check_script` trigger; `SCRIPT_TYPE_FILTER` in `web/js/admin/campaigns.js` is on, so step 2 offers only those scripts.
 <!-- /Phase A: campaigns -->
 
 <!-- Phase A: scripts -->

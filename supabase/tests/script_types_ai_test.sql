@@ -147,6 +147,17 @@ select pg_temp.fails_with('a script used by a fees campaign cannot become a sale
   format($q$update scripts set call_type_id = %L where id = %L$q$, :'t_sales', :'sc_fees'), 'used in a campaign');
 select pg_temp.ok('removing the script from a campaign is fine',
   $q$update campaigns set script_id = null where name = 'Old sales'$q$);
+-- Integration (0030): the Campaigns tab functions give the same type rule through campaign_check_script.
+select pg_temp.as_user(:'u_o', 'owner@p.test');
+set role authenticated;
+select pg_temp.fails_with('admin_create_campaign: a sales campaign cannot take the fees script',
+  format($q$select admin_create_campaign('Sales via tab', %L, %L)$q$, :'t_sales', :'sc_fees'), 'another call type');
+select pg_temp.ok('admin_create_campaign: a fees campaign takes the fees script',
+  format($q$select admin_create_campaign('Fees via tab', %L, %L)$q$, :'t_fees', :'sc_fees'));
+select pg_temp.ok('admin_create_campaign: an untyped live script is accepted',
+  format($q$select admin_create_campaign('Legacy via tab', %L, %L)$q$, :'t_sales', :'sc_legacy'));
+reset role;
+delete from campaigns where name like '% via tab';   -- the checks below count the campaigns using each script
 
 -- ---------- the Scripts tab list ----------
 -- Calls with the fees script in the fees campaign: one Paid (good), one Says already paid (not good), one old

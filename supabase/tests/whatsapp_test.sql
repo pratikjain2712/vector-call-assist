@@ -269,22 +269,13 @@ select pg_temp.val_is('overview shows the brief number', $q$select admin_whatsap
 reset role;
 set role service_role;
 select pg_temp.ok('approve the brief template', $q$select wa_template_status((select v::uuid from keep where k='tpl_brief'), null, null, '333444', 'APPROVED')$q$);
-select pg_temp.val_is('without admin_weekly_brief the brief is off', $q$select wa_brief_available()::text$q$, 'false');
-select pg_temp.rows_is('without admin_weekly_brief nothing is claimed', $q$select count(*)::int from wa_claim_briefs(current_date)$q$, 0);
+-- admin_weekly_brief comes from migration 0026 (insights-extra), so the brief is available.
+select pg_temp.val_is('admin_weekly_brief is there, so the brief is on', $q$select wa_brief_available()::text$q$, 'true');
 reset role;
--- A stand-in for the Insights feature's admin_weekly_brief: admin only, like the real one.
-create function public.admin_weekly_brief(p_campaign uuid) returns setof text language plpgsql security definer
-set search_path = public as $$
-declare inst uuid;
-begin
-  select institute_id into inst from campaigns where id = p_campaign;
-  if not public.is_admin_of(inst) then raise exception 'admins only' using errcode = '42501'; end if;
-  return next 'Calls: 120 this week.';
-  return next 'Promises kept: 8 of 10.';
-end $$;
 select pg_temp.as_user(null);
 set role service_role;
-select pg_temp.val_is('the brief runs as the owner', $q$select jsonb_array_length(r->'lines')::text from wa_claim_briefs(current_date) r$q$, '2');
+-- The real admin_weekly_brief returns 4 lines as text[]; they arrive as 4 strings, not one nested array.
+select pg_temp.val_is('the brief runs as the owner', $q$select jsonb_array_length(r->'lines')::text from wa_claim_briefs(current_date) r$q$, '4');
 select pg_temp.rows_is('the brief goes once a week', $q$select count(*)::int from wa_claim_briefs(current_date)$q$, 0);
 select pg_temp.val_is('the brief leaves no borrowed login behind', $q$select coalesce(auth.uid()::text, 'none')$q$, 'none');
 reset role;

@@ -149,7 +149,7 @@ test("scriptChoices offers live scripts only, and filters by type once the switc
   ];
   assert.deepEqual(C.scriptChoices(scripts, "fees", false).map((s) => s.name + " v" + s.version), ["Any type v1", "Fees reminder v3", "Sales v7"]);
   assert.deepEqual(C.scriptChoices(scripts, "fees", true).map((s) => s.id), ["d", "a"]);
-  assert.equal(C.SCRIPT_TYPE_FILTER, false);   // switched on by the integration agent with scripts.call_type_id
+  assert.equal(C.SCRIPT_TYPE_FILTER, true);   // on since scripts.call_type_id exists (0022)
 });
 
 test("formProblem checks the form before a save", () => {

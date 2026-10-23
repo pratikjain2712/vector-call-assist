@@ -66,9 +66,10 @@
     return v.length ? v[0] : null;
   }
 
-  // TODO(integration, Sprint 9): switch on when the scripts agent adds scripts.call_type_id. Then only live
-  // scripts of the campaign's type are offered (the server check is in campaign_check_script).
-  const SCRIPT_TYPE_FILTER = false;
+  // On since scripts.call_type_id exists (0022): only live scripts of the campaign's type, or untyped scripts
+  // saved before types, are offered. The server checks the same in campaign_check_script (0030) and the
+  // campaigns_check_script trigger (0022).
+  const SCRIPT_TYPE_FILTER = true;
 
   // The scripts step 2 offers: live scripts only, of the chosen type when the filter is on, by name.
   function scriptChoices(scripts, typeId, filterOn) {

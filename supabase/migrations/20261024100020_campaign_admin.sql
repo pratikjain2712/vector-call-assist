@@ -54,9 +54,7 @@ as $$ select p_status in ('new', 'callback', 'promised') and not coalesce(p_do_n
 
 -- Checks a script for a campaign: same institute, has a live (published) version, and the institute has the
 -- Scripts add-on (a trial has everything). Null is fine: a campaign can run without a script.
--- TODO(scripts agent, Sprint 9): when scripts.call_type_id exists, also require it to match p_call_type
--- (or be null). The admin screen has the matching filter switched off too (SCRIPT_TYPE_FILTER in
--- web/js/admin/campaigns.js).
+-- Done in 20261024100030_phase_a_integration.sql: the script must also be of p_call_type (or untyped).
 create or replace function public.campaign_check_script(p_institute uuid, p_script uuid, p_call_type uuid)
 returns void
 language plpgsql stable security definer set search_path = public
