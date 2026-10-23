@@ -679,6 +679,77 @@ function createFakeBackend(world) {
   })();
   // /Phase A: admin
 
+  // Phase A: insights-extra. Weekly brief, script test and practice (migration 20261024100026). State is in
+  // db.ix so a test can change it (for example take the Scripts add-on away). Functions another block already
+  // defines are kept.
+  const IX_CAMPAIGN = '7e570000-0000-4000-8000-000000000001';
+  db.ix = {
+    features: { [world.institutes.a]: ['scripts', 'ai_drafts'], [world.institutes.b]: ['scripts', 'ai_drafts'] },
+    brief: [
+      'E2E fees: 40 of 82 leads have a good result so far. At this speed it will be 69 by 3 Nov.',
+      'People pick up most on weekdays 7–9 pm (68%). Rep 1 calls mostly at 11 am (31% of their calls).',
+      '9 people broke a promise. People who promised more than 7 days away kept it 30% of the time (within 7 days: 80%). Ask for a date within 7 days.',
+      'E2E script: v7 gets 16 more good results per 100 picked-up calls than v6.',
+    ],
+    campaign: { id: IX_CAMPAIGN, name: 'E2E fees', status: 'running', script_id: world.scriptId, script_name: 'E2E script' },
+    versions: [
+      { version: 7, published: false, change_note: 'Shorter pitch', created_at: '2026-10-20T10:00:00Z' },
+      { version: 6, published: true, change_note: '', created_at: '2026-10-01T10:00:00Z' },
+    ],
+    test: { id: '7e570000-0000-4000-8000-0000000000aa', status: 'running', version_a: 6, version_b: 7, winner: null,
+      started_at: '2026-10-10T04:30:00Z', ended_at: null, same_script: true, leads: 198, arms: [
+        { arm: 'a', version: 6, calls: 140, picked_up: 102, good: 9, avg_seconds: 410, change_note: '' },
+        { arm: 'b', version: 7, calls: 131, picked_up: 96, good: 25, avg_seconds: 340, change_note: 'Shorter pitch' }] },
+    log: [],   // [name, args] of every write
+  };
+  const ixSeat = (u) => (u && seatOf(u.id)) || null;
+  const ixHas = (s) => !!s && (db.ix.features[s.institute_id] || []).includes('scripts');
+  const ixAdmin = (u) => { const s = ixSeat(u); return s && s.role === 'admin' ? s : null; };
+  const IX_RPC = {
+    my_features: (u) => { const s = ixSeat(u); return json(200, s ? (db.ix.features[s.institute_id] || []) : null); },
+    admin_weekly_brief: (u) => (ixAdmin(u) ? json(200, db.ix.brief) : pgErr(403, '42501', 'only an admin can see the weekly brief')),
+    admin_script_test: (u, a) => {
+      const s = ixAdmin(u);
+      if (!s || a.p_campaign !== IX_CAMPAIGN) return pgErr(403, '42501', 'campaign not found');
+      if (!ixHas(s)) return pgErr(403, '42501', 'Script tests are part of the Scripts add-on');
+      return json(200, { campaign: db.ix.campaign, versions: db.ix.versions, test: db.ix.test });
+    },
+    admin_start_script_test: (u, a) => {
+      const s = ixAdmin(u);
+      if (!s || a.p_campaign !== IX_CAMPAIGN) return pgErr(403, '42501', 'campaign not found');
+      if (db.ix.test && db.ix.test.status === 'running') return pgErr(400, '22023', 'a test is already running on this campaign; stop it first');
+      db.ix.log.push(['admin_start_script_test', a]);
+      db.ix.test = { id: crypto.randomUUID(), status: 'running', version_a: a.p_version_a, version_b: a.p_version_b, winner: null,
+        started_at: new Date().toISOString(), ended_at: null, same_script: true, leads: 0, arms: [] };
+      return json(200, db.ix.test.id);
+    },
+    admin_end_script_test: (u, a) => {
+      const t = db.ix.test;
+      if (!ixAdmin(u) || !t || t.id !== a.p_test) return pgErr(403, '42501', 'test not found');
+      if (t.status !== 'running') return pgErr(400, '22023', 'this test has already ended');
+      db.ix.log.push(['admin_end_script_test', a]);
+      if (a.p_winner) db.ix.versions.forEach((v) => { v.published = v.version === a.p_winner; });
+      Object.assign(t, { status: 'ended', winner: a.p_winner || null, ended_at: new Date().toISOString() });
+      return json(200, null);
+    },
+    my_practice: (u) => {
+      const s = ixSeat(u);
+      if (!s) return pgErr(403, '42501', 'no active seat for this login');
+      if (!ixHas(s)) return pgErr(403, '42501', 'Practice is part of the Scripts add-on');
+      const done = db.ix.log.filter((l) => l[0] === 'my_practice_done');
+      return json(200, [{ assignment_id: 'a0000000-0000-4000-8000-0000000000p1', script_id: world.scriptId, script_name: 'E2E script',
+        version: 1, steps: world.steps, note: 'Slow down at the offer', assigned_at: '2026-10-22T05:00:00Z', assigned_by: 'E2E Admin',
+        done_at: done.length ? new Date().toISOString() : null, times_done: done.length }]);
+    },
+    my_practice_done: (u, a) => {
+      if (!ixSeat(u)) return pgErr(403, '42501', 'no active seat for this login');
+      db.ix.log.push(['my_practice_done', a]);
+      return json(200, null);
+    },
+  };
+  Object.keys(IX_RPC).forEach((k) => { if (!RPC[k]) RPC[k] = IX_RPC[k]; });
+  // /Phase A: insights-extra
+
   async function handle(route) {
     const req = route.request();
     const url = new URL(req.url());

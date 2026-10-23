@@ -341,3 +341,26 @@ Words: picked up = outcome not `no_answer` / `busy` / `dropped_network`; good = 
 | `admin_apply_insights_plan(p_campaign, p_callers, p_calls_per_caller, p_evening_share, p_daily_target, p_call_hours default null)` | void | admin | Sets `daily_target`, `insights_plan` and (when given) `call_hours`. Audit `campaign.plan_applied`. |
 | `admin_set_campaign_goal(p_campaign, p_goal)` | void | admin | Null clears. Audit `campaign.goal_set`. |
 <!-- /Phase A: insights -->
+
+<!-- Phase A: insights-extra -->
+## Insights extra: script test, weekly brief, practice (migration `20261024100026_insights_extra.sql`)
+
+Details and the email schedule: `docs/weekly-brief.md`. Tables `script_tests`, `script_test_leads` and `practice_assignments` have RLS on and no browser grants: use the functions.
+
+| Function | Returns | Who | What |
+|---|---|---|---|
+| `campaign_script_version(p_campaign uuid, p_lead uuid default null)` | table `(script_id uuid, script_name text, version int, steps jsonb, test_id uuid, arm text)` | caller of the lead (active seat, campaign member, not draft), admins | **Caller page: use this for the script of a call** and save `script_id::text` and `version` in `call_outcomes.script_id` / `script_version`. With a running test and a lead: that lead's version (A/B alternate, stored, stable). Otherwise the published version (`test_id` null). No rows: no script, nothing published, or no Scripts add-on. Writes the lead's arm the first time. |
+| `admin_script_test(p_campaign uuid)` | jsonb `{campaign:{id,name,status,script_id,script_name}, versions:[{version,published,change_note,created_at}], test:null or {id,status,version_a,version_b,winner,started_at,ended_at,same_script,leads,arms:[{arm,version,calls,picked_up,good,avg_seconds,change_note}]}}` | admin, Scripts add-on | The running test, else the last one. Counts since the test started; corrections applied; no money. |
+| `admin_start_script_test(p_campaign uuid, p_version_a int, p_version_b int)` | uuid | admin, Scripts add-on | One running test per campaign. Audit `script_test.started`. |
+| `admin_end_script_test(p_test uuid, p_winner int default null)` | void | admin | Winner: publishes that version of the script ("Use vX for everyone"; audit `script.published`). Null: stop. Audit `script_test.ended`, target `<test>:v<n>` or `<test>:none`. |
+| `admin_weekly_brief(p_campaign uuid default null)` | text[] (4 lines) | admin | Forecast, best hours, promises, script version change. Rupees only when `can_see_money()`. Null campaign: forecast for the busiest running campaign, the rest across campaigns. |
+| `weekly_brief_lines(p_institute uuid, p_campaign uuid default null, p_money boolean default false)` | text[] | **service role only** | Same lines without a login (Edge Function `weekly-brief`, WhatsApp brief). |
+| `weekly_brief_recipients()` | table `(institute_id uuid, institute_name text, emails text[])` | **service role only** | Trial, active and grace institutes and their active owners' emails. |
+| `admin_assign_practice(p_seat uuid, p_script uuid, p_note text default null)` | uuid | admin, Scripts add-on | Send a caller to practise a published script; again for the same pair refreshes it. Audit `practice.assigned`. |
+| `admin_list_practice()` | table `(id, seat_id, seat_label, script_id, script_name, note, assigned_at, done_at, done_seconds, times_done)` | admin | Practice requests of the institute. |
+| `my_practice()` | table `(assignment_id uuid, script_id uuid, script_name text, version int, steps jsonb, note text, assigned_at timestamptz, assigned_by text, done_at timestamptz, times_done int)` | seat holder, Scripts add-on | Requests first (`assignment_id` set), then other published scripts. Raises "Practice is part of the Scripts add-on" without it. |
+| `my_practice_done(p_assignment uuid, p_seconds int default null)` | void | the caller of that request | Marks it done. Practice never writes `call_outcomes`. |
+| `ix_count(numeric)`, `ix_rupees_short(numeric)`, `ix_hour(int)`, `ix_hour_range(int)` | text | any signed-in | Indian number format and hour labels for SQL sentences ('43,20,000', '₹43.2L', '7–9 pm'). |
+
+"Picked up" (script test, brief) = the call's result is not No answer, Busy or Wrong number and its outcome is not no_answer, busy or dropped_network. "Good" = the result's `counts_as_good` (old rows: outcome `won`).
+<!-- /Phase A: insights-extra -->

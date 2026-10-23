@@ -1,0 +1,47 @@
+/* Weekly brief and script test cards (js/admin/insights-extra.js), shown in the Insights tab. Every rule is
+   scoped under .tab-insights. The brief is the dark card of the mockup in light mode; in dark mode it becomes a
+   soft panel so it does not glare. Phone first: one column at 375px. */
+.tab-insights .ix-brief { --ix-brief-bg: #0e1628; --ix-brief-text: #e8edf7; --ix-brief-sub: #b8c3d9;
+  background: var(--ix-brief-bg); color: var(--ix-brief-text); border-radius: var(--radius-card); padding: 20px;
+  display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .tab-insights .ix-brief { --ix-brief-bg: var(--panel-soft); --ix-brief-text: var(--text);
+    --ix-brief-sub: var(--muted); border: 1px solid var(--line); }
+}
+:root[data-theme="dark"] .tab-insights .ix-brief { --ix-brief-bg: var(--panel-soft); --ix-brief-text: var(--text);
+  --ix-brief-sub: var(--muted); border: 1px solid var(--line); }
+.tab-insights .ix-brief-title { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ix-brief-sub); }
+.tab-insights .ix-brief-sub { margin: -6px 0 0; font-size: 13px; color: var(--ix-brief-sub); }
+.tab-insights .ix-brief-lines { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px;
+  font-size: 15px; line-height: 1.5; overflow-wrap: anywhere; }
+.tab-insights .ix-brief-msg { margin: 0; font-size: 14px; color: var(--ix-brief-sub); }
+.tab-insights .ix-brief-msg:empty { display: none; }
+.tab-insights .ix-brief-msg.error { color: #ffb4ab; }
+:root[data-theme="dark"] .tab-insights .ix-brief-msg.error { color: var(--danger); }
+
+.tab-insights .ix-test { display: flex; flex-direction: column; gap: 12px; }
+.tab-insights .ix-test h2, .tab-insights .ix-test h3, .tab-insights .ix-test p { margin: 0; }
+.tab-insights .ix-test > .msg:empty { display: none; }
+.tab-insights .ix-test h2 { font-size: 17px; color: var(--heading); }
+.tab-insights .ix-test h3 { font-size: 15px; color: var(--heading); }
+.tab-insights .ix-test-body { display: flex; flex-direction: column; gap: 10px; min-width: 0; overflow-wrap: anywhere; }
+.tab-insights .ix-test-pick select, .tab-insights .ix-test-form select { max-width: 100%; }
+.tab-insights .ix-test-form label { flex: 1 1 160px; min-width: 0; }
+.tab-insights .ix-arms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.tab-insights .ix-arm { border: 1px solid var(--line); border-radius: 12px; padding: 12px; min-width: 0; }
+.tab-insights .ix-arm.win { border: 2px solid var(--ok); padding: 11px; }
+.tab-insights .ix-arm-head { font-size: 13px; color: var(--muted); }
+.tab-insights .ix-arm-big { font-family: var(--font-display); font-weight: 800; font-size: 24px; color: var(--heading);
+  font-variant-numeric: tabular-nums; }
+.tab-insights .ix-arm-sub { font-size: 12px; color: var(--muted); }
+.tab-insights .ix-arm-win { font-size: 12px; font-weight: 600; color: var(--ok); margin-top: 4px; }
+.tab-insights .ix-verdict { font-size: 14px; color: var(--text); }
+.tab-insights .ix-warn { color: var(--warn); }
+.tab-insights .ix-addon { color: var(--muted); }
+.tab-insights .ix-test-actions { gap: 8px; }
+.tab-insights .ix-stop { margin-left: auto; }
+@media (max-width: 420px) {
+  .tab-insights .ix-stop { margin-left: 0; }
+  .tab-insights .ix-test-actions button { flex: 1 1 100%; }
+}
