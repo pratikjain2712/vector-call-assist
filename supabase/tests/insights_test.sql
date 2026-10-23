@@ -113,7 +113,7 @@ select pg_temp.val_is('setup: lists the institute''s 3 campaigns', format($q$sel
 select pg_temp.val_is('setup: running campaigns first', format($q$select admin_insights_setup(%L)->'campaigns'->2->>'status'$q$, :'inst_i'), 'closed');
 select pg_temp.val_is('setup: callers on the fees campaign', format($q$select c->>'callers' from jsonb_array_elements(admin_insights_setup(%L)->'campaigns') c where c->>'id' = %L$q$, :'inst_i', :'k_f'), '2');
 select pg_temp.val_is('setup: the Scripts add-on', format($q$select (admin_insights_setup(%L)->'features')::text$q$, :'inst_i'), '["scripts"]');
-select pg_temp.val_is('setup: practice mode not installed', format($q$select admin_insights_setup(%L)->>'practice_available'$q$, :'inst_i'), 'false');
+select pg_temp.val_is('setup: practice mode is available (admin_assign_practice, migration 0026)', format($q$select admin_insights_setup(%L)->>'practice_available'$q$, :'inst_i'), 'true');
 select pg_temp.val_is('forecast: fees with money is in rupees', format($q$select admin_insights_forecast(%L,%L,'UTC')->>'kind'$q$, :'inst_i', :'k_f'), 'amount');
 select pg_temp.val_is('forecast: corrections are not extra calls', format($q$select admin_insights_forecast(%L,%L,'UTC')->'stats'->>'calls'$q$, :'inst_i', :'k_f'), '7');
 select pg_temp.val_is('forecast: picked up calls', format($q$select admin_insights_forecast(%L,%L,'UTC')->'stats'->>'picked'$q$, :'inst_i', :'k_f'), '5');
