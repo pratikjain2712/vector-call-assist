@@ -1,28 +1,81 @@
-/* Scripts tab (js/admin/scripts.js, the editor in js/script-editor.js). Moved from script-editor.css. */
-.tab-scripts .layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gap); }
-.tab-scripts .main-col { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
-@media (min-width: 900px) {
-  .tab-scripts .layout { grid-template-columns: 260px minmax(0, 1fr); align-items: start; }
-}
+/* Scripts tab (js/admin/scripts.js: list, templates, AI script maker; the editor in js/script-editor.js). */
+.tab-scripts .view { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+.tab-scripts .scripts-head { flex-direction: row; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.tab-scripts .scripts-head > div:first-child { flex: 1 1 320px; min-width: 0; }
+.tab-scripts .start-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.tab-scripts .addon-note { margin: 0; padding: 10px 14px; border: 1px solid var(--warn); background: var(--warn-soft);
+  color: var(--text); border-radius: var(--radius-button); font-size: 14px; }
+.tab-scripts .msg:empty { display: none; }
+.tab-scripts button.linkish { border: 0; background: none; padding: 2px 0; color: var(--accent); text-decoration: underline;
+  font-size: 14px; }
+.tab-scripts button.linkish:hover { color: var(--accent-hover); background: none; }
+.tab-scripts button.linkish.small { font-size: 13px; }
+.tab-scripts td.name { font-weight: 600; color: var(--heading); }
+.tab-scripts .to-check { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: var(--radius-pill);
+  background: var(--warn-soft); color: var(--warn); font-size: 12px; font-weight: 600; }
+.tab-scripts td.row-actions { white-space: nowrap; }
+
+/* templates */
+.tab-scripts .tpl-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+@media (min-width: 760px) { .tab-scripts .tpl-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.tab-scripts .tpl { border: 1px solid var(--line); border-radius: var(--radius-button); padding: 14px; display: flex;
+  flex-direction: column; gap: 6px; }
+.tab-scripts .tpl p { margin: 0; }
+.tab-scripts .tpl button { margin-top: auto; align-self: flex-start; }
+
+/* AI script maker */
+.tab-scripts .ai-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gap); }
+@media (min-width: 1000px) { .tab-scripts .ai-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
+.tab-scripts .ai-form { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.tab-scripts .ai-form h2, .tab-scripts .ai-form p { margin: 0; }
+.tab-scripts .ai-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+@media (min-width: 600px) { .tab-scripts .ai-row { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.tab-scripts .fld select, .tab-scripts .fld textarea { width: 100%; }
+.tab-scripts .ai-actions { align-items: center; }
+.tab-scripts .ai-draft { border: 1px solid var(--line); border-radius: var(--radius-button); padding: 14px; background: var(--panel-soft);
+  min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.tab-scripts .ai-draft h3 { margin: 0; overflow-wrap: anywhere; }
+.tab-scripts .ai-draft h3:focus { outline: none; }
+.tab-scripts .ai-draft h4 { margin: 6px 0 0; }
+.tab-scripts .score { padding: 3px 10px; border-radius: var(--radius-pill); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.tab-scripts .score-easy { background: var(--ok-soft); color: var(--ok); }
+.tab-scripts .score-ok { background: var(--warn-soft); color: var(--warn); }
+.tab-scripts .score-hard { background: var(--danger-soft); color: var(--danger); }
+.tab-scripts .ai-steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 8px; overflow-wrap: anywhere; }
+.tab-scripts .say-line { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.tab-scripts .pb-chips { display: flex; flex-direction: column; gap: 6px; }
+.tab-scripts .pb-chips li { border: 1px solid var(--line); border-radius: var(--radius-button); background: var(--panel);
+  padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.tab-scripts .pb-label { font-weight: 600; color: var(--heading); }
+.tab-scripts .pb-chips button { align-self: flex-start; }
+
+/* editor (moved from script-editor.css) */
+.tab-scripts .editor-col { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
 .tab-scripts .row { align-items: center; }
 .tab-scripts .compare { align-items: flex-end; margin-top: 12px; }
 .tab-scripts .field { width: 100%; margin: 10px 0; }
-.tab-scripts .field input, .tab-scripts .field textarea, .tab-scripts .opt input { width: 100%; }
+.tab-scripts .field input, .tab-scripts .field textarea, .tab-scripts .field select, .tab-scripts .opt input { width: 100%; }
 .tab-scripts label.check { flex-direction: row; align-items: center; gap: 8px; font-weight: 500; }
 .tab-scripts .plain { display: flex; flex-direction: column; gap: 6px; }
 .tab-scripts .plain li { padding: 0; border: 0; }
-.tab-scripts .plain button { width: 100%; text-align: left; overflow-wrap: anywhere; }
-.tab-scripts .plain button.current { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
 .tab-scripts td { overflow-wrap: anywhere; }
 .tab-scripts .published-tag { color: var(--ok); font-weight: 600; }
 .tab-scripts .problems { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: var(--radius-button);
   padding: 10px 14px; margin: 10px 0; }
-.tab-scripts .problems h3 { color: var(--warn); }
+.tab-scripts .problems h3, .tab-scripts .problems h4 { color: var(--warn); }
 .tab-scripts .problems ul { margin: 0; padding-left: 18px; }
-.tab-scripts .step { border: 1px solid var(--line); border-radius: var(--radius-button); padding: 12px 14px; margin: 10px 0; min-width: 0; }
-.tab-scripts .step legend { padding: 0 6px; font-weight: 600; color: var(--heading); }
+.tab-scripts .step, .tab-scripts .pushback { border: 1px solid var(--line); border-radius: var(--radius-button); padding: 12px 14px;
+  margin: 10px 0; min-width: 0; }
+.tab-scripts .has-marks { border-color: var(--warn); }
+.tab-scripts .step legend, .tab-scripts .pushback legend { padding: 0 6px; font-weight: 600; color: var(--heading); overflow-wrap: anywhere; }
+.tab-scripts .marks { background: var(--warn-soft); border-radius: var(--radius-control); padding: 8px 10px; margin: 4px 0 8px; }
+.tab-scripts .marks li { font-size: 14px; overflow-wrap: anywhere; }
+.tab-scripts .marks button { padding: 3px 8px; font-size: 13px; }
+.tab-scripts .mark-tag { font-weight: 700; color: var(--warn); }
+.tab-scripts .pb-head { margin-top: 16px; }
+.tab-scripts .pb-head p { margin: 0; }
 .tab-scripts .grid2 { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
-@media (min-width: 600px) { .tab-scripts .grid2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+@media (min-width: 600px) { .tab-scripts .grid2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: end; } }
 .tab-scripts .grid2 .field { margin: 0; }
 .tab-scripts .opt { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; border-top: 1px dashed var(--line);
   padding-top: 8px; margin-top: 8px; }
@@ -31,3 +84,7 @@
 .tab-scripts .confirm { position: static; box-shadow: none; max-width: none; margin-top: 12px; border-width: 2px; }
 .tab-scripts .test-lines { padding-left: 20px; margin: 12px 0; display: flex; flex-direction: column; gap: 6px; overflow-wrap: anywhere; }
 .tab-scripts .diff p { margin: 6px 0; overflow-wrap: anywhere; }
+@media (max-width: 699px) {
+  .tab-scripts .start-row > button { flex: 1 1 100%; }
+  .tab-scripts td.row-actions:empty { display: none; }
+}

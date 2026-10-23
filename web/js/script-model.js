@@ -5,7 +5,13 @@
    Saved format (the steps list in script_versions.steps):
      { id: "open", title: "Opening", start: true, say: ["Hi {name}, {me} here."], tip: "Smile first.",
        opts: [{ label: "Yes", to: "discovery" }, { label: "No", to: "close" }] }
-   A step with no opts is an end card. A call starts at a step marked start. */
+   A step with no opts is an end card. A call starts at a step marked start.
+   Since Sprint 9 (migration 20261024100022):
+     an end card names the result it saves, a key of the script's call type: { id: "paid", say: [...], result: "paid" }
+     a step or pushback may carry "Check this" marks, notes a person must check before publishing:
+       { ..., check: ["Is the fee ₹18,000?"] }   (a version with any mark cannot be published)
+   Pushback answers are saved with each version (script_versions.pushbacks): [{ label, answer, check? }].
+   A script as a whole (templates, AI drafts): { name, call_type, steps, pushbacks }. */
 (function (root, factory) {
   const api = factory();
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -15,6 +21,10 @@
 
   const ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$/;
   const MAX_CHANGE_NOTE = 500;
+  const MAX_OPTS = 3;               // the call page shows at most 3 choices (web/js/script-adapter.js)
+  const MAX_PUSHBACKS = 12;         // same limits as script_pushbacks_problem in the migration
+  const PUSHBACK_LABEL_MAX = 60;
+  const PUSHBACK_ANSWER_MAX = 600;
 
   const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
   const listOf = (v) => (Array.isArray(v) ? v : []);
@@ -29,8 +39,17 @@
     return String(s == null ? '' : s).split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
   }
 
+  // A step with no options is an end card (an ending of the call).
+  const isEnding = (s) => isObj(s) && (s.opts === undefined || (Array.isArray(s.opts) && s.opts.length === 0));
+
+  // The "Check this" marks of a step or pushback: trimmed, blank ones dropped.
+  const marksOf = (item) => (isObj(item) && Array.isArray(item.check) ? item.check.map(trimmed).filter(Boolean) : []);
+
   // Returns a list of problems in English, for the editor to show. An empty list means the script is valid.
-  function validateSteps(steps) {
+  // options.resultKeys: the result keys of the script's call type. When given, every ending must name one
+  // of them in its "result". "Check this" marks are listed as problems, so a marked script cannot be published.
+  function validateSteps(steps, options) {
+    const resultKeys = options && Array.isArray(options.resultKeys) ? options.resultKeys : null;
     if (!Array.isArray(steps)) return ['The script must be a list of steps.'];
     if (steps.length === 0) return ['Add at least one step.'];
     const errs = [];
@@ -55,7 +74,18 @@
       const says = Array.isArray(s.say) ? s.say.map(trimmed).filter(Boolean) : [];
       if (says.length === 0) errs.push(name + ' has nothing to say.');
 
+      marksOf(s).forEach((m) => errs.push('Check this (' + (id ? 'step "' + id + '"' : 'step ' + (i + 1)) + '): ' + m));
+
       if (s.opts !== undefined && !Array.isArray(s.opts)) { errs.push(name + ' has malformed options.'); return; }
+      if (s.opts !== undefined && s.opts.length > MAX_OPTS) {
+        errs.push(name + ' has more than ' + MAX_OPTS + ' options. Callers can pick from ' + MAX_OPTS + ' at most.');
+      }
+      if (resultKeys && isEnding(s)) {
+        const result = trimmed(s.result);
+        const end = 'The ending "' + (trimmed(s.title) || id || String(i + 1)) + '"';
+        if (!result) errs.push(end + ' is not linked to a result.');
+        else if (!resultKeys.includes(result)) errs.push(end + ' is linked to "' + result + '", which is not a result of this call type.');
+      }
       const labels = new Set();
       listOf(s.opts).forEach((o) => {
         const label = isObj(o) ? trimmed(o.label) : '';
@@ -72,6 +102,48 @@
     if (!hasStart) errs.push('Mark at least one step as the start.');
     return errs;
   }
+
+  // Problems with a pushback list ([{ label, answer, check? }]), in English. Same rules as the database.
+  function validatePushbacks(list) {
+    if (list === undefined || list === null) return [];
+    if (!Array.isArray(list)) return ['Pushback answers must be a list.'];
+    const errs = [];
+    if (list.length > MAX_PUSHBACKS) errs.push('Keep to ' + MAX_PUSHBACKS + ' pushback answers or fewer.');
+    const seen = new Set();
+    list.forEach((p, i) => {
+      const label = isObj(p) ? trimmed(p.label) : '';
+      const answer = isObj(p) ? trimmed(p.answer) : '';
+      const name = label ? 'The pushback "' + label + '"' : 'Pushback ' + (i + 1);
+      if (!label) errs.push(name + ' has no label.');
+      else if (label.length > PUSHBACK_LABEL_MAX) errs.push(name + ' has a label longer than ' + PUSHBACK_LABEL_MAX + ' characters.');
+      if (!answer) errs.push(name + ' has no answer.');
+      else if (answer.length > PUSHBACK_ANSWER_MAX) errs.push(name + ' has an answer longer than ' + PUSHBACK_ANSWER_MAX + ' characters.');
+      if (label && seen.has(label.toLowerCase())) errs.push('Two pushbacks are labelled "' + label + '".');
+      if (label) seen.add(label.toLowerCase());
+      marksOf(p).forEach((m) => errs.push('Check this (' + (label ? 'pushback "' + label + '"' : 'pushback ' + (i + 1)) + '): ' + m));
+    });
+    return errs;
+  }
+
+  // Steps and pushbacks of a whole script ({ steps, pushbacks }) together. Used by the editor and by the AI
+  // script maker (supabase/functions/ai-script-draft), so a draft is checked exactly like a script by hand.
+  function validateScript(script, options) {
+    if (!isObj(script)) return ['The script must be an object with steps.'];
+    return validateSteps(script.steps, options).concat(validatePushbacks(script.pushbacks));
+  }
+
+  // Every "Check this" mark in a script, in order: { where: 'step' | 'pushback', index, name, text }.
+  function checkMarks(script) {
+    const out = [];
+    listOf(isObj(script) ? script.steps : null).forEach((s, i) => marksOf(s).forEach((text) =>
+      out.push({ where: 'step', index: i, name: trimmed(s.title) || trimmed(s.id), text })));
+    listOf(isObj(script) ? script.pushbacks : null).forEach((p, i) => marksOf(p).forEach((text) =>
+      out.push({ where: 'pushback', index: i, name: trimmed(p.label), text })));
+    return out;
+  }
+
+  // The end cards of a step list.
+  function endings(steps) { return listOf(steps).filter(isEnding); }
 
   // The lines a rep would see for the steps walked in `path` (a list of step ids).
   function renderPreview(steps, path) {
@@ -178,5 +250,9 @@
     };
   }
 
-  return { ID_RE, MAX_CHANGE_NOTE, MAX_REPORT_DAYS, splitLines, validateSteps, renderPreview, testRun, diffVersions, reportRange };
+  return {
+    ID_RE, MAX_CHANGE_NOTE, MAX_REPORT_DAYS, MAX_OPTS, MAX_PUSHBACKS, PUSHBACK_LABEL_MAX, PUSHBACK_ANSWER_MAX,
+    splitLines, validateSteps, validatePushbacks, validateScript, checkMarks, endings, isEnding,
+    renderPreview, testRun, diffVersions, reportRange,
+  };
 }));

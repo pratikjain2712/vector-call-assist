@@ -5,7 +5,7 @@
 
    Saved step:  { id, title?, start?, stage?, say: [lines], tip?, opts: [{ label, to }] }   no opts = end card
    FLOW node:   { stage, say: [lines], tip?, opts: [{ k: yes|no|maybe|next, hint, to }] }
-   FLOW end:    { end: { tone, label, note } }
+   FLOW end:    { end: { tone, label, note, result? } }   result: the ending's result key, when the step names one
 
    adaptSteps returns null, and never throws, when the script cannot be shown exactly as saved. The call page
    then keeps its built-in script. */
@@ -70,6 +70,8 @@
 
       if (s.opts === undefined || (Array.isArray(s.opts) && s.opts.length === 0)) {
         flow[s.id] = { end: { tone: 'neutral', label: trimmed(s.title) || s.id, note: '' } };
+        // Sprint 9: the result key the ending saves (a key of the script's call type), for the result buttons.
+        if (trimmed(s.result)) flow[s.id].end.result = trimmed(s.result);
         continue;
       }
       if (!Array.isArray(s.opts) || s.opts.length > MAX_OPTS) return null;
