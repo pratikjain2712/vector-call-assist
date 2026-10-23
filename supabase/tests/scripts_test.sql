@@ -67,6 +67,8 @@ insert into auth.users (id, email, email_confirmed_at) values
   (:'UR2', 'rep2@sc.test', now()), (:'UO', 'other@sc.test', now());
 insert into institutes (id, name, status, seat_limit) values
   (:'I1', 'Scripts One', 'active', 5), (:'I2', 'Scripts Two', 'active', 5);
+-- Phase A: scripts. Saving needs the Scripts add-on since 20261024100022.
+update institutes set features = array['scripts'] where id in (:'I1', :'I2');
 insert into seats (id, institute_id, user_id, label, role, status) values
   (:'SA', :'I1', :'UA', 'Admin', 'admin', 'active'),
   (:'SR1', :'I1', :'UR1', 'Rep 1', 'rep', 'active'),

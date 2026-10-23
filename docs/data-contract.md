@@ -253,3 +253,27 @@ Internal (granted to nobody): `campaign_for_admin`, `campaign_admin_seat`, `lead
 
 When `scripts.call_type_id` exists (scripts feature), `campaign_check_script` and `SCRIPT_TYPE_FILTER` in `web/js/admin/campaigns.js` should also require the script's type to match (marked TODO in both).
 <!-- /Phase A: campaigns -->
+
+<!-- Phase A: scripts -->
+## Scripts and the AI script maker (Sprint 9)
+
+_Migration `20261024100022_script_types_ai.sql`, tests `supabase/tests/script_types_ai_test.sql`. Edge Function `supabase/functions/ai-script-draft`._
+
+- **`scripts.call_type_id`** uuid null → `call_types`. Built in or the institute's own (trigger). Null only for scripts saved before 0022. Cannot change to another type while a campaign of the old type uses the script.
+- **A campaign uses a live script of its own type**: trigger `campaigns_check_script` on `campaigns.script_id` / `call_type_id` refuses a script of another type (`23514`, "that script is for another call type") or one with no published version ("no live version yet"). An untyped (pre-0022) live script is accepted for any type. In the Campaigns tab, offer only live scripts whose `call_type_id` is the campaign's type (or null).
+- **Steps** (`script_versions.steps`, format in `web/js/script-model.js`): an ending (a step with no `opts`) has `result`, a result key of the script's type; a step may have `stage` (0–5, the call page's progress rail) and `check` (a list of "Check this" notes). `web/js/script-adapter.js` copies an ending's `result` to `FLOW[id].end.result`, so the caller screen can preselect that result button.
+- **`script_versions.pushbacks`** jsonb, default `[]`: `[{label (1–60), answer (1–600), check?}]`, 12 at most, labels unique (any case). Read it with the steps (`select('steps, pushbacks')`); the caller screen shows `label` as a button and `answer` as what to say. Immutable once published.
+- **Publishing** needs the Scripts add-on, a call type, no "Check this" mark on a step or pushback, and every ending linked to an active result of the type (`script_publish_problem`).
+
+| Function | Returns | Who | What |
+|---|---|---|---|
+| `admin_save_script(p_script uuid, p_name text, p_call_type uuid, p_steps jsonb, p_pushbacks jsonb, p_change_note text, p_publish boolean)` | jsonb `{script_id, version_id, version}` | admin, `has_feature('scripts')` | `p_script` null creates the script. `p_call_type` null keeps the type, `p_pushbacks` null keeps the latest version's. Audit `script.published` / `script.draft_saved`. |
+| `admin_save_script_version(...)` (0007) | uuid | admin, Scripts add-on | Kept for old pages: keeps type and pushbacks; may still publish an untyped script; marks still block publishing. |
+| `admin_list_scripts()` | table `(id, name, call_type_id, call_type_key, call_type_label, live_version int, live_version_id uuid, latest_version int, changed_at, used_in jsonb [{id,name,status}], calls bigint, good_calls bigint, check_marks int)` | admin | The Scripts tab list. Calls: original calls of the last 90 days with `script_id` = the script; good: the result counts as good for the campaign's type, or old outcome `won`. No money. |
+| `admin_ai_usage()` | table `(used int, monthly_limit int, month date, cost_usd numeric)` | admin | For Settings ("N of 20 AI drafts used this month"). `used` counts drafts (including "Try again") that worked or are still running, this calendar month in India time; `cost_usd` is the month's cost of all AI requests (US dollars, not lead money). |
+| `ai_reserve_request(p_institute, p_seat, p_kind)` / `ai_finish_request(...)` | bigint / void | service role only | Used by the Edge Function: reserve one request against the monthly limit (`54000` "limit reached"), then record model, attempts, tokens, cost and ok. Limits: 20 drafts, 100 "Make simpler" a month. |
+
+**`ai_requests`** (one row per AI request): `institute_id`, `seat_id`, `kind` (`draft` / `simplify`), `model`, `attempts`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `cost_usd`, `ok` (null while running), `created_at`, `finished_at`. Admins of the institute read it; only the service role writes.
+
+**Edge Function `ai-script-draft`** (POST, `Authorization: Bearer <admin access token>`): `{action:"draft", brief:{call_type, audience, language: simple_english|hinglish|hindi, purpose, facts, never_say}}` or `{action:"simplify", brief, script, target:{step, line}|{pushback}|null}`. Answers `{script, checks:{passed, failures, problems, marks, score:{score, label, long_lines}}, model, usage}`; errors `{error, code?}` with 401, 403 (`code: "no_feature"`), 429 (`code: "limit"`), 400, 500, 502. Secrets: `ANTHROPIC_API_KEY`; optional `ANTHROPIC_MODEL_DRAFT` (default `claude-haiku-5-5`), `ANTHROPIC_MODEL_FALLBACK` (default `claude-sonnet-5-5`).
+<!-- Phase A: scripts (end) -->

@@ -242,6 +242,116 @@ function createFakeBackend(world) {
   // /Phase A: campaigns
   const ADMIN_EMPTY = ['admin_weekly_summary', 'admin_rep_progress', 'list_supervisor_notes'];
 
+  // Phase A: scripts. The Scripts tab: typed scripts with pushbacks, the add-ons (db.features, all on by default,
+  // like a trial), the AI usage and the ai-script-draft Edge Function (a canned draft from the fees template).
+  // Same rules as 20261024100022_script_types_ai.sql, in short.
+  const SCRIPT_TYPES = (() => {
+    const common = [['no_answer', 'No answer'], ['busy', 'Busy'], ['wrong_number', 'Wrong number'], ['call_back_later', 'Call back later'], ['do_not_call', 'Do not call again']];
+    const mk = (n, key, label, rs) => ({ id: '00000000-0000-4000-8000-00000000000' + n, key, label, sort_order: n * 10, active: true, built_in: true,
+      results: rs.concat(common).map(([k, l, good]) => ({ key: k, label: l, counts_as_good: !!good })) });
+    return [
+      mk(1, 'sales', 'Sales', [['joined', 'Joined', 1], ['interested', 'Interested'], ['will_think', 'Will think'], ['not_interested', 'Not interested']]),
+      mk(2, 'fees', 'Fees collection', [['paid', 'Paid', 1], ['will_pay_on', 'Will pay on date', 1], ['paid_part', 'Paid part', 1], ['already_paid', 'Says already paid'], ['refused', 'Refused']]),
+      mk(4, 'admission', 'Admission enquiry', [['visit_booked', 'Visit booked', 1], ['form_sent', 'Form sent', 1], ['not_this_year', 'Not this year'], ['joined_elsewhere', 'Joined elsewhere']]),
+    ];
+  })();
+  db.features = ['scripts', 'ai_drafts'];
+  db.scripts = [];          // { id, institute_id, name, call_type_id, created_at }
+  db.scriptVersions = [];   // { id, script_id, institute_id, version, steps, pushbacks, change_note, published, created_at }
+  db.aiRequests = [];       // { institute_id, kind, ok }
+  db.aiDraft = null;        // set by a test to change the canned draft
+  const hasMarks = (list) => (list || []).some((x) => x && Array.isArray(x.check) && x.check.length > 0);
+  const scriptRow = (sc) => {
+    const vs = db.scriptVersions.filter((v) => v.script_id === sc.id).sort((a, b) => b.version - a.version);
+    const live = vs.find((v) => v.published);
+    const t = SCRIPT_TYPES.find((x) => x.id === sc.call_type_id);
+    const latest = vs[0];
+    return { id: sc.id, name: sc.name, call_type_id: sc.call_type_id || null, call_type_key: t ? t.key : null, call_type_label: t ? t.label : null,
+      live_version: live ? live.version : null, live_version_id: live ? live.id : null, latest_version: latest ? latest.version : null,
+      changed_at: latest ? latest.created_at : sc.created_at, used_in: [], calls: 0, good_calls: 0,
+      check_marks: latest ? (latest.steps || []).filter((x) => x.check && x.check.length).length + (latest.pushbacks || []).filter((x) => x.check && x.check.length).length : 0 };
+  };
+  Object.assign(RPC, {
+    my_features: (u) => json(200, u && seatOf(u.id) ? db.features : null),
+    admin_list_call_types: (u) => {
+      const s = u && seatOf(u.id);
+      if (!s || s.role !== 'admin') return pgErr(403, '42501', 'only an admin can manage call types');
+      return json(200, SCRIPT_TYPES);
+    },
+    admin_list_scripts: (u) => {
+      const s = u && seatOf(u.id);
+      if (!s || s.role !== 'admin') return pgErr(403, '42501', 'only an admin can list scripts');
+      return json(200, db.scripts.filter((x) => x.institute_id === s.institute_id).map(scriptRow).sort((a, b) => a.name.localeCompare(b.name)));
+    },
+    admin_ai_usage: (u) => {
+      const s = u && seatOf(u.id);
+      if (!s || s.role !== 'admin') return pgErr(403, '42501', 'only an admin can see AI usage');
+      const used = db.aiRequests.filter((r) => r.institute_id === s.institute_id && r.kind === 'draft' && r.ok).length;
+      return json(200, [{ used, monthly_limit: 20, month: new Date().toISOString().slice(0, 8) + '01', cost_usd: used * 0.0023 }]);
+    },
+    admin_save_script: (u, a) => {
+      const s = u && seatOf(u.id);
+      if (!s || s.role !== 'admin') return pgErr(403, '42501', 'only an admin can save scripts');
+      if (!db.features.includes('scripts')) return pgErr(403, '42501', 'add Scripts to your plan to save scripts');
+      let sc = a.p_script ? db.scripts.find((x) => x.id === a.p_script && x.institute_id === s.institute_id) : null;
+      if (a.p_script && !sc) return pgErr(400, '22023', 'script not found');
+      const typ = a.p_call_type || (sc && sc.call_type_id) || null;
+      const t = SCRIPT_TYPES.find((x) => x.id === typ);
+      if (a.p_publish) {
+        if (!t) return pgErr(400, '22023', 'choose the call type before publishing');
+        if (hasMarks(a.p_steps) || hasMarks(a.p_pushbacks)) return pgErr(400, '22023', 'the script still has "Check this" marks: check each one and remove it before publishing');
+        const bad = (a.p_steps || []).find((x) => !(x.opts && x.opts.length) && !t.results.some((r) => r.key === x.result));
+        if (bad) return pgErr(400, '22023', 'the ending "' + (bad.title || bad.id) + '" is not linked to a result');
+      }
+      const now = new Date().toISOString();
+      if (!sc) { sc = { id: crypto.randomUUID(), institute_id: s.institute_id, created_at: now }; db.scripts.push(sc); }
+      sc.name = a.p_name; sc.call_type_id = typ;
+      const mine = db.scriptVersions.filter((v) => v.script_id === sc.id);
+      const prev = mine.sort((x, y) => y.version - x.version)[0];
+      if (a.p_publish) mine.forEach((v) => { v.published = false; });
+      const v = { id: crypto.randomUUID(), script_id: sc.id, institute_id: s.institute_id, version: (prev ? prev.version : 0) + 1,
+        steps: a.p_steps, pushbacks: a.p_pushbacks || (prev ? prev.pushbacks : []), change_note: a.p_change_note || '', published: !!a.p_publish, created_at: now };
+      db.scriptVersions.push(v);
+      return json(200, { script_id: sc.id, version_id: v.id, version: v.version });
+    },
+  });
+  // The REST reads and the Edge Function of the Scripts tab. Returns null for any other request.
+  function scriptsRoute(p, method, url, body, u, req) {
+    if (p === '/rest/v1/script_versions' && method === 'GET') {
+      const sid = (url.searchParams.get('script_id') || '').replace(/^eq\./, '');
+      const s = u && seatOf(u.id);
+      const rows = db.scriptVersions.filter((v) => v.script_id === sid && s && s.institute_id === v.institute_id && s.role === 'admin')
+        .sort((a, b) => b.version - a.version);
+      return json(200, rows);
+    }
+    if (p === '/functions/v1/ai-script-draft' && method === 'POST') {
+      const s = u && seatOf(u.id);
+      if (!s || s.role !== 'admin') return json(403, { error: 'Only an admin can use the AI script maker.' });
+      if (!db.features.includes('ai_drafts')) return json(403, { error: 'Add AI drafts to your plan to use this.', code: 'no_feature' });
+      const used = db.aiRequests.filter((r) => r.institute_id === s.institute_id && r.kind === 'draft' && r.ok).length;
+      if (body.action === 'draft' && used >= 20) return json(429, { error: 'You have used all AI drafts for this month.', code: 'limit' });
+      db.aiRequests.push({ institute_id: s.institute_id, kind: body.action, ok: true, brief: body.brief });
+      let script;
+      if (body.action === 'simplify') {
+        script = JSON.parse(JSON.stringify(body.script));
+        if (body.target && body.target.step) script.steps.find((x) => x.id === body.target.step).say[body.target.line] = 'Simpler: ' + body.target.step;
+      } else {
+        script = db.aiDraft || (() => {
+          const t = require('../../web/js/script-templates.js').template('fees_reminder');
+          t.steps.forEach((x) => delete x.check); t.pushbacks.forEach((x) => delete x.check);
+          t.steps[1].say = ['This is {me} from the school office.', 'The fee of ₹18,000 is due on 31 Oct.'];
+          t.steps[2].check = ['"₹9,000" is not in the facts you gave. Check it or remove it.'];
+          return { name: 'Fees reminder Class 10', call_type: 'fees', steps: t.steps, pushbacks: t.pushbacks };
+        })();
+      }
+      const n = db.aiRequests.filter((r) => r.institute_id === s.institute_id && r.kind === 'draft' && r.ok).length;
+      return json(200, { script, model: 'claude-haiku-5-5', checks: { passed: true, failures: [], problems: [], marks: 1, score: { score: 96, label: 'Easy to read', long_lines: [] } },
+        usage: { used: n, monthly_limit: 20 } });
+    }
+    return null;
+  }
+  // Phase A: scripts (end)
+
   async function handle(route) {
     const req = route.request();
     const url = new URL(req.url());
@@ -305,6 +415,10 @@ function createFakeBackend(world) {
     if (p === '/rest/v1/call_outcomes' && method === 'GET') {
       return send(json(200, u ? db.outcomes.filter((r) => { const s = seatOf(u.id); return s && r.seat_id === s.id; }) : []));
     }
+    // Phase A: scripts
+    const scriptsOut = scriptsRoute(p, method, url, body, u, req);
+    if (scriptsOut) return send(scriptsOut);
+    // Phase A: scripts (end)
     return send(pgErr(404, 'PGRST000', 'fake backend has no route for ' + method + ' ' + p));
   }
 
