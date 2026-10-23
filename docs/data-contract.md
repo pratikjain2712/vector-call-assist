@@ -229,3 +229,27 @@ Caller lead card: read the lead's plain columns from `leads`, then `lead_money(l
 ## Not built here (for the feature agents)
 
 Campaign create / edit / pause / close, adding and removing members, lead upload and moving leads, the caller queue order, reports, insights, WhatsApp. Each needs its own checked functions following the rules above.
+
+<!-- Phase A: campaigns -->
+## Campaigns: admin functions
+
+_Sprint 8. Migration `20261024100020_campaign_admin.sql`, tests `supabase/tests/campaign_admin_test.sql`. Admin screen: `web/js/admin/campaigns.js`; lead sheet helpers: `web/js/lead-upload.js`._
+
+All are `security definer`; "admin" means owner or manager of the campaign's institute (`is_admin_of`). A campaign of another institute is "campaign not found" (42501). Each write adds an `audit_log` row.
+
+| Function | Returns | Who | What |
+|---|---|---|---|
+| `admin_create_campaign(p_name text, p_call_type uuid, p_script uuid default null, p_start date default null, p_end date default null, p_daily_target int default null, p_share_mode text default 'equal')` | uuid | admin | Always a draft. Type: active, built in or own. Script: same institute, has a live (published) version, and `has_feature(inst, 'scripts')`. Audit `campaign.created`. |
+| `admin_update_campaign(p_campaign uuid, p_name, p_call_type, p_script, p_clear_script boolean, p_start, p_end, p_clear_dates boolean, p_daily_target int, p_share_mode, p_status)` (all but the first `default null` / `false`) | void | admin | Null keeps a value; `p_daily_target` 0 clears it. Type changes only on a draft. Status: draft → running (needs an active member and a lead) or closed; running ↔ paused; running/paused → closed; closed is final (no changes at all). Audit `campaign.changed` and `campaign.<status>`. |
+| `admin_add_leads(p_campaign uuid, p_rows jsonb)` | table `(added int, bad_numbers int, repeats int, other_skipped int)` | admin | `p_rows`: up to 5000 `{name, phone, amount_due, extra}`. Bad rows are skipped and counted; a money key in any `extra` refuses the whole call. Repeats = twice in the rows or already in the campaign. Keeps sheet order in `created_at`. Equal mode shares the new leads at once. Not for a closed campaign. Audit `leads.added` `<campaign>:<n>`. |
+| `admin_set_campaign_members(p_campaign uuid, p_seats uuid[])` | int (members) | admin | Replaces the member list (active seats of the institute). Open leads of a seat that leaves go back to the pool; equal mode then shares again. Audit `campaign.members_set`. |
+| `admin_share_leads(p_campaign uuid, p_mode text)` | int (leads that changed hands) | admin | Saves the mode. `equal`: every member ends with the same number of open leads (±1) where possible; callbacks, promises and leads already called stay; only uncalled leads move. `next_free`: uncalled leads go back to the pool. Audit `leads.shared`. |
+| `admin_move_leads(p_from_seat uuid, p_to_seat uuid, p_campaign uuid default null)` | int (leads moved) | admin | Open leads (new, callback, promised; not do-not-call) of one seat to another, in one campaign or every campaign that is not closed. `p_to_seat` null = back to the pool. The new seat joins each campaign it gets leads in. Audit `leads.moved` `<from>:<to or pool>:<n>`. For the Callers tab. |
+| `admin_campaign_list()` | table `(id, name, status, call_type_id, call_type_key, call_type_label, script_id, script_name, start_date, end_date, daily_target, share_mode, leads_total, leads_called, leads_open, leads_unassigned, callers jsonb, created_at, updated_at)` | admin | Running, paused, draft, closed; newest first in each. `leads_called` = status not new, or a saved call. `callers` = `[{seat_id, label}]`. No money. |
+| `admin_campaign_detail(p_campaign uuid)` | jsonb | admin | Campaign fields, `script_live_version`, `leads {total, called, open, unassigned, new, callback, promised, done, wrong_number, do_not_call}`, `calls_today` (Asia/Kolkata day), `callers [{seat_id, label, status, leads, open, called, calls_today}]`, `results [{key, label, count}]` (corrections applied), `amount_due_total` (null unless `can_see_money`), `money_hidden`. |
+| `next_free_lead(p_campaign uuid)` | table `(lead_id, campaign_id, name, phone, extra, status, next_call_at, promised_date)`, 0 or 1 row | caller whose active seat is a member | Running campaigns only (22023 otherwise). Gives back a lead the caller took but has not called yet, else locks (`for update skip locked`) and assigns the next pool lead: due callbacks and promises first, then new leads in upload order; only `consent_call` and not do-not-call. No money: use `lead_money(lead_id)`. For the caller screen. |
+
+Internal (granted to nobody): `campaign_for_admin`, `campaign_admin_seat`, `lead_is_open`, `lead_is_uncalled`, `campaign_check_script`, `campaign_share_equal`, `campaign_share_next_free`.
+
+When `scripts.call_type_id` exists (scripts feature), `campaign_check_script` and `SCRIPT_TYPE_FILTER` in `web/js/admin/campaigns.js` should also require the script's type to match (marked TODO in both).
+<!-- /Phase A: campaigns -->

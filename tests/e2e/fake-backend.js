@@ -112,6 +112,134 @@ function createFakeBackend(world) {
         seat_id: s.id, label: s.label, role: s.role, status: s.status, device_kinds: [], last_call_at: null, has_phone: false })));
     },
   };
+  // Phase A: campaigns. A small stand-in for the campaign functions of 20261024100020_campaign_admin.sql:
+  // the same inputs and answer shapes, the admin check and the counts; shares leads round-robin. No money
+  // is kept except amount_due on leads, returned only as the detail's total (can_see_money is false here).
+  const CALL_TYPES = [['fees', 'Fees collection'], ['sales', 'Sales'], ['follow_up', 'Follow-up / appointment']]
+    .map(([key, label], i) => ({ id: crypto.randomUUID(), key, label, sort_order: (i + 1) * 10, active: true, built_in: true, results: [] }));
+  db.campaigns = [];
+  db.members = [];
+  db.leads = [];
+  const adminSeat = (u) => { const s = u && seatOf(u.id); return s && s.role === 'admin' ? s : null; };
+  const campaignOf = (u, id) => { const s = adminSeat(u); const c = db.campaigns.find((x) => x.id === id); return s && c && c.institute_id === s.institute_id ? c : null; };
+  const notAdmin = () => pgErr(403, '42501', 'only an admin can manage campaigns');
+  const notFound = () => pgErr(403, '42501', 'campaign not found');
+  const isOpen = (l) => ['new', 'callback', 'promised'].includes(l.status);
+  function shareRoundRobin(c) {
+    const ids = db.members.filter((m) => m.campaign_id === c.id).map((m) => m.seat_id);
+    if (!ids.length) return 0;
+    let i = 0, n = 0;
+    db.leads.filter((l) => l.campaign_id === c.id && isOpen(l) && (!l.assigned_seat_id || !ids.includes(l.assigned_seat_id)))
+      .forEach((l) => { l.assigned_seat_id = ids[i++ % ids.length]; n++; });
+    return n;
+  }
+  function campaignRow(c) {
+    const leads = db.leads.filter((l) => l.campaign_id === c.id);
+    const t = CALL_TYPES.find((x) => x.id === c.call_type_id) || {};
+    const callers = db.members.filter((m) => m.campaign_id === c.id)
+      .map((m) => db.seats.find((s) => s.id === m.seat_id)).filter(Boolean)
+      .map((s) => ({ seat_id: s.id, label: s.label })).sort((a, b) => a.label.localeCompare(b.label));
+    return { ...c, call_type_key: t.key, call_type_label: t.label, script_name: null,
+      leads_total: leads.length, leads_called: leads.filter((l) => l.status !== 'new').length,
+      leads_open: leads.filter(isOpen).length, leads_unassigned: leads.filter((l) => isOpen(l) && !l.assigned_seat_id).length, callers };
+  }
+  Object.assign(RPC, {
+    my_features: (u) => json(200, u && seatOf(u.id) ? ['scripts', 'ai_drafts'] : null),
+    admin_list_call_types: (u) => (adminSeat(u) ? json(200, CALL_TYPES) : pgErr(403, '42501', 'only an admin can manage call types')),
+    admin_campaign_list: (u) => {
+      const s = adminSeat(u);
+      if (!s) return notAdmin();
+      return json(200, db.campaigns.filter((c) => c.institute_id === s.institute_id).map(campaignRow));
+    },
+    admin_create_campaign: (u, a) => {
+      const s = adminSeat(u);
+      if (!s) return notAdmin();
+      const name = String(a.p_name || '').trim();
+      if (!name) return pgErr(400, '22023', 'campaign name must be 1 to 120 characters');
+      if (!CALL_TYPES.some((t) => t.id === a.p_call_type)) return pgErr(400, '22023', 'pick a call type');
+      const c = { id: crypto.randomUUID(), institute_id: s.institute_id, name, call_type_id: a.p_call_type, script_id: a.p_script || null,
+        start_date: a.p_start || null, end_date: a.p_end || null, daily_target: a.p_daily_target || null,
+        share_mode: a.p_share_mode || 'equal', status: 'draft', created_at: new Date().toISOString() };
+      db.campaigns.push(c);
+      return json(200, c.id);
+    },
+    admin_update_campaign: (u, a) => {
+      if (!adminSeat(u)) return notAdmin();
+      const c = campaignOf(u, a.p_campaign);
+      if (!c) return notFound();
+      if (c.status === 'closed') return pgErr(400, '22023', 'this campaign is closed and cannot be changed');
+      if (a.p_status === 'running' && c.status === 'draft') {
+        if (!db.members.some((m) => m.campaign_id === c.id)) return pgErr(400, '22023', 'add at least one caller before you start');
+        if (!db.leads.some((l) => l.campaign_id === c.id)) return pgErr(400, '22023', 'add leads before you start');
+      }
+      if (a.p_status === 'paused' && c.status !== 'running') return pgErr(400, '22023', 'only a running campaign can be paused');
+      if (a.p_name) c.name = String(a.p_name).trim();
+      if (a.p_clear_dates) { c.start_date = null; c.end_date = null; }
+      if (a.p_start) c.start_date = a.p_start;
+      if (a.p_end) c.end_date = a.p_end;
+      if (a.p_daily_target !== undefined && a.p_daily_target !== null) c.daily_target = a.p_daily_target || null;
+      if (a.p_status) c.status = a.p_status;
+      return json(200, null);
+    },
+    admin_add_leads: (u, a) => {
+      if (!adminSeat(u)) return notAdmin();
+      const c = campaignOf(u, a.p_campaign);
+      if (!c) return notFound();
+      const out = { added: 0, bad_numbers: 0, repeats: 0, other_skipped: 0 };
+      for (const r of a.p_rows || []) {
+        const d = String(r.phone || '').replace(/[\s-]+/g, '').replace(/^\+91/, '').replace(/^91(?=\d{10}$)/, '').replace(/^0/, '');
+        if (!/^\d{10}$/.test(d)) { out.bad_numbers++; continue; }
+        if (!String(r.name || '').trim()) { out.other_skipped++; continue; }
+        if (db.leads.some((l) => l.campaign_id === c.id && l.phone === '+91' + d)) { out.repeats++; continue; }
+        db.leads.push({ id: crypto.randomUUID(), campaign_id: c.id, institute_id: c.institute_id, name: r.name, phone: '+91' + d,
+          extra: r.extra || {}, amount_due: r.amount_due, assigned_seat_id: null, status: 'new' });
+        out.added++;
+      }
+      if (c.share_mode === 'equal') shareRoundRobin(c);
+      return json(200, [out]);
+    },
+    admin_set_campaign_members: (u, a) => {
+      if (!adminSeat(u)) return notAdmin();
+      const c = campaignOf(u, a.p_campaign);
+      if (!c) return notFound();
+      const want = [...new Set(a.p_seats || [])];
+      if (want.some((id) => !db.seats.some((s) => s.id === id && s.institute_id === c.institute_id && s.status === 'active'))) {
+        return pgErr(400, '22023', 'a chosen caller is not an active seat of this institute');
+      }
+      db.members = db.members.filter((m) => m.campaign_id !== c.id).concat(want.map((seat_id) => ({ campaign_id: c.id, seat_id })));
+      db.leads.filter((l) => l.campaign_id === c.id && l.assigned_seat_id && !want.includes(l.assigned_seat_id) && isOpen(l))
+        .forEach((l) => { l.assigned_seat_id = null; });
+      if (c.share_mode === 'equal') shareRoundRobin(c);
+      return json(200, want.length);
+    },
+    admin_share_leads: (u, a) => {
+      if (!adminSeat(u)) return notAdmin();
+      const c = campaignOf(u, a.p_campaign);
+      if (!c) return notFound();
+      c.share_mode = a.p_mode;
+      if (a.p_mode === 'equal') return json(200, shareRoundRobin(c));
+      let n = 0;
+      db.leads.filter((l) => l.campaign_id === c.id && l.status === 'new' && l.assigned_seat_id).forEach((l) => { l.assigned_seat_id = null; n++; });
+      return json(200, n);
+    },
+    admin_campaign_detail: (u, a) => {
+      if (!adminSeat(u)) return notAdmin();
+      const c = campaignOf(u, a.p_campaign);
+      if (!c) return notFound();
+      const row = campaignRow(c);
+      const leads = db.leads.filter((l) => l.campaign_id === c.id);
+      const by = (st) => leads.filter((l) => l.status === st).length;
+      return json(200, { ...c, call_type_key: row.call_type_key, call_type_label: row.call_type_label, script_name: null, script_live_version: null,
+        leads: { total: leads.length, called: row.leads_called, open: row.leads_open, unassigned: row.leads_unassigned,
+          new: by('new'), callback: by('callback'), promised: by('promised'), done: by('done'), wrong_number: by('wrong_number'), do_not_call: by('do_not_call') },
+        calls_today: 0, results: [], amount_due_total: null, money_hidden: true,
+        callers: row.callers.map((m) => {
+          const mine = leads.filter((l) => l.assigned_seat_id === m.seat_id);
+          return { ...m, status: 'active', leads: mine.length, open: mine.filter(isOpen).length, called: mine.filter((l) => l.status !== 'new').length, calls_today: 0 };
+        }) });
+    },
+  });
+  // /Phase A: campaigns
   const ADMIN_EMPTY = ['admin_weekly_summary', 'admin_rep_progress', 'list_supervisor_notes'];
 
   async function handle(route) {

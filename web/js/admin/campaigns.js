@@ -1,16 +1,854 @@
 'use strict';
-/* Campaigns tab of the admin app (web/admin.html): the campaign list and "New campaign" (details, script,
-   leads, callers), pause and close (docs/phase-a-plan.md, Sprint 8). Not built yet: shows a short note.
-   Fill mount() and unmount(); styles go in web/css/admin-campaigns.css. ₹ only when ctx.canSeeMoney. */
+/* Campaigns tab of the admin app (web/admin.html): the campaign list, one campaign's page (progress, pause,
+   resume, close, callers, add more leads) and "New campaign" in 4 steps, as in the mockup: 1 details, 2 script,
+   3 leads, 4 callers; then Save as draft or Start campaign (docs/phase-a-plan.md, Sprint 8).
+   Routes: #campaigns (list), #campaigns?id=<campaign> (one campaign), #campaigns?new=1 (New campaign).
+   Reads: admin_campaign_list, admin_campaign_detail, admin_list_call_types, admin_seat_list, my_features, and
+   the institute's scripts with their live version (table read, as the Scripts tab does).
+   Writes (all checked on the server, supabase/migrations/20261024100020_campaign_admin.sql): admin_create_campaign,
+   admin_update_campaign, admin_add_leads, admin_set_campaign_members, admin_share_leads.
+   Lead sheets: .xlsx through the same XLSX library as the caller app (loaded the first time it is needed),
+   .csv through LeadUpload.parseCsv; phone checks through ImportCheck (js/lead-upload.js, js/import-check.js).
+   Money: counts only, except the campaign's total amount due when the server says this admin may see money.
+   The pure helpers at the top are also loaded by tests/web/campaigns.test.js (Node, no DOM). */
 (function () {
+  // ---------- pure helpers ----------
+
+  const STATUS = { draft: 'Draft', running: 'Running', paused: 'Paused', closed: 'Closed' };
+  const statusLabel = (s) => STATUS[s] || String(s || '');
+  const SHARE = { equal: 'Equal parts', next_free: 'One by one, whoever is free next' };
+
+  // The colour of a type's pill: fees amber, sales blue, follow-up green, the rest grey (CSS class names).
+  function typeTone(key) {
+    if (key === 'fees' || key === 'renewal') return 'tone-warn';
+    if (key === 'sales' || key === 'admission') return 'tone-accent';
+    if (key === 'follow_up' || key === 'event') return 'tone-ok';
+    return 'tone-plain';
+  }
+
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function ymdParts(s) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || ''));
+    return m ? { y: Number(m[1]), m: Number(m[2]) - 1, d: Number(m[3]) } : null;
+  }
+  const dayMonth = (p) => p.d + ' ' + MONTHS[p.m];
+
+  // Dates as in the mockup: '15 – 31 Oct', '1 Oct – 11 Nov', 'From 10 Oct', 'Until 20 Nov', 'No dates'.
+  // The year is shown when the two dates are in different years.
+  function dateRange(start, end) {
+    const a = ymdParts(start), b = ymdParts(end);
+    if (!a && !b) return 'No dates';
+    if (a && !b) return 'From ' + dayMonth(a);
+    if (!a && b) return 'Until ' + dayMonth(b);
+    if (a.y !== b.y) return dayMonth(a) + ' ' + a.y + ' – ' + dayMonth(b) + ' ' + b.y;
+    if (a.m === b.m) return (a.d === b.d ? '' : a.d + ' – ') + dayMonth(b);
+    return dayMonth(a) + ' – ' + dayMonth(b);
+  }
+
+  // Called share as a whole percent for the progress bar (0 when there are no leads).
+  function percent(part, total) {
+    const t = Number(total) || 0;
+    if (t <= 0) return 0;
+    return Math.max(0, Math.min(100, Math.round((Number(part) || 0) * 100 / t)));
+  }
+
+  // The buttons a campaign offers for its status: [{ status, label, danger }].
+  function statusActions(status) {
+    if (status === 'draft') return [{ status: 'running', label: 'Start campaign' }, { status: 'closed', label: 'Close', danger: true }];
+    if (status === 'running') return [{ status: 'paused', label: 'Pause' }, { status: 'closed', label: 'Close', danger: true }];
+    if (status === 'paused') return [{ status: 'running', label: 'Resume' }, { status: 'closed', label: 'Close', danger: true }];
+    return [];
+  }
+
+  // A script's live version, or null: the published one of script_versions.
+  function liveVersion(script) {
+    const v = ((script && script.script_versions) || []).filter((x) => x && x.published);
+    return v.length ? v[0] : null;
+  }
+
+  // TODO(integration, Sprint 9): switch on when the scripts agent adds scripts.call_type_id. Then only live
+  // scripts of the campaign's type are offered (the server check is in campaign_check_script).
+  const SCRIPT_TYPE_FILTER = false;
+
+  // The scripts step 2 offers: live scripts only, of the chosen type when the filter is on, by name.
+  function scriptChoices(scripts, typeId, filterOn) {
+    return (scripts || [])
+      .filter((s) => liveVersion(s))
+      .filter((s) => !filterOn || !s.call_type_id || s.call_type_id === typeId)
+      .map((s) => ({ id: s.id, name: s.name, version: liveVersion(s).version, steps: liveVersion(s).steps || [] }))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  }
+
+  // What a save does, in order, from the form: the step list for the page and the check before it starts.
+  // f: { name, typeId, start, end, target, leads (ready rows), seats (ids), share, start: bool }.
+  // Returns an error text, or '' when the form can be saved.
+  function formProblem(f, starting) {
+    if (!String(f.name || '').trim()) return 'Give the campaign a name.';
+    if (String(f.name).trim().length > 120) return 'Keep the name under 120 characters.';
+    if (!f.typeId) return 'Pick a type.';
+    if (f.startDate && f.endDate && f.endDate < f.startDate) return 'The end date is before the start date.';
+    if (f.target !== '' && f.target !== null && f.target !== undefined) {
+      const n = Number(f.target);
+      if (!Number.isInteger(n) || n < 1 || n > 10000) return 'The daily target is a number of calls from 1 to 10,000.';
+    }
+    if (f.moneyInExtra && f.moneyInExtra.length) return 'Column "' + f.moneyInExtra[0] + '" has money in it. Match it to Amount due or untick it.';
+    if (starting) {
+      if (!f.leadCount) return 'Add a lead sheet before you start.';
+      if (!f.seatCount) return 'Pick at least one caller before you start.';
+    }
+    return '';
+  }
+
+  // "220 leads added. 12 bad numbers and 8 repeats skipped." from admin_add_leads counts.
+  function addedText(c) {
+    const x = c || {};
+    const n = Number(x.added) || 0;
+    const parts = [];
+    if (x.bad_numbers) parts.push(x.bad_numbers + ' bad number' + (x.bad_numbers === 1 ? '' : 's'));
+    if (x.repeats) parts.push(x.repeats + ' repeat' + (x.repeats === 1 ? '' : 's'));
+    if (x.other_skipped) parts.push(x.other_skipped + ' other row' + (x.other_skipped === 1 ? '' : 's'));
+    return n + ' lead' + (n === 1 ? '' : 's') + ' added.' + (parts.length ? ' ' + parts.join(', ') + ' skipped.' : '');
+  }
+
+  const pure = { statusLabel, typeTone, dateRange, percent, statusActions, liveVersion, scriptChoices, formProblem,
+    addedText, SCRIPT_TYPE_FILTER };
+  if (typeof module !== 'undefined' && module.exports) { module.exports = pure; return; }
+
+  // ---------- browser ----------
+
   const S = window.VectorAdminShared;
+  const LU = window.LeadUpload;
+  const el = S.el;
+  const say = S.say;
+  const $ = (id) => document.getElementById(id);
+  const CHUNK = 1000;   // leads per admin_add_leads call (the server takes up to 5000)
+  // The same file as app.html's cdnjs copy (same SRI hash), from jsDelivr, which the admin page's CSP allows.
+  const XLSX_URL = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+  const XLSX_SRI = 'sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw';
+
+  let ctx = null;
+  let box = null;
+  let campaigns = [];
+  let types = [];          // active call types
+  let scripts = [];        // the institute's scripts with versions
+  let seats = [];          // active seats of the institute
+  let features = null;     // my_features(), null until loaded
+  let current = null;      // detail of the open campaign
+  let seq = 0;             // newest load wins
+  let busy = false;
+  let pickers = {};        // lead pickers by prefix: { sheet, map, built }
+  let xlsxLoading = null;
+
+  const NOT_YET = 'Not available yet: the database needs the campaigns update.';
+  const cell = (text, cls, label) => el('td', { text: text === null || text === undefined ? '' : String(text), className: cls || '', 'data-label': label || null });
+  const head = (cols) => el('thead', null, [el('tr', null, cols.map((c) => el('th', { text: c[0], className: c[1] || '' })))]);
+  const msg = (id) => el('p', { id, className: 'msg', role: 'status' });
+  const button = (text, onClick, cls, id) => el('button', { type: 'button', text, onClick, className: cls || '', id: id || null });
+  const hasScripts = () => !features || features.indexOf('scripts') >= 0;
+
+  async function rpc(name, args) {
+    try { return await ctx.rpc(name, args); } catch (err) {
+      if (ctx.isMissing(err)) throw new Error(NOT_YET);
+      throw err;
+    }
+  }
+  const rows = (data) => (Array.isArray(data) ? data : data ? [data] : []);
+
+  // ---------- page ----------
+
+  function build() {
+    box.appendChild(el('div', { className: 'tab-head camp-head' }, [
+      el('div', null, [
+        el('h1', { text: 'Campaigns' }),
+        el('p', { className: 'muted', text: 'A campaign is one script, one lead list and the callers who work on it.' }),
+      ]),
+      el('a', { href: S.buildHash('campaigns', { new: '1' }), id: 'camp-new', className: 'button-link primary', text: '+ New campaign' }),
+    ]));
+
+    box.appendChild(el('section', { className: 'panel', id: 'camp-list', 'aria-label': 'All campaigns' }, [
+      msg('camp-list-msg'),
+      el('div', { className: 'scroll' }, [el('table', { className: 'stack' }, [
+        head([['Campaign'], ['Type'], ['Script'], ['Called', 'num'], ['Callers'], ['Dates'], ['Status'], ['']]),
+        el('tbody', { id: 'camp-body' }),
+      ])]),
+      el('p', { id: 'camp-empty', className: 'muted', hidden: true, text: 'No campaigns yet. Start one with New campaign.' }),
+    ]));
+
+    box.appendChild(el('section', { className: 'panel', id: 'camp-detail', hidden: true, 'aria-labelledby': 'camp-d-name' }));
+    box.appendChild(buildWizard());
+  }
+
+  // ---------- list ----------
+
+  async function loadList() {
+    const my = ++seq;
+    say('camp-list-msg', 'Loading…');
+    try {
+      const data = rows(await rpc('admin_campaign_list'));
+      if (my !== seq || !ctx) return;
+      campaigns = data;
+      say('camp-list-msg', '');
+      renderList();
+    } catch (err) {
+      if (my !== seq || !ctx) return;
+      say('camp-list-msg', err.message === NOT_YET ? NOT_YET : 'Could not load campaigns: ' + err.message, err.message !== NOT_YET);
+    }
+  }
+
+  function typePill(key, label) {
+    return el('span', { className: 'pill ' + typeTone(key), text: label || key || '' });
+  }
+
+  function progress(called, total) {
+    const p = percent(called, total);
+    return el('div', { className: 'progress' }, [
+      el('span', { className: 'progress-text', text: S.count(called || 0) + ' / ' + S.count(total || 0) }),
+      el('div', { className: 'bar', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(p),
+        'aria-label': p + '% called' }, [el('div', { className: 'bar-fill', 'data-pct': String(p) })]),
+    ]);
+  }
+  // CSP forbids inline styles in markup, but the CSSOM is fine: set the bar width after building it.
+  function sizeBars(root) {
+    root.querySelectorAll('.bar-fill[data-pct]').forEach((b) => { b.style.width = b.getAttribute('data-pct') + '%'; });
+  }
+
+  function renderList() {
+    const body = $('camp-body');
+    body.textContent = '';
+    campaigns.forEach((c) => {
+      const callers = rows(c.callers).map((x) => x.label).join(', ');
+      const td = (node, label, cls) => el('td', { 'data-label': label, className: cls || '' }, [node]);
+      body.appendChild(el('tr', null, [
+        el('td', { 'data-label': 'Campaign', className: 'camp-name', text: c.name }),
+        td(typePill(c.call_type_key, c.call_type_label), 'Type'),
+        cell(c.script_name || 'No script', '', 'Script'),
+        td(progress(c.leads_called, c.leads_total), 'Called', 'num'),
+        cell(callers || 'No callers yet', callers ? '' : 'muted', 'Callers'),
+        cell(dateRange(c.start_date, c.end_date), '', 'Dates'),
+        el('td', { 'data-label': 'Status' }, [el('span', { className: 'status st-' + c.status, text: statusLabel(c.status) })]),
+        el('td', { 'data-label': '' }, [el('a', { href: S.buildHash('campaigns', { id: c.id }), text: 'Open',
+          'aria-label': 'Open ' + c.name })]),
+      ]));
+    });
+    sizeBars(body);
+    $('camp-empty').hidden = campaigns.length > 0;
+  }
+
+  // ---------- one campaign ----------
+
+  async function loadDetail(id) {
+    const my = ++seq;
+    const pane = $('camp-detail');
+    pane.textContent = '';
+    pane.appendChild(msg('camp-d-msg'));
+    say('camp-d-msg', 'Loading…');
+    try {
+      const [d] = await Promise.all([rpc('admin_campaign_detail', { p_campaign: id }), ensureSeats()]);
+      if (my !== seq || !ctx) return;
+      current = Array.isArray(d) ? d[0] : d;
+      if (!current) throw new Error('campaign not found');
+      renderDetail();
+    } catch (err) {
+      if (my !== seq || !ctx) return;
+      current = null;
+      pane.textContent = '';
+      pane.appendChild(el('p', null, [el('a', { href: S.buildHash('campaigns'), text: '← All campaigns' })]));
+      pane.appendChild(el('p', { className: 'msg error', text: /not found/i.test(err.message) ? 'This campaign was not found.' : 'Could not open the campaign: ' + err.message }));
+    }
+  }
+
+  function fact(label, value) {
+    return el('div', { className: 'fact' }, [el('dt', { text: label }), el('dd', { text: value })]);
+  }
+  function stat(label, value, cls) {
+    return el('div', { className: 'stat ' + (cls || '') }, [el('span', { className: 'stat-n', text: S.count(value || 0) }), el('span', { className: 'stat-l', text: label })]);
+  }
+
+  function renderDetail() {
+    const c = current;
+    const pane = $('camp-detail');
+    pane.textContent = '';
+    const leads = c.leads || {};
+    const closed = c.status === 'closed';
+
+    pane.appendChild(el('p', { className: 'back' }, [el('a', { href: S.buildHash('campaigns'), text: '← All campaigns' })]));
+    pane.appendChild(el('div', { className: 'row between d-head' }, [
+      el('h2', { id: 'camp-d-name', text: c.name }),
+      el('span', { className: 'status st-' + c.status, id: 'camp-d-status', text: statusLabel(c.status) }),
+    ]));
+    pane.appendChild(el('dl', { className: 'facts' }, [
+      el('div', { className: 'fact' }, [el('dt', { text: 'Type' }), el('dd', null, [typePill(c.call_type_key, c.call_type_label)])]),
+      fact('Script', c.script_name ? c.script_name + (c.script_live_version ? ' v' + c.script_live_version + ' (live)' : '') : 'No script'),
+      fact('Dates', dateRange(c.start_date, c.end_date)),
+      fact('Daily target', c.daily_target ? S.count(c.daily_target) + ' calls' : 'None'),
+      fact('Share leads', SHARE[c.share_mode] || c.share_mode),
+    ]));
+
+    pane.appendChild(el('h3', { text: 'Progress' }));
+    const prog = progress(leads.called, leads.total);
+    prog.id = 'camp-d-progress';
+    pane.appendChild(prog);
+    const stats = [
+      stat('calls today', c.calls_today),
+      stat('to call', leads.open),
+      stat('call backs', leads.callback),
+      stat('promises', leads.promised),
+      stat('done', leads.done),
+      stat('wrong numbers', leads.wrong_number),
+      stat('do not call', leads.do_not_call),
+    ];
+    if (leads.unassigned) stats.push(stat(c.share_mode === 'next_free' ? 'waiting for a free caller' : 'without a caller', leads.unassigned, leads.unassigned && c.share_mode !== 'next_free' ? 'warn' : ''));
+    pane.appendChild(el('div', { className: 'stats', id: 'camp-d-stats' }, stats));
+    // Money: the total due of the sheet, only when the server says this admin may see money.
+    if (ctx.canSeeMoney && !c.money_hidden && c.amount_due_total !== null && c.amount_due_total !== undefined) {
+      pane.appendChild(el('p', { className: 'small', id: 'camp-d-money' }, ['Amount due on the lead list: ', el('strong', { text: S.rupees(c.amount_due_total) })]));
+    }
+    const results = rows(c.results);
+    if (results.length) {
+      pane.appendChild(el('h3', { text: 'Results so far' }));
+      pane.appendChild(el('ul', { className: 'plain results' }, results.map((r) => el('li', null, [
+        el('span', { text: r.label }), el('span', { className: 'num', text: S.count(r.count) }),
+      ]))));
+    }
+
+    // Status buttons.
+    const actions = statusActions(c.status);
+    if (actions.length) {
+      pane.appendChild(el('div', { className: 'actions d-actions' }, actions.map((a) =>
+        button(a.label, () => askStatus(a), a.danger ? 'danger' : (a.status === 'running' ? 'primary' : ''), 'camp-d-' + (a.status === 'running' ? (c.status === 'draft' ? 'start' : 'resume') : a.status === 'paused' ? 'pause' : 'close')))));
+    } else {
+      pane.appendChild(el('p', { className: 'muted', text: 'This campaign is closed. Its results stay in Reports.' }));
+    }
+    pane.appendChild(msg('camp-d-msg'));
+
+    // Callers.
+    pane.appendChild(el('h3', { text: 'Callers' }));
+    const callers = rows(c.callers);
+    if (callers.length) {
+      pane.appendChild(el('div', { className: 'scroll' }, [el('table', { className: 'stack' }, [
+        head([['Caller'], ['Leads', 'num'], ['To call', 'num'], ['Called', 'num'], ['Calls today', 'num']]),
+        el('tbody', { id: 'camp-d-callers' }, callers.map((m) => el('tr', null, [
+          cell(m.label + (m.status && m.status !== 'active' ? ' (' + m.status + ')' : ''), '', 'Caller'),
+          cell(S.count(m.leads), 'num', 'Leads'), cell(S.count(m.open), 'num', 'To call'),
+          cell(S.count(m.called), 'num', 'Called'), cell(S.count(m.calls_today), 'num', 'Calls today'),
+        ]))),
+      ])]));
+    } else {
+      pane.appendChild(el('p', { className: 'muted', text: 'No callers yet.' }));
+    }
+    if (!closed) pane.appendChild(buildCallerEditor(c, callers));
+    if (!closed) pane.appendChild(buildMoreLeads());
+    if (!closed) pane.appendChild(buildDetailsEditor(c));
+    sizeBars(pane);
+  }
+
+  function askStatus(a) {
+    const c = current;
+    const texts = {
+      running: c.status === 'draft' ? 'Callers on this campaign see it and start calling.' : 'Callers can call this campaign again.',
+      paused: 'Callers stop getting leads from this campaign until you resume it. Nothing is lost.',
+      closed: 'Callers stop calling this campaign for good. A closed campaign cannot be opened again. Results stay in Reports.',
+    };
+    ctx.confirm({
+      title: a.label + ': ' + c.name,
+      text: texts[a.status],
+      button: a.label,
+      danger: !!a.danger,
+      run: () => rpc('admin_update_campaign', { p_campaign: c.id, p_status: a.status }),
+      done: c.name + ': ' + statusLabel(a.status).toLowerCase() + '.',
+      reload: () => loadDetail(c.id),
+    });
+  }
+
+  // Callers and how leads are shared, for a campaign that is not closed.
+  function buildCallerEditor(c, callers) {
+    const on = new Set(callers.map((m) => m.seat_id));
+    const form = el('form', { className: 'subform', id: 'camp-d-callers-form' }, [
+      el('h4', { text: 'Change callers' }),
+      seatChecks('camp-d-seat', on),
+      el('label', null, ['Share leads', shareSelect('camp-d-share', c.share_mode, null)]),
+      el('div', { className: 'row' }, [el('button', { type: 'submit', text: 'Save callers' })]),
+      msg('camp-d-callers-msg'),
+    ]);
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (busy) return;
+      const ids = checkedSeats('camp-d-seat');
+      const mode = $('camp-d-share').value;
+      if (!ids.length && c.status === 'running') { say('camp-d-callers-msg', 'A running campaign needs at least one caller. Pause it first.', true); return; }
+      busy = true;
+      say('camp-d-callers-msg', 'Saving…');
+      try {
+        await rpc('admin_set_campaign_members', { p_campaign: c.id, p_seats: ids });
+        if (ids.length || mode === 'next_free') await rpc('admin_share_leads', { p_campaign: c.id, p_mode: mode });
+        ctx.status('Callers saved for ' + c.name + '.');
+        busy = false;
+        await loadDetail(c.id);
+      } catch (err) {
+        busy = false;
+        say('camp-d-callers-msg', err.message, true);
+      }
+    });
+    return form;
+  }
+
+  function buildMoreLeads() {
+    const form = el('form', { className: 'subform', id: 'camp-d-leads-form' }, [
+      el('h4', { text: 'Add more leads' }),
+      leadPicker('camp-d-leads'),
+      el('div', { className: 'row' }, [el('button', { type: 'submit', text: 'Add leads' })]),
+      msg('camp-d-leads-msg'),
+    ]);
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (busy) return;
+      const built = pickerResult('camp-d-leads');
+      if (!built || !built.rows.length) { say('camp-d-leads-msg', 'Choose a sheet with at least one good row.', true); return; }
+      const money = LU.moneyInExtra(pickers['camp-d-leads'].sheet.header, pickers['camp-d-leads'].map.extra);
+      if (money.length) { say('camp-d-leads-msg', 'Column "' + money[0] + '" has money in it. Match it to Amount due or untick it.', true); return; }
+      busy = true;
+      say('camp-d-leads-msg', 'Adding…');
+      try {
+        const id = current.id;
+        const total = await sendLeads(id, built.rows, (done) => say('camp-d-leads-msg', 'Adding… ' + S.count(done) + ' of ' + S.count(built.rows.length)));
+        busy = false;
+        ctx.status(addedText(total));
+        await loadDetail(id);
+      } catch (err) {
+        busy = false;
+        say('camp-d-leads-msg', 'Not all leads were added: ' + err.message, true);
+      }
+    });
+    return form;
+  }
+
+  function buildDetailsEditor(c) {
+    const form = el('form', { className: 'subform', id: 'camp-d-edit' }, [
+      el('h4', { text: 'Change details' }),
+      el('label', null, ['Name', el('input', { id: 'camp-d-name-in', type: 'text', maxlength: '120', value: c.name, required: true })]),
+      el('div', { className: 'row' }, [
+        el('label', null, ['Start', el('input', { id: 'camp-d-startdate', type: 'date', value: c.start_date || '' })]),
+        el('label', null, ['End', el('input', { id: 'camp-d-enddate', type: 'date', value: c.end_date || '' })]),
+        el('label', null, ['Daily target (calls)', el('input', { id: 'camp-d-target', type: 'number', min: '1', max: '10000', step: '1',
+          inputmode: 'numeric', value: c.daily_target ? String(c.daily_target) : '' })]),
+      ]),
+      el('div', { className: 'row' }, [el('button', { type: 'submit', text: 'Save details' })]),
+      msg('camp-d-edit-msg'),
+    ]);
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (busy) return;
+      const f = { name: $('camp-d-name-in').value, typeId: c.call_type_id, startDate: $('camp-d-startdate').value, endDate: $('camp-d-enddate').value, target: $('camp-d-target').value };
+      const problem = formProblem(f, false);
+      if (problem) { say('camp-d-edit-msg', problem, true); return; }
+      busy = true;
+      try {
+        const clearDates = !f.startDate && !f.endDate;
+        await rpc('admin_update_campaign', {
+          p_campaign: c.id, p_name: f.name.trim(),
+          p_start: f.startDate || null, p_end: f.endDate || null, p_clear_dates: clearDates,
+          p_daily_target: f.target === '' ? 0 : Number(f.target),
+        });
+        busy = false;
+        ctx.status('Details saved for ' + f.name.trim() + '.');
+        await loadDetail(c.id);
+      } catch (err) {
+        busy = false;
+        say('camp-d-edit-msg', err.message, true);
+      }
+    });
+    return form;
+  }
+
+  // ---------- shared form parts ----------
+
+  // A checkbox per active seat: callers first, then admins (an admin can call too).
+  function seatChecks(prefix, on) {
+    const list = seats.slice().sort((a, b) => (a.role === 'admin') - (b.role === 'admin') || String(a.label).localeCompare(String(b.label)));
+    const wrap = el('fieldset', { className: 'checks', id: prefix + 's' }, [el('legend', { text: 'Who calls' })]);
+    if (!list.length) wrap.appendChild(el('p', { className: 'muted small', text: 'No active seats yet. Add seats in the Callers tab.' }));
+    list.forEach((s) => {
+      wrap.appendChild(el('label', { className: 'check' }, [
+        el('input', { type: 'checkbox', className: prefix, value: s.seat_id, checked: on.has(s.seat_id) }),
+        s.label + (s.role === 'admin' ? ' (admin)' : ''),
+      ]));
+    });
+    return wrap;
+  }
+  const checkedSeats = (prefix) => Array.from(document.querySelectorAll('input.' + prefix + ':checked')).map((i) => i.value);
+
+  function shareSelect(id, value, leadCount) {
+    const sel = el('select', { id }, [
+      el('option', { value: 'equal', text: LU.equalText(leadCount, null) }),
+      el('option', { value: 'next_free', text: SHARE.next_free }),
+    ]);
+    sel.value = value || 'equal';
+    return sel;
+  }
+
+  async function ensureSeats() {
+    if (seats.length) return;
+    try {
+      const data = rows(await rpc('admin_seat_list', { p_institute: ctx.institute.id }));
+      seats = data.filter((s) => s.status === 'active');
+    } catch (err) { seats = []; }
+  }
+
+  // ---------- lead sheet picker (step 3, and "Add more leads") ----------
+
+  function leadPicker(prefix) {
+    pickers[prefix] = { sheet: null, map: null, built: null, file: '' };
+    const input = el('input', { type: 'file', id: prefix + '-file', accept: '.xlsx,.xls,.csv', className: 'file-input' });
+    input.addEventListener('change', () => { if (input.files && input.files[0]) readFile(prefix, input.files[0]); });
+    return el('div', { className: 'picker', id: prefix }, [
+      el('label', { className: 'drop', for: prefix + '-file' }, [
+        el('span', { className: 'drop-title', id: prefix + '-name', text: 'Choose an Excel or CSV file' }),
+        el('span', { className: 'muted small', text: 'First row: column names. One person per row.' }),
+        input,
+      ]),
+      el('div', { id: prefix + '-map', className: 'map', hidden: true }),
+      el('p', { id: prefix + '-skip', className: 'msg skip', role: 'status' }),
+    ]);
+  }
+
+  // The XLSX library (the same file and hash as the caller app), loaded the first time a sheet is opened.
+  function loadXlsx() {
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    if (xlsxLoading) return xlsxLoading;
+    xlsxLoading = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = XLSX_URL;
+      s.integrity = XLSX_SRI;
+      s.crossOrigin = 'anonymous';
+      s.onload = () => (window.XLSX ? resolve(window.XLSX) : reject(new Error('no reader')));
+      s.onerror = () => { xlsxLoading = null; s.remove(); reject(new Error('no reader')); };
+      document.head.appendChild(s);
+    });
+    return xlsxLoading;
+  }
+
+  async function readFile(prefix, file) {
+    const p = pickers[prefix];
+    say(prefix + '-skip', 'Reading ' + file.name + '…');
+    try {
+      let aoa;
+      if (/\.csv$/i.test(file.name)) aoa = LU.parseCsv(await file.text());   // CSV stays text: 09876543210 keeps its 0
+      else {
+        let X;
+        try { X = await loadXlsx(); } catch (err) {
+          say(prefix + '-skip', 'The spreadsheet reader did not load. Check your internet connection, or save the sheet as .csv.', true);
+          return;
+        }
+        const wb = X.read(new Uint8Array(await file.arrayBuffer()), { type: 'array', raw: true, cellDates: true });
+        aoa = X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', raw: true });
+      }
+      if (!pickers[prefix] || pickers[prefix] !== p) return;   // the form was rebuilt meanwhile
+      const sheet = LU.tidy(aoa);
+      if (!sheet.rows.length) { say(prefix + '-skip', 'That sheet has no rows under the header row.', true); return; }
+      p.sheet = sheet;
+      p.file = file.name;
+      p.map = LU.guessColumns(sheet.header);
+      $(prefix + '-name').textContent = file.name + ' · ' + S.count(sheet.rows.length) + ' row' + (sheet.rows.length === 1 ? '' : 's');
+      renderMap(prefix);
+    } catch (err) {
+      say(prefix + '-skip', 'Could not read that file. Use an .xlsx or .csv file with a header row.', true);
+    }
+  }
+
+  function colSelect(id, header, value, noneText) {
+    const sel = el('select', { id }, [el('option', { value: '-1', text: noneText })].concat(
+      header.map((h, i) => el('option', { value: String(i), text: h }))));
+    sel.value = String(value);
+    return sel;
+  }
+
+  // Column matching: name, phone and amount due, then a tick per other column to keep as an extra field.
+  function renderMap(prefix) {
+    const p = pickers[prefix];
+    const box2 = $(prefix + '-map');
+    box2.textContent = '';
+    const h = p.sheet.header;
+    const nameSel = colSelect(prefix + '-col-name', h, p.map.name, 'Pick a column');
+    const phoneSel = colSelect(prefix + '-col-phone', h, p.map.phone, 'Pick a column');
+    const amountSel = colSelect(prefix + '-col-amount', h, p.map.amount, 'No amount');
+    box2.appendChild(el('div', { className: 'map-grid' }, [
+      el('label', null, ['Name', nameSel]),
+      el('label', null, ['Phone', phoneSel]),
+      el('label', null, ['Amount due', amountSel]),
+    ]));
+    const others = el('fieldset', { className: 'checks extra', id: prefix + '-extra' }, [el('legend', { text: 'Other columns to keep (shown to the caller)' })]);
+    h.forEach((name, i) => {
+      if (i === p.map.name || i === p.map.phone || i === p.map.amount) return;
+      const money = LU.looksLikeMoney(name);
+      const box3 = el('input', { type: 'checkbox', value: String(i), checked: !money && p.map.extra.indexOf(i) >= 0, disabled: money });
+      box3.addEventListener('change', () => {
+        p.map.extra = Array.from(others.querySelectorAll('input:checked')).map((x) => Number(x.value));
+        recount(prefix);
+      });
+      others.appendChild(el('label', { className: 'check' }, [box3, name + (money ? ' (money: use it as Amount due)' : '')]));
+    });
+    if (others.querySelectorAll('input').length) box2.appendChild(others);
+    const onCol = () => {
+      p.map.name = Number(nameSel.value);
+      p.map.phone = Number(phoneSel.value);
+      p.map.amount = Number(amountSel.value);
+      p.map.extra = p.map.extra.filter((i) => i !== p.map.name && i !== p.map.phone && i !== p.map.amount);
+      renderMap(prefix);
+    };
+    [nameSel, phoneSel, amountSel].forEach((s) => s.addEventListener('change', onCol));
+    box2.hidden = false;
+    recount(prefix);
+  }
+
+  function recount(prefix) {
+    const p = pickers[prefix];
+    if (!p.sheet) return;
+    if (p.map.name < 0 || p.map.phone < 0) {
+      p.built = null;
+      say(prefix + '-skip', 'Pick the name and phone columns.', true);
+      return;
+    }
+    p.built = LU.buildLeads(p.sheet, p.map);
+    const skip = LU.skipText(p.built.counts);
+    const ready = p.built.counts.ready;
+    say(prefix + '-skip', S.count(ready) + ' lead' + (ready === 1 ? '' : 's') + ' ready.' + (skip ? ' ' + skip + '.' : ''), false);
+    $(prefix + '-skip').classList.toggle('warn', !!skip);
+    if (prefix === 'camp-w-leads') syncShareText();
+  }
+  const pickerResult = (prefix) => (pickers[prefix] ? pickers[prefix].built : null);
+
+  async function sendLeads(campaignId, list, onProgress) {
+    let total = {};
+    let done = 0;
+    for (const part of LU.chunk(list, CHUNK)) {
+      const out = await rpc('admin_add_leads', { p_campaign: campaignId, p_rows: part });
+      total = LU.addCounts(total, out);
+      done += part.length;
+      if (onProgress) onProgress(done);
+    }
+    return total;
+  }
+
+  // ---------- New campaign ----------
+
+  function buildWizard() {
+    return el('section', { className: 'panel', id: 'camp-wizard', hidden: true, 'aria-labelledby': 'camp-w-title' }, [
+      el('p', { className: 'back' }, [el('a', { href: S.buildHash('campaigns'), text: '← All campaigns' })]),
+      el('h2', { id: 'camp-w-title', text: 'New campaign' }),
+      el('form', { id: 'camp-w-form', novalidate: 'novalidate' }, [
+        el('div', { className: 'steps', id: 'camp-w-steps' }),
+        el('div', { className: 'row end' }, [
+          el('button', { type: 'button', id: 'camp-w-draft', text: 'Save as draft' }),
+          el('button', { type: 'submit', id: 'camp-w-start', text: 'Start campaign' }),
+        ]),
+        msg('camp-w-msg'),
+      ]),
+    ]);
+  }
+
+  function step(n, title, children) {
+    return el('fieldset', { className: 'step', id: 'camp-w-step' + n }, [el('legend', { text: n + ' · ' + title })].concat(children));
+  }
+
+  async function openWizard() {
+    const steps = $('camp-w-steps');
+    steps.textContent = '';
+    pickers = {};
+    say('camp-w-msg', 'Loading…');
+    await Promise.all([loadTypes(), loadScripts(), ensureSeats(), loadFeatures()]);
+    if (!ctx) return;
+    say('camp-w-msg', '');
+
+    const typeSel = el('select', { id: 'camp-w-type', required: true }, types.map((t) => el('option', { value: t.id, text: t.label })));
+    const fees = types.find((t) => t.key === 'fees');
+    if (fees) typeSel.value = fees.id;
+    steps.appendChild(step(1, 'Details', [
+      el('label', null, ['Name', el('input', { id: 'camp-w-name', type: 'text', maxlength: '120', placeholder: 'Nov fees – Class 10', required: true })]),
+      el('label', null, ['Type', typeSel]),
+      el('div', { className: 'row two' }, [
+        el('label', null, ['Start', el('input', { id: 'camp-w-startdate', type: 'date' })]),
+        el('label', null, ['End', el('input', { id: 'camp-w-enddate', type: 'date' })]),
+      ]),
+    ]));
+
+    const scriptSel = el('select', { id: 'camp-w-script' });
+    const scriptLabel = el('span', { id: 'camp-w-script-label', text: 'Script' });
+    const previewBtn = button('Preview script', () => togglePreview(), 'linkish', 'camp-w-preview-btn');
+    previewBtn.setAttribute('aria-expanded', 'false');
+    previewBtn.setAttribute('aria-controls', 'camp-w-preview');
+    steps.appendChild(step(2, 'Script', hasScripts() ? [
+      el('label', null, [scriptLabel, scriptSel]),
+      el('p', { className: 'muted small', text: 'Callers always get the live version. A new version starts on their next call, never in the middle of one.' }),
+      previewBtn,
+      el('ol', { id: 'camp-w-preview', className: 'preview', hidden: true }),
+    ] : [
+      el('p', { className: 'muted small', id: 'camp-w-noscripts', text: 'Add Scripts to use a guided script. Without it, callers use the result buttons only.' }),
+    ]));
+    typeSel.addEventListener('change', fillScripts);
+    scriptSel.addEventListener('change', () => { if (!$('camp-w-preview').hidden) renderPreview(); });
+    if (hasScripts()) fillScripts();
+
+    steps.appendChild(step(3, 'Leads', [leadPicker('camp-w-leads')]));
+
+    const target = el('input', { id: 'camp-w-target', type: 'number', min: '1', max: '10000', step: '1', inputmode: 'numeric', placeholder: '40' });
+    steps.appendChild(step(4, 'Callers', [
+      seatChecks('camp-w-seat', new Set()),
+      el('label', null, ['Share leads', shareSelect('camp-w-share', 'equal', null)]),
+      el('label', null, ['Daily target (calls a day, all callers)', target]),
+      el('p', { className: 'muted small', id: 'camp-w-target-hint' }),
+    ]));
+    steps.querySelectorAll('input.camp-w-seat').forEach((i) => i.addEventListener('change', syncShareText));
+    target.addEventListener('input', syncShareText);
+    syncShareText();
+    $('camp-w-name').focus();
+  }
+
+  function fillScripts() {
+    const sel = $('camp-w-script');
+    if (!sel) return;
+    const typeId = $('camp-w-type').value;
+    const t = types.find((x) => x.id === typeId);
+    const list = scriptChoices(scripts, typeId, SCRIPT_TYPE_FILTER);
+    sel.textContent = '';
+    sel.appendChild(el('option', { value: '', text: 'No script' }));
+    list.forEach((s) => sel.appendChild(el('option', { value: s.id, text: s.name + ' v' + s.version + ' (live)' })));
+    if (list.length) sel.value = list[0].id;
+    $('camp-w-script-label').textContent = SCRIPT_TYPE_FILTER && t ? 'Script (' + t.label.toLowerCase() + ' scripts only)' : 'Script (live scripts only)';
+    if (!$('camp-w-preview').hidden) renderPreview();
+  }
+
+  function togglePreview() {
+    const box2 = $('camp-w-preview');
+    box2.hidden = !box2.hidden;
+    $('camp-w-preview-btn').setAttribute('aria-expanded', String(!box2.hidden));
+    if (!box2.hidden) renderPreview();
+  }
+
+  function renderPreview() {
+    const box2 = $('camp-w-preview');
+    box2.textContent = '';
+    const s = scriptChoices(scripts, $('camp-w-type').value, SCRIPT_TYPE_FILTER).find((x) => x.id === $('camp-w-script').value);
+    if (!s) { box2.appendChild(el('li', { className: 'muted', text: 'No script picked.' })); return; }
+    (s.steps || []).forEach((st) => {
+      const say1 = Array.isArray(st.say) ? st.say.join(' ') : '';
+      box2.appendChild(el('li', null, [
+        el('strong', { text: st.title || st.id || '' }),
+        say1 ? el('span', { text: ' ' + say1 }) : null,
+      ]));
+    });
+    if (!box2.children.length) box2.appendChild(el('li', { className: 'muted', text: 'This script has no steps yet.' }));
+  }
+
+  function syncShareText() {
+    const sel = $('camp-w-share');
+    if (!sel) return;
+    const built = pickerResult('camp-w-leads');
+    const n = built ? built.counts.ready : 0;
+    const callers = checkedSeats('camp-w-seat').length;
+    sel.options[0].textContent = LU.equalText(n, callers);
+    const t = Number($('camp-w-target').value);
+    $('camp-w-target-hint').textContent = t > 0 && callers > 1 ? 'About ' + S.count(Math.ceil(t / callers)) + ' a day for each caller.' : '';
+  }
+
+  async function loadTypes() {
+    try {
+      types = rows(await rpc('admin_list_call_types')).filter((t) => t.active !== false);
+    } catch (err) { types = []; }
+  }
+  async function loadScripts() {
+    try {
+      const cols = 'id, name' + (SCRIPT_TYPE_FILTER ? ', call_type_id' : '') + ', script_versions(version, steps, published)';
+      const { data, error } = await ctx.client.from('scripts').select(cols).eq('institute_id', ctx.institute.id);
+      scripts = error ? [] : rows(data);
+    } catch (err) { scripts = []; }
+  }
+  async function loadFeatures() {
+    try {
+      const f = await rpc('my_features');
+      features = Array.isArray(f) ? f.filter((x) => typeof x === 'string') : [];
+    } catch (err) { features = null; }   // an older database: the server still checks
+  }
+
+  // Save as draft (start false) or Start campaign (start true): create, add leads, set callers, share,
+  // then start. A failure after the campaign exists opens it, so the admin can finish there.
+  async function saveWizard(start) {
+    if (busy) return;
+    const built = pickerResult('camp-w-leads');
+    const p = pickers['camp-w-leads'];
+    const f = {
+      name: $('camp-w-name').value, typeId: $('camp-w-type').value,
+      startDate: $('camp-w-startdate').value, endDate: $('camp-w-enddate').value, target: $('camp-w-target').value,
+      leadCount: built ? built.counts.ready : 0, seatCount: checkedSeats('camp-w-seat').length,
+      moneyInExtra: p && p.sheet && p.map ? LU.moneyInExtra(p.sheet.header, p.map.extra) : [],
+    };
+    const problem = formProblem(f, start);
+    if (problem) { say('camp-w-msg', problem, true); return; }
+    const scriptSel = $('camp-w-script');
+    const seatIds = checkedSeats('camp-w-seat');
+    const mode = $('camp-w-share').value;
+    busy = true;
+    $('camp-w-draft').disabled = true;
+    $('camp-w-start').disabled = true;
+    say('camp-w-msg', 'Saving…');
+    let id = null;
+    const notes = [];
+    try {
+      id = await rpc('admin_create_campaign', {
+        p_name: f.name.trim(), p_call_type: f.typeId, p_script: scriptSel && scriptSel.value ? scriptSel.value : null,
+        p_start: f.startDate || null, p_end: f.endDate || null,
+        p_daily_target: f.target === '' ? null : Number(f.target), p_share_mode: mode,
+      });
+      if (Array.isArray(id)) id = id[0];
+      if (built && built.rows.length) {
+        const counts = await sendLeads(id, built.rows, (done) => say('camp-w-msg', 'Adding leads… ' + S.count(done) + ' of ' + S.count(built.rows.length)));
+        notes.push(addedText(counts));
+      }
+      if (seatIds.length) {
+        await rpc('admin_set_campaign_members', { p_campaign: id, p_seats: seatIds });
+        await rpc('admin_share_leads', { p_campaign: id, p_mode: mode });
+      }
+      if (start) await rpc('admin_update_campaign', { p_campaign: id, p_status: 'running' });
+      busy = false;
+      ctx.status((start ? 'Campaign started: ' : 'Draft saved: ') + f.name.trim() + '. ' + notes.join(' '));
+      ctx.navigate('campaigns', { id });
+    } catch (err) {
+      busy = false;
+      $('camp-w-draft').disabled = false;
+      $('camp-w-start').disabled = false;
+      if (!id) { say('camp-w-msg', err.message, true); return; }
+      ctx.status('The campaign was saved as a draft, but this step failed: ' + err.message + ' Finish it here.', true);
+      ctx.navigate('campaigns', { id });
+    }
+  }
+
+  // ---------- routes ----------
+
+  function showView(params) {
+    const p = params || {};
+    const view = p.new ? 'new' : p.id ? 'detail' : 'list';
+    $('camp-list').hidden = view !== 'list';
+    $('camp-new').hidden = view !== 'list';
+    $('camp-detail').hidden = view !== 'detail';
+    $('camp-wizard').hidden = view !== 'new';
+    if (view === 'list') { current = null; loadList(); }
+    else if (view === 'detail') loadDetail(p.id);
+    else openWizard();
+  }
 
   S.registerTab({
     id: 'campaigns',
     label: 'Campaigns',
-    mount(box) {
-      S.placeholder(box, 'Campaigns', 'Here you will start a calling campaign: pick a script, add the people to call and share them between your callers.');
+    mount(container, c) {
+      ctx = c;
+      box = container;
+      build();
+      $('camp-w-form').addEventListener('submit', (e) => { e.preventDefault(); saveWizard(true); });
+      $('camp-w-draft').addEventListener('click', () => saveWizard(false));
     },
-    unmount() {},
+    show(params) { if (ctx) showView(params); },
+    unmount() {
+      ctx = null; box = null; campaigns = []; types = []; scripts = []; seats = []; features = null;
+      current = null; pickers = {}; busy = false; seq++;
+    },
   });
 })();

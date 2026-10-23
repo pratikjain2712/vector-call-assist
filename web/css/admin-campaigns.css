@@ -1,1 +1,98 @@
-/* Campaigns tab (js/admin/campaigns.js). Scope every rule under .tab-campaigns. */
+/* Campaigns tab (js/admin/campaigns.js): the campaign list, one campaign's page and "New campaign" in four
+   step cards. Scope every rule under .tab-campaigns. Phone first: one column at 375px, the cards sit side by
+   side from 900px, as in the mockup. */
+.tab-campaigns .camp-head { flex-direction: row; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.tab-campaigns .button-link.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600;
+  padding: 11px 18px; border-radius: var(--radius-button); }
+.tab-campaigns .button-link.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: var(--on-accent); }
+.tab-campaigns .camp-name { font-weight: 600; color: var(--heading); overflow-wrap: anywhere; }
+.tab-campaigns td { overflow-wrap: anywhere; }
+.tab-campaigns #camp-list-msg:empty { display: none; }
+.tab-campaigns #camp-list-msg { margin: 0 0 8px; }
+
+/* type pills and status words */
+.tab-campaigns .pill { display: inline-block; padding: 3px 9px; border-radius: var(--radius-pill); font-size: 12px; font-weight: 600;
+  color: var(--heading); white-space: nowrap; }
+.tab-campaigns .tone-warn { background: var(--warn-soft); }
+.tab-campaigns .tone-accent { background: var(--accent-soft); }
+.tab-campaigns .tone-ok { background: var(--ok-soft); }
+.tab-campaigns .tone-plain { background: var(--panel-soft); border: 1px solid var(--line); }
+.tab-campaigns .status { font-weight: 600; }
+.tab-campaigns .st-running { color: var(--ok); }
+.tab-campaigns .st-paused { color: var(--warn); }
+.tab-campaigns .st-draft { color: var(--accent); }
+.tab-campaigns .st-closed { color: var(--muted); }
+
+/* progress */
+.tab-campaigns .progress { display: flex; flex-direction: column; gap: 4px; min-width: 90px; }
+.tab-campaigns td.num .progress { align-items: flex-end; }
+.tab-campaigns .progress-text { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tab-campaigns .bar { width: 100%; height: 8px; background: var(--line-soft); border-radius: 4px; overflow: hidden; }
+.tab-campaigns .bar-fill { height: 100%; width: 0; background: var(--chart-2); }
+#camp-d-progress { max-width: 420px; }
+
+/* one campaign */
+.tab-campaigns .back { margin: 0 0 10px; font-size: 14px; }
+.tab-campaigns .d-head { margin-bottom: 8px; }
+.tab-campaigns .d-head h2 { margin: 0; overflow-wrap: anywhere; }
+.tab-campaigns h3 { margin: 18px 0 8px; }
+.tab-campaigns .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px 16px; margin: 0; }
+.tab-campaigns .fact dt { font-size: 12px; color: var(--muted); }
+.tab-campaigns .fact dd { margin: 2px 0 0; color: var(--heading); overflow-wrap: anywhere; }
+.tab-campaigns .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-top: 12px; }
+.tab-campaigns .stat { border: 1px solid var(--line); border-radius: var(--radius-button); padding: 10px 12px; display: flex; flex-direction: column; }
+.tab-campaigns .stat.warn { border-color: var(--warn); background: var(--warn-soft); }
+.tab-campaigns .stat-n { font-family: var(--font-display); font-size: 20px; font-weight: 800; color: var(--heading); font-variant-numeric: tabular-nums; }
+.tab-campaigns .stat-l { font-size: 13px; color: var(--muted); }
+.tab-campaigns .results li { display: flex; justify-content: space-between; gap: 12px; }
+.tab-campaigns .results .num { font-variant-numeric: tabular-nums; }
+.tab-campaigns .d-actions { margin-top: 16px; }
+.tab-campaigns .d-actions button { padding: 9px 14px; font-size: 14px; }
+.tab-campaigns .subform { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+.tab-campaigns .subform h4 { margin: 0; }
+
+/* New campaign: four step cards */
+.tab-campaigns .steps { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+@media (min-width: 700px) { .tab-campaigns .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .tab-campaigns .steps { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.tab-campaigns .step { border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 16px; margin: 0; min-width: 0;
+  display: flex; flex-direction: column; gap: 12px; }
+.tab-campaigns .step legend { font-weight: 700; color: var(--heading); padding: 0 6px; }
+.tab-campaigns .step label input, .tab-campaigns .step label select, .tab-campaigns .subform label input,
+.tab-campaigns .subform label select { width: 100%; }
+.tab-campaigns .row.two { flex-wrap: nowrap; }
+.tab-campaigns .row.two > label { flex: 1 1 0; }
+.tab-campaigns .row.end { justify-content: flex-end; margin-top: 16px; }
+.tab-campaigns button.linkish { border: 0; background: none; padding: 0; color: var(--accent); text-decoration: underline; text-align: left;
+  align-self: flex-start; }
+.tab-campaigns button.linkish:hover { color: var(--accent-hover); background: none; }
+.tab-campaigns .preview { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 13px;
+  max-height: 260px; overflow-y: auto; overflow-wrap: anywhere; }
+.tab-campaigns .step p { margin: 0; }
+
+/* checkbox lists */
+.tab-campaigns .checks { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.tab-campaigns .checks legend { font-size: 13px; font-weight: 600; padding: 0; margin-bottom: 4px; }
+.tab-campaigns label.check { flex-direction: row; align-items: center; gap: 8px; font-weight: 500; font-size: 14px; overflow-wrap: anywhere; }
+.tab-campaigns label.check input { width: auto; flex: none; }
+
+/* lead sheet */
+.tab-campaigns .drop { border: 2px dashed var(--input-line); border-radius: var(--radius-button); padding: 14px; text-align: center;
+  cursor: pointer; align-items: center; font-weight: 400; position: relative; }
+.tab-campaigns .drop:hover { border-color: var(--accent); }
+.tab-campaigns .drop:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tab-campaigns .drop-title { font-weight: 600; color: var(--heading); overflow-wrap: anywhere; }
+/* The file input stays focusable and readable by screen readers; the dashed box is what people see. */
+.tab-campaigns .file-input { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.tab-campaigns .map { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.tab-campaigns .map-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.tab-campaigns .msg.skip.warn { color: var(--warn); }
+.tab-campaigns .msg.skip.error { color: var(--danger); }
+
+@media (max-width: 699px) {
+  .tab-campaigns .camp-head > .button-link { width: 100%; text-align: center; }
+  .tab-campaigns td.num .progress { align-items: stretch; }
+  .tab-campaigns .row.end > button { width: 100%; }
+  .tab-campaigns .row.two > label { min-width: 0; }
+}
