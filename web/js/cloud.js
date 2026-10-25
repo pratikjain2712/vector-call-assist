@@ -261,6 +261,20 @@
   /* The function is not on the server (an older database): the page falls back without it. */
   const missing = (error) => !!error && (error.code === 'PGRST202' || error.code === '42883');
 
+  /* Presence for the admin Home tab: args from VectorPresence.args() (p_on_call, p_phone_ok, p_call_state,
+     p_call_started_at), or the old (onCall, phoneOk). A database without the call state (before
+     20261025190000) is asked with the first two only, from then on. */
+  let presenceLegacy = false;
+  async function reportPresence(a, phoneOk) {
+    const full = a && typeof a === 'object' ? a : { p_on_call: !!a, p_phone_ok: phoneOk !== false };
+    const old = { p_on_call: !!full.p_on_call, p_phone_ok: full.p_phone_ok !== false };
+    if (presenceLegacy || !('p_call_state' in full)) return call('report_presence', old);
+    const r = await call('report_presence', full);
+    if (!missing(r.error)) return r;
+    presenceLegacy = true;
+    return call('report_presence', old);
+  }
+
   /* The published version of one script (a campaign's script): { scriptId, version, steps }, or null. */
   async function scriptById(scriptId) {
     try {
@@ -299,7 +313,7 @@
     // the caller's practice list, presence for the admin Home tab, and the signed-in client for WhatsApp.
     campaignScript: (campaignId, leadId) => call('campaign_script_version', { p_campaign: campaignId, p_lead: leadId || null }),
     myPractice: () => call('my_practice'),
-    reportPresence: (onCall, phoneOk) => call('report_presence', { p_on_call: !!onCall, p_phone_ok: phoneOk !== false }),
+    reportPresence,
     client: () => (client && session && seat ? client : null),
     // Phase A.2: caller. The institute's name for {institute}, the ledger on the fees lead card (balance due now and the
     // last payment, for the lead on the call only), and the institute's common answers (an older database has none).

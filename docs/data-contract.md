@@ -307,8 +307,8 @@ New column `institutes.time_zone` (text, default `Asia/Kolkata`; Home counts "to
 
 | Function | Returns | Who | What |
 |---|---|---|---|
-| `report_presence(p_on_call boolean default false, p_phone_ok boolean default true)` | void | any active seat | **For the caller screen:** call about once a minute and when a call starts or ends. Feeds Home's "On a call", "Ready", "No calls for N min" and "Phone offline" (seen in the last 3 minutes). |
-| `admin_home_summary(p_day text default 'today', p_campaign uuid default null)` | jsonb | admin | `p_day` `today` / `yesterday` / `week`. Tiles (calls, same stretch before, picked up, talk, sales joined / interested, fees paid / promised counts; `paid_amount`, `promised_amount` null unless `can_see_money`), callers right now with `now {status, since, idle_minutes}`, `promises_due_today {count, amount}`, `script_ends` (Scripts add-on only: a step where > 35% of a script's picked-up calls in 7 days end, ≥ 10 calls), running campaign progress, campaign filter choices. |
+| `report_presence(p_on_call boolean default false, p_phone_ok boolean default true, p_call_state text default null, p_call_started_at timestamptz default null)` | void | any active seat | **For the caller screen:** call about once a minute, at every phone call-phase change and after a save. Feeds Home's "On a call", "Wrap-up", "Ready", "No calls for N min" and "Phone offline" (seen in the last 3 minutes). The call-state arguments are from `20261025190000` (see "Presence: call state" below); the two-argument call still works. |
+| `admin_home_summary(p_day text default 'today', p_campaign uuid default null)` | jsonb | admin | `p_day` `today` / `yesterday` / `week`. Tiles (calls, same stretch before, picked up, talk, sales joined / interested, fees paid / promised counts; `paid_amount`, `promised_amount` null unless `can_see_money`), callers right now with `now {status, since, idle_minutes}` (plus `call_state`, `confirmed`, `seconds` for `on_call` and `wrapup`, see below), `promises_due_today {count, amount}`, `script_ends` (Scripts add-on only: a step where > 35% of a script's picked-up calls in 7 days end, ≥ 10 calls), running campaign progress, campaign filter choices. |
 | `admin_callers(p_institute uuid)` | table `(seat_id, label, access_role, can_see_money, status, campaigns jsonb, calls_today, calls_target, now_status jsonb)` | admin | Adds roles, campaigns (not closed) and "now" to `admin_seat_list`. No emails, no money. |
 | `admin_institute_settings()` | jsonb | admin | name, time_zone, hide_money, status, trial_ends_at, trial_days_left, seat_limit, seats_used, features (`my_features`), is_owner, access_role. |
 | `admin_set_institute(p_name text default null, p_time_zone text default null)` | void | owner | Null keeps a value. Audit `institute.changed` (`name`, `time_zone` or both). |
@@ -318,6 +318,39 @@ Internal (granted to nobody): `home_seat_status`, `home_calls` (latest correctio
 
 Callers tab uses `admin_set_campaign_members` and `admin_move_leads` (campaign functions) and shows "not available yet" without them. Settings reads `admin_ai_usage()` when the scripts feature has it, and loads `web/js/admin/settings-whatsapp.js` (an ES module exporting `mount(section, ctx)` and optionally `unmount()`) into `#settings-whatsapp` when the file exists.
 <!-- /Phase A: admin -->
+
+<!-- presence -->
+### Presence: call state
+
+_Migration `20261025190000_presence_call_state.sql`, tests `supabase/tests/presence_test.sql`. Caller page: `web/js/presence.js` (state and debounce, `tests/web/presence.test.js`) and `campPresence` in `web/js/main.js`. Home: `statusInfo` in `web/js/admin/home.js`._
+
+New `seat_presence` columns: `call_state` (text, not null, default `none`, one of `none`, `dialling`, `connected`, `wrapup`, `unconfirmed`), `call_started_at` (timestamptz, the page's clock), `state_at` (timestamptz, server time `call_state` last changed). Rows from before the migration get `unconfirmed` when `on_call`, else `none`. `on_call` is still written (true for dialling, connected and unconfirmed).
+
+What the caller page sends as `p_call_state`:
+
+| State | When |
+|---|---|
+| `dialling` | the paired Vector Companion phone reports `REQUESTED` for the call on screen |
+| `connected` | the paired phone reports `OFFHOOK` |
+| `wrapup` | the phone reported `ENDED` / `FAILED` and the result is not saved yet; ends with the save, when the caller moves to another lead, or after 10 minutes |
+| `unconfirmed` | a call started on the page (Dial / "Call on this device" / the first answer tapped) and no paired phone reports it |
+| `none` | anything else |
+
+`p_call_started_at`: the moment the line went into use, else the dial, else when the page started the call; null for `none`. A start in the future counts as now; one more than 12 hours ago is ignored. A report without a start keeps the start already known for the call. Null `p_call_state` (older pages): `unconfirmed` when `p_on_call`, else `none`. An unknown state is refused (`22023`).
+
+When the page reports: at once on every change of the call state, phone answering or call start (dial, connect, hang up, save, moving on), on a call start and a save, and every minute (a hidden page with no call skips the minute report); a burst sends at most one report per 2 seconds, with the latest state. On a database without the call state (`PGRST202` / `42883` for the four-argument call) the page falls back to `report_presence(p_on_call, p_phone_ok)`.
+
+`home_seat_status` (and so `admin_home_summary` callers' `now` and `admin_callers.now_status`), in order:
+
+| `status` | Extra keys | When (screen seen in the last 3 minutes unless said) |
+|---|---|---|
+| `phone_offline` | `since` | the phone does not answer |
+| `on_call` | `call_state` (`dialling`, `connected` or `unconfirmed`), `confirmed` (false for `unconfirmed`), `since` (call start), `seconds` | a call is going on |
+| `wrapup` | `call_state`, `since` (hang-up), `seconds` | `wrapup` for less than 10 minutes |
+| `idle` / `ready` / `not_started` | as before | otherwise |
+
+Home shows "On a call · 3:12", "On a call (unconfirmed) · 0:40", "Wrap-up · 0:40" (`m:ss`, `h:mm:ss` past an hour) and ticks the time on every second between its one-minute refreshes; Callers shows the words without the time.
+<!-- /presence -->
 
 <!-- Phase A: insights -->
 ## Insights (migration `20261024100025_insights.sql`, tests `supabase/tests/insights_test.sql`)
@@ -394,7 +427,7 @@ _Migration `20261024100030_phase_a_integration.sql`. All eight feature branches 
 | `my_practice()` | sign-in | top-bar link "Practise (N to do)" → `practice.html` or `practice.html?script=<id>` when one is assigned |
 | `my_whatsapp_templates()` (via `VectorWhatsApp.loadTemplates`) | sign-in | `[]` without a connected number |
 | Edge Function `whatsapp-send` (via `VectorWhatsApp.sendAfterCall`) | after the server has the result, when the caller ticked "After saving, send … from the institute's WhatsApp" | offered only for an approved template of this call type and ending with no typed blanks, and when the person said yes (on this call or before); the `wa.me` link stays beside it |
-| `report_presence(p_on_call, p_phone_ok)` | every minute, when a call starts, after a save | `p_phone_ok` false when the paired phone does not answer; stops calling if the function is missing |
+| `report_presence(p_on_call, p_phone_ok, p_call_state, p_call_started_at)` | every minute, at every phone call-phase change, when a call starts, after a save (at most once per 2 seconds) | `p_phone_ok` false when the paired phone does not answer; the call state as in "Presence: call state"; falls back to the two-argument call on an older database; stops calling if the function is missing |
 
 **Admin page (`web/admin.html`)**
 - Settings mounts `window.VectorSettingsWhatsApp` (`js/admin/settings-whatsapp.js`, loaded by `admin.html`) into `#settings-whatsapp`; shows `admin_ai_usage()` as "N of 20 AI drafts used this month".

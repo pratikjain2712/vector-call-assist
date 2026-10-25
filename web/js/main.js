@@ -441,7 +441,7 @@ function back() {
   if (state.history.length) startClock();
   render();
 }
-function resetCall() { campResetCall(); stopClock(); state.callId = null; state.node = ACTIVE.start; state.history = []; state.trail = []; state.objs = []; state.objection = null; state.elapsed = 0; tick(); }
+function resetCall() { campResetCall(); stopClock(); state.callId = null; state.node = ACTIVE.start; state.history = []; state.trail = []; state.objs = []; state.objection = null; state.elapsed = 0; tick(); presenceChanged(); }
 function restart() { lastOutcome = null; camp.pick = null; camp.values = {}; resetCall(); if (!sheet) $("lead-name").value = ""; render(); }
 function loadLead(i) {
   if (state.practice) { note(leaveMessage()); return; }
@@ -612,6 +612,7 @@ function renderCallPanel() {
   else line = callView.summary || "Call finished, checking the call log…";
   box.appendChild(el("p", "heard", line));
   if (live) box.appendChild(tool("call-hangup", "Hang up on the phone", hangupCall, "plain"));
+  presenceChanged();   // dial, connect and hang up reach the admin Home tab at once
 }
 
 function setCallSummary(sessionId, text) {
@@ -659,9 +660,9 @@ async function callFromLaptop() {
     detection: "", callStatus: "dialling", outcome: "", objections: "",
     notes: t.notes, saveStatus: "awaiting-outcome", updatedAt: Date.now(),
   });
-  campBegin(res.dialWallMs || Date.now());   // Phase A: caller
   state.callId = res.session;
   callView = { sessionId: res.session, phase: "REQUESTED", offhookWallMs: 0, endWallMs: 0, final: false, summary: "" };
+  campBegin(res.dialWallMs || Date.now());   // Phase A: caller (after callView, so presence reports "dialling")
   renderCallPanel();
   watchCall(res.session);
 }
@@ -988,7 +989,7 @@ function setHealth(h, msg) {
   const was = linkHealth;
   linkHealth = h; linkError = msg || "";
   renderHealth();
-  if (was !== h) renderSheet();   // the Call button follows the connection
+  if (was !== h) { renderSheet(); presenceChanged(); }   // the Call button and "Phone offline" follow the connection
 }
 
 async function checkPhone() {
@@ -1844,16 +1845,54 @@ async function campSendWhatsapp(items) {
   }
 }
 
-/* Presence for the admin Home tab ("On a call", "Phone offline"): about once a minute, and when a call starts
-   or is saved. report_presence is from the admin tabs; an older database without it is left alone. */
-let presenceOff = false;
-async function campPresence() {
-  if (presenceOff || !Cloud.hasSeat() || document.hidden) return;
-  const live = callView && (callView.phase === "REQUESTED" || callView.phase === "OFFHOOK");
-  const onCall = !!(live || camp.begun);
+/* Presence for the admin Home tab ("Callers right now"), see js/presence.js: the call state (dialling and
+   connected from the paired phone, wrap-up after it hangs up until the result is saved, unconfirmed when only
+   this page says a call is going on), when the call started, and whether the phone answers. Sent at once when
+   any of these change (at most one update per 2 seconds), after a save, and every minute. report_presence is
+   from the admin tabs; an older database without it is left alone (Cloud.reportPresence falls back to the
+   two-argument call on a database without the call state). */
+var presenceOff = false;   // var: resetCall() may run before this line
+var presenceSent = "";       // VectorPresence.key of the last report sent
+var presenceWrapup = 0;      // when the phone went idle with the result not saved yet (ms), 0 otherwise
+var presenceReporter = null;
+function presenceNow() {
+  const P = window.VectorPresence;
+  const live = !!callView && (callView.phase === "REQUESTED" || callView.phase === "OFFHOOK");
+  const mine = !!callView && (live || (!!state.callId && callView.sessionId === state.callId));
+  const rec = mine ? CallRecords.get(callView.sessionId) : null;
+  const awaiting = !!(camp.begun || (mine && state.callId && rec && rec.saveStatus === "awaiting-outcome"));
+  const input = { paired: PhoneLink.isPaired(), phase: mine ? callView.phase : null, awaitingResult: awaiting, wrapupSince: presenceWrapup, now: Date.now() };
+  const st = P.callState(input);
+  // Wrap-up counts from the first time it is seen; it ends with the save (or moving on), or after 10 minutes.
+  if (st === "wrapup" && !presenceWrapup) presenceWrapup = Date.now();
+  else if (!(awaiting && (input.phase === "ENDED" || input.phase === "FAILED"))) presenceWrapup = 0;
+  const started = P.startedAt(st, { offhookWallMs: mine ? callView.offhookWallMs : 0, dialWallMs: rec ? rec.dialWallMs : 0, beganAt: camp.beganAt });
   const phoneOk = !PhoneLink.isPaired() || linkHealth === "ok" || linkHealth === "checking";
-  const r = await Cloud.reportPresence(onCall, phoneOk);
+  return P.args(st, started, phoneOk);
+}
+async function sendPresence() {
+  if (presenceOff || !Cloud.hasSeat()) return;
+  const a = presenceNow();
+  presenceSent = VectorPresence.key(a);
+  const r = await Cloud.reportPresence(a);
   if (r.error && Cloud.missing(r.error)) presenceOff = true;
+  else if (r.error) presenceSent = "";   // try again with the next change or heartbeat
+}
+function presenceRequest() {
+  if (presenceOff || !window.VectorPresence) return;
+  if (!presenceReporter) presenceReporter = VectorPresence.createReporter({ send: sendPresence });
+  presenceReporter.request();
+}
+/* Something the call state depends on may have changed: report only when Home would show something else. */
+function presenceChanged() {
+  if (presenceOff || !window.VectorPresence || !Cloud.hasSeat()) return;
+  if (VectorPresence.key(presenceNow()) !== presenceSent) presenceRequest();
+}
+/* The minute heartbeat, a call start and a save. A hidden page with no call going on stays quiet. */
+function campPresence() {
+  if (presenceOff || !window.VectorPresence || !Cloud.hasSeat()) return;
+  if (document.hidden && presenceNow().p_call_state === "none") return;
+  presenceRequest();
 }
 
 /* my_campaigns() and my_features(), with the last answer kept for offline use. */

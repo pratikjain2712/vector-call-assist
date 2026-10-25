@@ -46,6 +46,9 @@ test('campaign changes', () => {
 test('now words', () => {
   assert.strictEqual(C.nowText({ status: 'on_call' }), 'On a call');
   assert.strictEqual(C.nowText({ status: 'phone_offline' }), 'Phone offline');
+  assert.strictEqual(C.nowText({ status: 'on_call', call_state: 'connected', confirmed: true }), 'On a call');
+  assert.strictEqual(C.nowText({ status: 'on_call', call_state: 'unconfirmed', confirmed: false }), 'On a call (unconfirmed)');
+  assert.strictEqual(C.nowText({ status: 'wrapup', seconds: 40 }), 'Wrap-up');
   assert.strictEqual(C.nowText({ status: 'idle', idle_minutes: 46 }), 'No calls for 46 min');
   assert.strictEqual(C.nowText({ status: 'not_started' }), 'No calls today');
   assert.strictEqual(C.nowText(null), '');

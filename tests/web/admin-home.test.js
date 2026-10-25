@@ -45,6 +45,24 @@ test('caller status words and levels', () => {
   assert.deepStrictEqual(H.statusInfo({ status: 'phone_offline' }), { text: 'Phone offline', level: 'danger' });
   assert.strictEqual(H.statusInfo(null).text, 'No calls today');
 });
+test('calls and wrap-up with their running time', () => {
+  assert.strictEqual(H.clock(192), '3:12');
+  assert.strictEqual(H.clock(0), '0:00');
+  assert.strictEqual(H.clock(3725), '1:02:05');
+  assert.strictEqual(H.clock(null), '');
+  assert.deepStrictEqual(H.statusInfo({ status: 'on_call', call_state: 'connected', confirmed: true, seconds: 192 }), { text: 'On a call · 3:12', level: 'ok' });
+  assert.strictEqual(H.statusInfo({ status: 'on_call', call_state: 'dialling', confirmed: true, seconds: 5 }).text, 'On a call · 0:05');
+  // Home ticks the timer on between refreshes.
+  assert.strictEqual(H.statusInfo({ status: 'on_call', call_state: 'connected', seconds: 192 }, 10.6).text, 'On a call · 3:22');
+  assert.strictEqual(H.statusInfo({ status: 'wrapup', seconds: 40 }).text, 'Wrap-up · 0:40');
+  assert.strictEqual(H.statusInfo({ status: 'wrapup' }).text, 'Wrap-up');
+  assert.strictEqual(H.statusInfo({ status: 'on_call', call_state: 'unconfirmed', confirmed: false, seconds: 61 }).text, 'On a call (unconfirmed) · 1:01');
+  assert.strictEqual(H.statusInfo({ status: 'on_call', confirmed: false }).text, 'On a call (unconfirmed)');
+  assert.strictEqual(H.ticks({ status: 'on_call', seconds: 3 }), true);
+  assert.strictEqual(H.ticks({ status: 'wrapup', seconds: 0 }), true);
+  assert.strictEqual(H.ticks({ status: 'on_call' }), false);
+  assert.strictEqual(H.ticks({ status: 'ready', seconds: 3 }), false);
+});
 test('results read as counts and words', () => {
   assert.strictEqual(H.resultsText([{ label: 'Paid', count: 5 }, { label: 'Will pay on date', count: 4 }]), '5 paid · 4 will pay on date');
   assert.strictEqual(H.resultsText([]), '—');
