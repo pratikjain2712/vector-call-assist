@@ -1,5 +1,6 @@
-// The Reports tab: Fees collection with and without money access, "Send these back to callers", the sales
-// funnel, and Excel downloads that follow the money rules. Fake backend only: the numbers come from
+// The Reports tab: Fees collection with and without money access (from the fee ledger, Phase A.2), "Send these
+// back to callers", the sales funnel, and Excel downloads that follow the money rules. The fallback without a
+// fee ledger and the ledger chart are in ledger-reports.spec.js. Fake backend only: the numbers come from
 // tests/e2e/fake-backend.js (the SQL itself is tested in supabase/tests/reports_test.sql).
 const fs = require('node:fs');
 const path = require('node:path');
@@ -42,30 +43,40 @@ test('a manager without money access sees counts only, and the Excel file has no
   await openReports(page);
   await expect(page.locator('#rp-pick-fees')).toHaveAttribute('aria-pressed', 'true');
   const cards = page.locator('#fees-cards');
-  await expect(cards).toContainText('Total due');
-  await expect(cards).toContainText('240');
-  await expect(cards).toContainText('reported by caller');
+  await expect(cards).toContainText('Total due now');
+  await expect(cards).toContainText('150 students · fee ledger');
+  await expect(cards).toContainText('4 payments · fee ledger');
+  await expect(cards).toContainText('Broken promises');
   await expect(cards).not.toContainText('₹');
+  await expect(page.locator('#fees-reported')).toContainText('85 calls');
+  await expect(page.locator('#fees-reported')).toContainText('reported by caller');
   await expect(page.locator('#fees-money-note')).toBeVisible();
   await expect(page.locator('#promise-head')).not.toContainText('Amount');
-  await expect(page.locator('#promise-body tr')).toHaveCount(3);
+  await expect(page.locator('#promise-head')).toContainText('Fee ledger');
+  await expect(page.locator('#promise-body tr')).toHaveCount(4);
   await expect(page.locator('#promise-body')).toContainText('Asha · 10-B');
   await expect(page.locator('#promise-body')).toContainText('2 days late');
   await expect(page.locator('#promise-body')).toContainText('Due today');
   await expect(page.locator('#promise-body')).toContainText('Not yet due');
+  await expect(page.locator('#promise-body tr', { hasText: 'Asha · 10-B' })).toContainText('Partly paid');
+  await expect(page.locator('#promise-body tr', { hasText: 'Parent Today' })).toContainText('Not paid');
+  await expect(page.locator('#promise-body tr', { hasText: 'Parent Later' })).toContainText('Not in the fee ledger');
+  await expect(page.locator('#promise-body tr', { hasText: 'Parent Paid' })).toContainText(/Paid on \d+ \w{3} by UPI/);
+  await expect(page.locator('#promise-body')).not.toContainText('₹');
 
   const x = await downloadExcel(page);
   expect(x.name).toMatch(/^vector-fees-collection-\d{4}-\d{2}-\d{2}-to-\d{4}-\d{2}-\d{2}\.xlsx$/);
-  expect(Object.keys(x.sheets)).toEqual(['Fees collection', 'Promises due this week']);
+  expect(Object.keys(x.sheets)).toEqual(['Fees collection', 'Promises due this week', 'Ledger']);
   expect(JSON.stringify(x.sheets)).not.toContain('₹');
-  expect(x.sheets['Fees collection'][1]).toEqual(['Total due', 240]);
+  expect(x.sheets['Fees collection'][1]).toEqual(['Total due now (fee ledger, students)', 150]);
+  expect(x.sheets.Ledger[1]).toEqual(['By mode', 'UPI', 2]);
   expect(backend.db.reports.exports).toEqual([]);   // nothing to log: no money left the server
   expect(errors).toEqual([]);
 });
 
 test('send these back to callers sends the promises due today or late', async ({ page, backend }) => {
   await openReports(page);
-  await expect(page.locator('#promise-body tr')).toHaveCount(3);
+  await expect(page.locator('#promise-body tr')).toHaveCount(4);   // 3 open promises and 1 the ledger closed (not sent back)
   await page.locator('#fees-send').click();
   await expect(page.locator('#confirm')).toBeVisible();
   await expect(page.locator('#confirm-text')).toContainText('2 parents');
@@ -79,18 +90,27 @@ test('an admin with money access sees ₹, and the money export is logged before
   backend.db.reports.money = true;
   await openReports(page);
   const cards = page.locator('#fees-cards');
-  await expect(cards).toContainText('₹43,20,000');
-  await expect(cards).toContainText('₹14,40,000');
-  await expect(cards).toContainText('80 parents · reported by caller');
+  await expect(cards).toContainText('₹27,00,000');
+  await expect(cards).toContainText('₹18,000');
+  await expect(cards).toContainText('₹11,000');
+  await expect(page.locator('#fees-modes')).toContainText('UPI');
+  await expect(page.locator('#fees-modes')).toContainText('₹6,000');
+  await expect(page.locator('#fees-reported')).toContainText('85 calls as paid in these dates (₹14,40,000), reported by caller');
   await expect(page.locator('#fees-money-note')).toBeHidden();
   await expect(page.locator('#promise-head')).toContainText('Amount');
   await expect(page.locator('#promise-body')).toContainText('₹18,000');
+  await expect(page.locator('#promise-body tr', { hasText: 'Asha · 10-B' })).toContainText('Partly paid (₹4,000)');
 
   const x = await downloadExcel(page);
-  expect(backend.db.reports.exports).toEqual([{ what: 'fees_report', rows: 7 }]);
-  expect(x.sheets['Fees collection'][0]).toEqual(['Measure', 'Parents', 'Amount (₹)']);
-  expect(x.sheets['Fees collection'][1]).toEqual(['Total due', 240, 4320000]);
+  // 4 promises, 5 summary lines, 3 modes and 4 days with payments.
+  expect(backend.db.reports.exports).toEqual([{ what: 'fees_report', rows: 16 }]);
+  expect(x.sheets['Fees collection'][0]).toEqual(['Measure', 'Count', 'Amount (₹)']);
+  expect(x.sheets['Fees collection'][1]).toEqual(['Total due now (fee ledger, students)', 150, 2700000]);
+  expect(x.sheets['Fees collection'][5]).toEqual(['Paid after a call (reported by caller, calls)', 85, 1440000]);
   expect(x.sheets['Promises due this week'][0]).toContain('Promised amount (₹)');
+  expect(x.sheets['Promises due this week'][0]).toContain('In the fee ledger');
+  expect(x.sheets.Ledger[0]).toEqual(['Collected', 'Mode or day', 'Payments', 'Amount (₹)']);
+  expect(x.sheets.Ledger[1]).toEqual(['By mode', 'UPI', 2, 6000]);
 });
 
 test('the sales funnel shows each step, the biggest drop and a note on the pitch step', async ({ page }) => {
@@ -138,6 +158,8 @@ test('the Reports tab fits a phone screen', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 740 });
   await openReports(page);
   await expect(page.locator('#fees-cards')).toContainText('Total due');
+  await expect(page.locator('#fees-days .bar-row')).toHaveCount(7);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
   for (const id of ['fees', 'funnel', 'results', 'lost', 'weekly']) {
     await page.locator('#rp-pick-' + id).click();
     await expect(page.locator('#rp-pick-' + id)).toHaveAttribute('aria-pressed', 'true');

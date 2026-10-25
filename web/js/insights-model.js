@@ -369,6 +369,30 @@
     return { rows: list, total, top };
   }
 
+  // Phase A.2: promises measured against the fee ledger. pvp: promises_vs_payments(p_campaign). Returns null
+  // when no promise of the campaign can be checked in the ledger (no lead linked to a student), so the page uses
+  // the caller-reported method. Otherwise { buckets, kept, partPaid, broken, waiting, judged, noStudent, promises }:
+  // buckets in the shape of admin_insights_promises (for promiseBuckets), by days from the call to the promised
+  // date; judged = kept + part paid + broken (part paid counts as not kept). Buckets use the rows sent (newest 500).
+  const LEDGER_BUCKETS = [['1–3 days', 1, -100000, 3], ['4–7 days', 2, 4, 7], ['8–14 days', 3, 8, 14], ['15+ days', 4, 15, 100000]];
+  function ledgerPromises(pvp) {
+    const d = pvp || {};
+    const promises = num(d.promises), noStudent = num(d.no_student);
+    if (!(promises - noStudent > 0)) return null;
+    const buckets = LEDGER_BUCKETS.map(([bucket, order]) => ({ bucket, bucket_order: order, promises: 0, kept: 0, waiting: 0 }));
+    (Array.isArray(d.rows) ? d.rows : []).forEach((r) => {
+      if (!r || r.state === 'no_student' || !r.promised_on || !r.promised_date) return;
+      const away = daysBetween(String(r.promised_on).slice(0, 10), String(r.promised_date).slice(0, 10));
+      const i = LEDGER_BUCKETS.findIndex((b) => away >= b[2] && away <= b[3]);
+      if (i < 0) return;
+      if (r.state === 'waiting') buckets[i].waiting++;
+      else buckets[i].promises++;
+      if (r.state === 'kept') buckets[i].kept++;
+    });
+    const kept = num(d.kept), partPaid = num(d.part_paid), broken = num(d.broken);
+    return { buckets, kept, partPaid, broken, waiting: num(d.waiting), judged: kept + partPaid + broken, noStudent, promises };
+  }
+
   // rows from admin_insights_promises. Adds the kept share; tip when far dates are kept clearly less often.
   function promiseBuckets(rows) {
     const list = (rows || []).map((r) => ({ bucket: r.bucket, order: num(r.bucket_order), promises: num(r.promises),
@@ -502,6 +526,6 @@
     dayNumber, addDays, daysBetween, wilson, relErrShare,
     baseline, defaultPlan, paceFor, pickupFor, forecast, pastPath, perCallerForTarget, gapSuggestions,
     heatGrid, bestCells, callHoursFromGrid, hourText, hourRange, callHoursText, dayName, pctText, heatTip, level,
-    callEnds, promiseBuckets, coaching, durationText, stepTips, teamSteps, compare, unitLabel,
+    callEnds, promiseBuckets, ledgerPromises, coaching, durationText, stepTips, teamSteps, compare, unitLabel,
   };
 }));

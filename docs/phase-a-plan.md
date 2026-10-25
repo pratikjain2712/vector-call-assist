@@ -169,7 +169,7 @@ Decisions (25 Oct): payments are recorded by a new Accounts role (and owners), c
 - [ ] M · Admin Fees tab: students list with filters and balance, student page (fees, payments, calls), record payment, receipt, Excel import of students and fees
 - [ ] M · Fees campaign from the ledger: pick class, board and due date; leads carry the student and the live balance; a recorded payment updates the lead and stops calls when nothing is due
 - [ ] S · Admission confirmed on a call becomes a student (fee plan added by Accounts)
-- [ ] M · Reports, Home and Insights: collected = ledger payments; promised vs actually paid; promises kept measured against the ledger
+- [x] M · Reports, Home and Insights: collected = ledger payments; promised vs actually paid; promises kept measured against the ledger (migration `20261025150000_ledger_reports.sql`)
 - [ ] S · Caller lead card shows the ledger: balance, last payment (amount, date, mode)
 - [ ] M · Demo data: students, fee plans and payments; campaigns tagged by class and board and open to all callers
 - [ ] L · Central template library: the Vector team writes and updates templates (AI on our side); every institute picks from the shared library (by purpose, class, board, language); new or changed templates reach all institutes without a release

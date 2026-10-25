@@ -5,7 +5,9 @@
    The weekly brief and the script test come from js/admin/insights-extra.js (another module, loaded when it
    exists) into #insights-brief and #insights-abtest.
    Reads: admin_insights_setup, admin_insights_forecast, admin_insights_summary, admin_insights_best_time,
-   admin_insights_call_ends, admin_insights_promises, admin_insights_coaching, admin_insights_step_coaching.
+   admin_insights_call_ends, admin_insights_promises, admin_insights_coaching, admin_insights_step_coaching, and
+   promises_vs_payments (Phase A.2: "Are promises kept?" is measured against the fee ledger when the campaign has
+   leads linked to students, else on what callers reported).
    Writes: admin_apply_insights_plan, admin_set_call_hours, admin_set_campaign_goal, add_supervisor_note and,
    when the database has it, admin_assign_practice. The database checks the admin role on every call.
    Money: ₹ only when the server allows it (the forecast says kind 'amount'); otherwise counts. Paid amounts are
@@ -617,9 +619,26 @@
         out.appendChild(el('p', { className: 'muted', text: 'Promises are tracked on fees and renewal campaigns.' }));
         return;
       }
-      const rows = (await rpc('admin_insights_promises', Object.assign({ p_tz: ctx.tz }, args))) || [];
+      // Phase A.2: when the campaign's leads are linked to the fee ledger, a promise is kept when the payment is in
+      // the ledger (promises_vs_payments). Otherwise, as before, when a later call reported it paid.
+      let pvp = null;
+      try { pvp = await ctx.rpc('promises_vs_payments', { p_campaign: campaign.id }); } catch (err) { pvp = null; }
+      if (seq !== loadSeq) return;
+      const lp = M.ledgerPromises(pvp);
+      const rows = lp ? lp.buckets : (await rpc('admin_insights_promises', Object.assign({ p_tz: ctx.tz }, args))) || [];
       if (seq !== loadSeq) return;
       const r = M.promiseBuckets(rows);
+      const method = el('p', { className: 'ins-method small', id: 'ins-promises-method', 'data-method': lp ? 'ledger' : 'calls' });
+      if (lp) {
+        method.textContent = 'Measured against the fee ledger: a promise is kept when the payment is recorded by ' +
+          (Number(pvp.grace_days) || 2) + ' days after the promised date. ' + S.count(lp.kept) + ' kept, ' +
+          S.count(lp.partPaid) + ' partly paid, ' + S.count(lp.broken) + ' broken, ' + S.count(lp.waiting) + ' still waiting.' +
+          (lp.noStudent ? ' ' + S.count(lp.noStudent) + ' promises are not linked to a student, so they are not counted.' : '');
+      } else {
+        method.textContent = 'Measured on what callers reported: a promise is kept when a later call says it was ' +
+          (campaign.call_type_key === 'fees' ? 'paid' : 'renewed') + '. This campaign has no leads linked to the fee ledger.';
+      }
+      out.appendChild(method);
       out.appendChild(el('p', { className: 'muted small', text: (campaign.call_type_key === 'fees' ? 'Paid' : 'Renewed') +
         ' by the promised date, by how far away the date was. ' + S.count(r.judged) + ' promises with the date passed.' }));
       if (!r.judged) { out.appendChild(el('p', { className: 'muted', text: 'No promise dates have passed yet.' })); return; }

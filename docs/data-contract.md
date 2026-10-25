@@ -553,3 +553,21 @@ Internal (granted to nobody): `student_balance_rows(p_institute, p_student defau
 **For the demo data:** add students, fee items and payments with the functions above (or with direct inserts as the table owner). If the demo's "Admission confirmed" uses a key other than `admission_done` / `admission_confirmed`, set `call_type_results.creates_student = true` on it. Tag campaigns with `class_label` / `board`.
 <!-- end Phase A.2 -->
 
+<!-- Phase A.2: reports -->
+### Reports, Home and Insights from the ledger
+
+_Migration `20261025150000_ledger_reports.sql`, tests `supabase/tests/ledger_reports_test.sql`. Screens: `web/js/admin/reports.js`, `home.js`, `insights.js`._
+
+Money received = ledger payments (not reversed, not reversals, not opening imports). What callers marked Paid stays apart, labelled "reported by caller". A **promise** = a fees lead with a promised date that is open (status `promised`), or closed (`done`) in the last 7 days. **Promised on** = the day of the latest uncorrected call on the lead with a promised date. **Ledger state**: `no_student` (lead not linked), `paid` (payments since the promise reach the promised amount, or the lead was closed), `part_paid`, `not_paid`. **Broken** = open, date passed, not `paid`. `admin_fees_ledger` and `admin_promises_ledger`: owners, managers and accounts (`can_read_ledger`, internal `report_require_ledger`), so an Accounts seat can open Reports > Fees collection (the page then shows only that report, leaves out the caller-reported line and "Send these back", and its Excel export is logged with `log_money_export`, which accounts may call). `admin_home_ledger`: owners and managers only. Amounts null and `money_hidden` true unless `can_see_money()`.
+
+| Function | Returns | What |
+|---|---|---|
+| `admin_fees_ledger(p_institute uuid, p_from date, p_to date, p_campaign uuid default null, p_seat uuid default null)` | jsonb `{from, to, campaign_id, today, money_hidden, has_ledger, linked_leads, due_now {students, amount}, collected {payments, reversed, total, by_mode, by_day}, promised {leads, amount}, broken {leads, part_paid, amount}, promises_paid {leads}}` | Reports > Fees collection tiles. Due now: active students (of the campaign, when picked) with balance due now > 0. Collected: `ledger_collected`. Promised: open promises dated today or later, not paid. Amounts of promised and broken = still to pay. The caller filter applies to promises only. Range ≤ 400 days. |
+| `admin_promises_ledger(p_institute uuid, p_campaign uuid default null, p_seat uuid default null, p_days int default 7)` | table `(lead_id, name, extra, student_id, amount, promised_date, days_late, promised_on, seat_id, caller, campaign_id, campaign, next_call_at, lead_status, ledger_state, paid_amount, paid_on, paid_mode, money_hidden)` | "Promises due this week": dated up to today + `p_days` − 1, open or paid in the ledger; oldest first, 500 at most. `paid_on` / `paid_mode` = latest payment since the promise. "Send these back" skips `paid` rows and closed leads. |
+| `admin_home_ledger(p_day text default 'today', p_campaign uuid default null)` | jsonb `{day, from, to, money_hidden, has_ledger, collected {payments, amount}, promises_due_unpaid {count, amount}, released_today {count, idle, inactive, revoked, admin}}` | Home: "Collected today (ledger)" (day / yesterday / Monday–Sunday), "N promises due today not yet paid in the ledger", "N follow-ups returned to the pool today" (audit `lead.released`, today in the institute's time zone; with a campaign, leads of that campaign). |
+
+Internal (granted to nobody): `report_fee_promise_rows(p_institute, p_campaign, p_seat)`, `report_check_days(p_from, p_to)`, `report_require_ledger(p_institute)`.
+
+Pages: without these functions, or when `has_ledger` is false, Reports and Home show what callers reported, as before. Insights "Are promises kept?" calls `promises_vs_payments(p_campaign)`; when at least one promise is linked to a student it is measured against the ledger (buckets from `rows` by days from `promised_on` to `promised_date`; part paid counts as not kept), else `admin_insights_promises`, with a note saying which.
+<!-- end Phase A.2: reports -->
+

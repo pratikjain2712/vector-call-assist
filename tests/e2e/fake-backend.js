@@ -322,6 +322,77 @@ function createFakeBackend(world) {
     return json(200, own);
   }
   // End of Phase A: reports.
+  // Phase A.2: reports. The fee-ledger numbers of migration 20261025150000 (admin_fees_ledger,
+  // admin_promises_ledger, admin_home_ledger) and promises_vs_payments (20261025130000) for institute A. Same
+  // money rule as the block above: amounts only when db.reports.money is true. A test turns the ledger off with
+  // db.ledgerReports.hasLedger = false (the pages then show what callers reported), sets the Home numbers in
+  // db.ledgerReports.home, and links an Insights campaign to the ledger with db.ledgerReports.pvp[campaignId].
+  db.ledgerReports = {
+    hasLedger: true,
+    home: { collected: { payments: 3, amount: 12500 }, promises_due_unpaid: { count: 2, amount: 9000 },
+      released_today: { count: 0, idle: 0, inactive: 0, revoked: 0, admin: 0 } },
+    pvp: {},
+    // What the ledger shows for the sample promises (by parent name), and one promise the ledger closed.
+    states: {
+      'Parent Late': { ledger_state: 'part_paid', paid_amount: 4000, paid_on: null, paid_mode: null, lead_status: 'promised' },
+      'Parent Today': { ledger_state: 'not_paid', paid_amount: 0, paid_on: null, paid_mode: null, lead_status: 'promised' },
+      'Parent Later': { ledger_state: 'no_student', paid_amount: 0, paid_on: null, paid_mode: null, lead_status: 'promised' },
+    },
+    paid: { lead_id: crypto.randomUUID(), name: 'Parent Paid', extra: { Student: 'Meera', Class: '9-A' }, amount: 12000, days_late: 1,
+      caller: 'Rep 2', ledger_state: 'paid', paid_amount: 12000, paid_on: 2, paid_mode: 'upi', lead_status: 'done' },
+  };
+  const ledgerMoney = (v) => (db.reports.money ? v : null);
+  Object.assign(RPC, {
+    admin_fees_ledger: (u, a) => {
+      if (!requireAdmin(u, a.p_institute)) return reportsDenied();
+      if (!a.p_from || !a.p_to || a.p_from > a.p_to) return pgErr(400, '22023', 'the from date must be on or before the to date');
+      const L = db.ledgerReports;
+      const day = (n) => reportsDay(n);
+      return json(200, {
+        from: a.p_from, to: a.p_to, campaign_id: a.p_campaign || null, today: day(0), money_hidden: !db.reports.money,
+        has_ledger: L.hasLedger, linked_leads: L.hasLedger ? 180 : 0,
+        due_now: { students: 150, amount: ledgerMoney(2700000) },
+        collected: { payments: 4, reversed: 1, total: ledgerMoney(18000),
+          by_mode: [{ mode: 'bank', payments: 1, amount: ledgerMoney(10000) }, { mode: 'cash', payments: 1, amount: ledgerMoney(2000) },
+            { mode: 'upi', payments: 2, amount: ledgerMoney(6000) }],
+          by_day: [{ day: day(3), payments: 1, amount: ledgerMoney(5000) }, { day: day(2), payments: 1, amount: ledgerMoney(10000) },
+            { day: day(1), payments: 1, amount: ledgerMoney(2000) }, { day: day(0), payments: 1, amount: ledgerMoney(1000) }] },
+        promised: { leads: 2, amount: ledgerMoney(11000) },
+        broken: { leads: 6, part_paid: 2, amount: ledgerMoney(54000) },
+        promises_paid: { leads: 1 },
+      });
+    },
+    admin_promises_ledger: (u, a) => {
+      if (!requireAdmin(u, a.p_institute)) return reportsDenied();
+      const L = db.ledgerReports;
+      const rows = db.reports.promises.map((p) => Object.assign({}, p, L.states[p.name] || {})).concat([L.paid]);
+      return json(200, rows.map((p) => ({ ...p, amount: ledgerMoney(p.amount), paid_amount: ledgerMoney(p.paid_amount),
+        paid_on: typeof p.paid_on === 'number' ? reportsDay(p.paid_on) : p.paid_on, promised_date: reportsDay(p.days_late),
+        promised_on: reportsDay(p.days_late + 5), student_id: p.ledger_state === 'no_student' ? null : crypto.randomUUID(),
+        seat_id: null, campaign_id: reportsCampaign, campaign: 'Oct fees', next_call_at: null, money_hidden: !db.reports.money }))
+        .sort((x, y) => (x.promised_date < y.promised_date ? -1 : x.promised_date > y.promised_date ? 1 : 0)));
+    },
+    admin_home_ledger: (u, a) => {
+      const s = u && seatOf(u.id);
+      if (!s || s.role !== 'admin') return pgErr(403, '42501', 'only an admin of this institute can see this');
+      if (!['today', 'yesterday', 'week'].includes(a.p_day)) return pgErr(400, '22023', 'day must be today, yesterday or week');
+      const L = db.ledgerReports;
+      const h = L.home;
+      return json(200, { day: a.p_day, from: reportsDay(0), to: reportsDay(0), money_hidden: !db.reports.money, has_ledger: L.hasLedger,
+        collected: { payments: h.collected.payments, amount: ledgerMoney(h.collected.amount) },
+        promises_due_unpaid: { count: h.promises_due_unpaid.count, amount: ledgerMoney(h.promises_due_unpaid.amount) },
+        released_today: h.released_today });
+    },
+    promises_vs_payments: (u, a) => {
+      const s = u && seatOf(u.id);
+      if (!s || s.role !== 'admin') return pgErr(400, '42501', 'campaign not found');
+      const p = db.ledgerReports.pvp[a.p_campaign];
+      return json(200, p ? { ...p, campaign_id: a.p_campaign, money_hidden: !db.reports.money }
+        : { campaign_id: a.p_campaign, grace_days: 2, promises: 0, kept: 0, part_paid: 0, broken: 0, waiting: 0, no_student: 0,
+          promised_amount: null, paid_amount: null, money_hidden: true, rows: [] });
+    },
+  });
+  // End of Phase A.2: reports.
   const ADMIN_EMPTY = ['admin_weekly_summary', 'admin_rep_progress', 'list_supervisor_notes'];
   // Phase A: insights (canned answers in fake-insights.js)
   const insights = createFakeInsights(world, { requireAdmin, json, pgErr });
