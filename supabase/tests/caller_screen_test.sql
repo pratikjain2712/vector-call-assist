@@ -67,10 +67,10 @@ insert into seats (id, institute_id, user_id, label, role, admin_kind, status) v
  (:'s_b', :'inst_i', :'u_b', 'Caller B', 'rep', null, 'active'),
  (:'s_c', :'inst_i', :'u_c', 'Caller C', 'rep', null, 'active'),
  (:'s_x', :'inst_j', :'u_x', 'Owner J', 'admin', 'owner', 'active');
-insert into campaigns (id, institute_id, name, call_type_id, status, daily_target) values
- (:'k_fee', :'inst_i', 'Oct fees', (select id from call_types where key='fees' and institute_id is null), 'running', 40),
- (:'k_sal', :'inst_i', 'Sales', (select id from call_types where key='sales' and institute_id is null), 'paused', null),
- (:'k_drf', :'inst_i', 'Draft', (select id from call_types where key='sales' and institute_id is null), 'draft', null);
+insert into campaigns (id, institute_id, name, call_type_id, status, daily_target, open_to_all) values
+ (:'k_fee', :'inst_i', 'Oct fees', (select id from call_types where key='fees' and institute_id is null), 'running', 40, false),
+ (:'k_sal', :'inst_i', 'Sales', (select id from call_types where key='sales' and institute_id is null), 'paused', null, false),
+ (:'k_drf', :'inst_i', 'Draft', (select id from call_types where key='sales' and institute_id is null), 'draft', null, false);
 insert into campaign_members (campaign_id, seat_id, institute_id) values
  (:'k_fee', :'s_a', :'inst_i'), (:'k_fee', :'s_b', :'inst_i'), (:'k_sal', :'s_a', :'inst_i'), (:'k_drf', :'s_a', :'inst_i');
 insert into leads (id, institute_id, campaign_id, name, phone, extra, amount_due, assigned_seat_id, status, next_call_at, created_at) values
