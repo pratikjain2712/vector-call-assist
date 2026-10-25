@@ -453,12 +453,13 @@
   }
 
   function showReady(st, session, redirect) {
-    var target = st.role === 'admin' ? 'admin.html' : 'app.html';
+    var target = st.role === 'admin' || st.role === 'accounts' ? 'admin.html' : 'app.html';   // Phase A.2: fees (Accounts)
     if (redirect) { location.replace(target); return; }
     $('openLink').setAttribute('href', target);
     $('whoami').textContent = session.user.email + ' · ' + st.institute_name;
     $('readyText').textContent = (st.role === 'admin'
       ? 'You are the admin of this account.'
+      : st.role === 'accounts' ? 'You have an accounts seat: fees and payments.'   // Phase A.2: fees
       : 'You have a rep seat on this login.') + trialText(st);
     show('stateReady');
   }
