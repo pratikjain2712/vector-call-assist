@@ -1,0 +1,3021 @@
+[
+  {
+    "key": "fees_reminder_polite",
+    "name": "Fee reminder before the due date",
+    "call_type": "fees",
+    "audience": "Parents of current students",
+    "about": "A friendly reminder a few days before the fee is due, and a date when the parent will pay.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "en",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Hello, am I speaking with {name}?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Introduction",
+        "stage": 0,
+        "say": ["This is {me} from {institute}.", "I am calling about {student}'s fee.", "Is this a good time to talk for two minutes?"],
+        "opts": [{"label": "Yes", "to": "reminder"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "reminder",
+        "title": "Reminder",
+        "stage": 4,
+        "say": ["This is a friendly reminder.", "The fee of {amount_due} is due on {due_date}.", "Will you be able to pay by then?"],
+        "tip": "Say the amount and the date slowly. Do not rush.",
+        "opts": [{"label": "Will pay", "to": "promise"}, {"label": "Already paid", "to": "already"}, {"label": "Needs time", "to": "time"}]
+      },
+      {
+        "id": "time",
+        "title": "Needs more time",
+        "stage": 4,
+        "say": ["No problem. Thank you for telling me.", "Which date would be possible for you?"],
+        "tip": "Listen first. Do not argue. Any honest date is fine.",
+        "opts": [{"label": "Gives a date", "to": "promise"}, {"label": "Cannot pay", "to": "refused"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "promise",
+        "title": "Will pay on date",
+        "stage": 5,
+        "result": "will_pay_on",
+        "say": ["Thank you. Please tell me the date, and I will note it.", "You can pay at the office or online."],
+        "tip": "Repeat the date and the amount back to them.",
+        "check": ["Write every way to pay that your institute accepts (office counter, UPI, bank transfer, cheque) and the office hours."]
+      },
+      {
+        "id": "already",
+        "title": "Says already paid",
+        "stage": 5,
+        "result": "already_paid",
+        "say": ["Thank you! I will check this with the accounts office.", "If you have the receipt number or the date you paid, please tell me."],
+        "tip": "Write the receipt number or date in the note."
+      },
+      {
+        "id": "refused",
+        "title": "Cannot pay now",
+        "stage": 5,
+        "result": "refused",
+        "say": ["I understand. I will tell the office.", "Thank you for your time, {name}."],
+        "tip": "Note the reason in their words. Be kind."
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Sorry to trouble you. Have a good day."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["No problem. When is a good time to call you back?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {
+        "check": ["Write your rule for paying in parts (how many parts, by when, who approves), or remove this answer."],
+        "label": "Can I pay in parts?",
+        "answer": "Let me check the rule for this with the office, and I will tell you."
+      },
+      {"label": "Please tell me the amount again", "answer": "Sure. The amount due is {amount_due}, and the due date is {due_date}."},
+      {
+        "check": ["Write every way to pay that your institute accepts (office counter, UPI, bank transfer, cheque) and the office hours."],
+        "label": "Can I pay online?",
+        "answer": "Yes. You can pay online or at the office. I can send the details on WhatsApp."
+      },
+      {
+        "check": ["Confirm the office can share a break-up of the fee."],
+        "label": "Why is the fee so high?",
+        "answer": "I understand. I can send you the fee details on WhatsApp, and the accounts office can explain any part of it."
+      },
+      {
+        "check": ["Write your late fee rule (amount and the date it starts), or write that there is no late fee."],
+        "label": "Is there a late fee?",
+        "answer": "Let me tell you the rule exactly, so there is no confusion."
+      },
+      {
+        "check": ["Say how the receipt is given: printed, on WhatsApp or in the app."],
+        "label": "Will I get a receipt?",
+        "answer": "Yes. The office gives a receipt for every payment."
+      }
+    ]
+  },
+  {
+    "key": "fees_overdue",
+    "name": "Overdue fee reminder",
+    "call_type": "fees",
+    "audience": "Parents whose fee is past the due date",
+    "about": "A calm, polite call when a fee is past its due date, to get a date for payment or find out what is wrong.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "en",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Hello, am I speaking with {name}?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Introduction",
+        "stage": 0,
+        "say": ["This is {me} from {institute}.", "I am calling about {student}'s fee.", "Is this a good time to talk for two minutes?"],
+        "opts": [{"label": "Yes", "to": "due"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "due",
+        "title": "Fee pending",
+        "stage": 4,
+        "say": [
+          "Our records show that the fee of {amount_due} was due on {due_date}.",
+          "We have not received it yet. Sometimes this gets missed.",
+          "When would you be able to pay?"
+        ],
+        "tip": "Speak calmly. Many parents simply forgot.",
+        "opts": [{"label": "Gives a date", "to": "promise"}, {"label": "Already paid", "to": "already"}, {"label": "Has a problem", "to": "problem"}]
+      },
+      {
+        "id": "problem",
+        "title": "Has a problem",
+        "stage": 4,
+        "say": ["I understand. Thank you for telling me.", "Would paying a part now, and the rest later, help you?"],
+        "tip": "Listen first. Do not argue. Never talk about the child in a bad way.",
+        "check": ["Write your rule for paying in parts (how many parts, by when, who approves), or remove the second line."],
+        "opts": [{"label": "Gives a date", "to": "promise"}, {"label": "Cannot pay", "to": "refused"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "promise",
+        "title": "Will pay on date",
+        "stage": 5,
+        "result": "will_pay_on",
+        "say": ["Thank you. Please tell me the date and the amount, and I will note it.", "You can pay at the office or online."],
+        "tip": "Repeat the date and the amount back to them.",
+        "check": ["Write every way to pay that your institute accepts (office counter, UPI, bank transfer, cheque) and the office hours."]
+      },
+      {
+        "id": "already",
+        "title": "Says already paid",
+        "stage": 5,
+        "result": "already_paid",
+        "say": [
+          "Thank you! I am sorry for the trouble. I will check this with the accounts office.",
+          "If you have the receipt number or the date you paid, please tell me."
+        ],
+        "tip": "Write the receipt number or date in the note."
+      },
+      {
+        "id": "refused",
+        "title": "Cannot pay now",
+        "stage": 5,
+        "result": "refused",
+        "say": ["I understand. I will tell the office, and they will talk with you.", "Thank you for your time, {name}."],
+        "tip": "Note the reason in their words. Be kind."
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Sorry to trouble you. Have a good day."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["No problem. When is a good time to call you back?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {"label": "Sorry, I forgot", "answer": "No problem at all, it happens. Which date suits you to pay?"},
+      {"label": "Money is tight this month", "answer": "I understand. Tell me a date that works for you, and I will note it down."},
+      {
+        "check": ["Write your rule for paying in parts (how many parts, by when, who approves), or remove this answer."],
+        "label": "Can I pay in parts?",
+        "answer": "Let me check the rule for this with the office, and I will tell you."
+      },
+      {
+        "check": ["Write who decides on late fee waivers and how the parent hears back, or remove this answer if there is no late fee."],
+        "label": "Can you waive the late fee?",
+        "answer": "I cannot decide that myself. I will pass your request to the office, and they will reply to you."
+      },
+      {
+        "label": "Why are you calling again?",
+        "answer": "Sorry for calling again. Our records still show the fee as pending. If you have paid, please tell me the date so we can match it."
+      },
+      {"label": "I will pay when I come to school", "answer": "That is fine. Which day will you come? I will note it."}
+    ]
+  },
+  {
+    "key": "fees_part_payment",
+    "name": "Fee in parts (instalments)",
+    "call_type": "fees",
+    "audience": "Parents with a large pending fee",
+    "about": "Offer to split a pending fee into parts, and note the first amount and date.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "en",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Hello, am I speaking with {name}?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Introduction",
+        "stage": 0,
+        "say": [
+          "This is {me} from {institute}.",
+          "I am calling about {student}'s pending fee of {amount_due}.",
+          "Is this a good time to talk for two minutes?"
+        ],
+        "opts": [{"label": "Yes", "to": "offer"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "offer",
+        "title": "Offer parts",
+        "stage": 4,
+        "say": ["We understand that paying it all at once can be hard.", "{institute} allows the fee to be paid in parts.", "Would that help you?"],
+        "tip": "Speak warmly. This call is to help, not to push.",
+        "check": ["Write your part-payment rule the way callers should say it: how many parts, the amount of each and the dates."],
+        "opts": [{"label": "Yes, in parts", "to": "plan"}, {"label": "Will pay in full", "to": "promise"}, {"label": "Cannot pay", "to": "refused"}]
+      },
+      {
+        "id": "plan",
+        "title": "First part",
+        "stage": 4,
+        "say": ["Thank you. How much can you pay first, and on which date?"],
+        "tip": "Note the first amount and the date. Repeat them back.",
+        "opts": [
+          {"label": "Gives amount and date", "to": "promise"},
+          {"label": "Paid a part already", "to": "part_paid"},
+          {"label": "Not sure yet", "to": "later"}
+        ]
+      },
+      {
+        "id": "promise",
+        "title": "Will pay on date",
+        "stage": 5,
+        "result": "will_pay_on",
+        "say": ["Thank you, {name}. I have noted the amount and the date.", "The office will confirm the plan for the rest of the fee."],
+        "check": ["Say who confirms the plan for the rest and how (WhatsApp, receipt, letter)."]
+      },
+      {
+        "id": "part_paid",
+        "title": "Paid a part",
+        "stage": 5,
+        "result": "paid_part",
+        "say": ["Thank you! Please tell me the amount and the date you paid.", "I will note it for the accounts office."],
+        "tip": "Note the amount, the date and how they paid."
+      },
+      {
+        "id": "refused",
+        "title": "Cannot pay now",
+        "stage": 5,
+        "result": "refused",
+        "say": ["I understand. I will tell the office, and they will talk with you.", "Thank you for your time, {name}."],
+        "tip": "Note the reason in their words. Be kind."
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Sorry to trouble you. Have a good day."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["No problem. When is a good time to call you back?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {
+        "check": ["Write your rule for paying in parts (how many parts, by when, who approves), or remove this answer."],
+        "label": "How many parts can I pay in?",
+        "answer": "Let me tell you exactly how the parts work."
+      },
+      {
+        "check": ["Confirm there is no extra charge, or write the real charge. Never hide a charge."],
+        "label": "Is there an extra charge for parts?",
+        "answer": "No, there is no extra charge for paying in parts."
+      },
+      {"label": "Can I pay the rest next month?", "answer": "I will note the date you suggest, and the office will confirm it with you."},
+      {
+        "label": "Our income has dropped",
+        "answer": "I am sorry to hear that, and thank you for telling me. Let us find an amount and a date that work for you."
+      },
+      {
+        "check": ["Confirm this is true for your institute, or change the answer."],
+        "label": "Will my child be affected?",
+        "answer": "No. This call is only to plan the payment. {student}'s classes go on as usual."
+      }
+    ]
+  },
+  {
+    "key": "fees_late_fee_notice",
+    "name": "Late fee notice",
+    "call_type": "fees",
+    "audience": "Parents whose fee is pending near or after the late fee date",
+    "about": "Tell a parent, calmly and once, when a late fee starts, and get a date for payment.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "en",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Hello, am I speaking with {name}?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Introduction",
+        "stage": 0,
+        "say": ["This is {me} from {institute}.", "I am calling about {student}'s fee.", "Is this a good time to talk for two minutes?"],
+        "opts": [{"label": "Yes", "to": "notice"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "notice",
+        "title": "Late fee rule",
+        "stage": 4,
+        "say": [
+          "The fee of {amount_due} was due on {due_date}.",
+          "As per the fee rules, a late fee is added after a fixed date.",
+          "I wanted to tell you, so you can plan."
+        ],
+        "tip": "Say the rule once, in a calm and kind voice. Do not repeat it.",
+        "check": ["Write your late fee rule exactly: the amount and the date it starts."],
+        "opts": [{"label": "Will pay", "to": "promise"}, {"label": "Already paid", "to": "already"}, {"label": "Asks to waive", "to": "waive"}]
+      },
+      {
+        "id": "waive",
+        "title": "Asks to waive",
+        "stage": 4,
+        "say": [
+          "I understand. I cannot decide this myself.",
+          "I will pass your request to the office, and they will reply to you.",
+          "When can you pay the fee?"
+        ],
+        "tip": "Do not promise a waiver.",
+        "check": ["Write who decides on a late fee waiver and how the parent hears back."],
+        "opts": [{"label": "Gives a date", "to": "promise"}, {"label": "Cannot pay", "to": "refused"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "promise",
+        "title": "Will pay on date",
+        "stage": 5,
+        "result": "will_pay_on",
+        "say": ["Thank you. Please tell me the date, and I will note it.", "You can pay at the office or online."],
+        "tip": "Repeat the date and the amount back to them.",
+        "check": ["Write every way to pay that your institute accepts (office counter, UPI, bank transfer, cheque) and the office hours."]
+      },
+      {
+        "id": "already",
+        "title": "Says already paid",
+        "stage": 5,
+        "result": "already_paid",
+        "say": [
+          "Thank you, and sorry for the trouble. I will check this with the accounts office.",
+          "If you have the receipt number or the date you paid, please tell me."
+        ]
+      },
+      {
+        "id": "refused",
+        "title": "Cannot pay now",
+        "stage": 5,
+        "result": "refused",
+        "say": ["I understand. I will tell the office, and they will talk with you.", "Thank you for your time, {name}."],
+        "tip": "Note the reason in their words. Be kind."
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Sorry to trouble you. Have a good day."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["No problem. When is a good time to call you back?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {
+        "check": ["Say where the late fee rule is written (fee notice, app, admission form)."],
+        "label": "Nobody told us about a late fee",
+        "answer": "I am sorry if it was not clear. That is why I am calling now. I can send the fee rules on WhatsApp."
+      },
+      {"label": "Why is there a late fee?", "answer": "The rule is the same for every parent. Paying by the date avoids it."},
+      {
+        "label": "I paid, but a day late",
+        "answer": "Thank you for paying. I will ask the accounts office how the rule applies, and they will tell you."
+      },
+      {
+        "check": ["Write how callers find the exact amount with the late fee, or remove this answer."],
+        "label": "How much do I pay if I pay today?",
+        "answer": "Let me check the exact amount for today with the office, so I tell you correctly."
+      },
+      {"label": "This is not fair", "answer": "I understand how you feel, and thank you for telling me. I will pass this to the office."}
+    ]
+  },
+  {
+    "key": "fees_already_paid_check",
+    "name": "Follow-up: says already paid",
+    "call_type": "fees",
+    "audience": "Parents who said they paid, when the office cannot find the payment",
+    "about": "Politely match a payment the parent says they made, without doubting them.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "en",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Hello, am I speaking with {name}?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Introduction",
+        "stage": 0,
+        "say": ["This is {me} from {institute}.", "I am calling about {student}'s fee payment.", "Is this a good time to talk for two minutes?"],
+        "opts": [{"label": "Yes", "to": "explain"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "explain",
+        "title": "Why we call",
+        "stage": 1,
+        "say": ["Earlier you told us the fee is paid. Thank you for that.", "We could not find it in our records yet, so I want to match it."],
+        "tip": "Never say they did not pay. Say we could not find it yet.",
+        "opts": [{"label": "Has the details", "to": "details"}, {"label": "Paid, no receipt", "to": "proof"}, {"label": "Not paid yet", "to": "promise"}]
+      },
+      {
+        "id": "details",
+        "title": "Payment details",
+        "stage": 4,
+        "say": [
+          "Thank you. Please tell me the date, the amount and how you paid.",
+          "If you have the receipt number or the transaction number, please tell me."
+        ],
+        "tip": "Never ask for a card number, PIN, OTP or bank password.",
+        "opts": [{"label": "Gave details", "to": "noted"}, {"label": "Needs to check", "to": "later"}]
+      },
+      {
+        "id": "noted",
+        "title": "Details noted",
+        "stage": 5,
+        "result": "already_paid",
+        "say": ["Thank you. I have noted this for the accounts office.", "They will check it and confirm to you."],
+        "check": ["Say how and when the office confirms (WhatsApp, call, receipt)."]
+      },
+      {
+        "id": "proof",
+        "title": "No receipt",
+        "stage": 5,
+        "result": "already_paid",
+        "say": [
+          "No problem. You can send a screenshot of the payment on WhatsApp, or show it at the office.",
+          "Please do not send any card number or PIN."
+        ],
+        "check": ["Confirm which WhatsApp number can receive payment proofs, or name another way."]
+      },
+      {
+        "id": "promise",
+        "title": "Will pay on date",
+        "stage": 5,
+        "result": "will_pay_on",
+        "say": ["No problem, and thank you for checking.", "On which date can you pay? I will note it."],
+        "check": ["Write every way to pay that your institute accepts (office counter, UPI, bank transfer, cheque) and the office hours."]
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Sorry to trouble you. Have a good day."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["No problem. When is a good time to call you back?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {
+        "label": "I already told you I paid",
+        "answer": "Yes, and thank you. I am only calling to match your payment in our records, so you are not called about it again."
+      },
+      {
+        "label": "Why don't you check yourself?",
+        "answer": "We did check, but we could not match it yet. The date or the transaction number will help us find it quickly."
+      },
+      {
+        "label": "I paid in cash at the counter",
+        "answer": "Thank you. Do you remember the date? I will pass this to the accounts office to check their register."
+      },
+      {"label": "Will I have to pay again?", "answer": "No. Once we match your payment, you will not be asked to pay it again."},
+      {
+        "label": "The money left my account",
+        "answer": "Thank you. A screenshot of the payment will help us find it. Please do not share any card number, PIN or OTP."
+      }
+    ]
+  },
+  {
+    "key": "fees_transport",
+    "name": "Bus (transport) fee reminder",
+    "call_type": "fees",
+    "audience": "Parents of students who use the school bus",
+    "about": "Remind a parent about the bus fee and answer simple transport questions.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "en",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Hello, am I speaking with {name}?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Introduction",
+        "stage": 0,
+        "say": ["This is {me} from {institute}.", "I am calling about {student}'s school bus fee.", "Is this a good time to talk for two minutes?"],
+        "opts": [{"label": "Yes", "to": "reminder"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "reminder",
+        "title": "Bus fee",
+        "stage": 4,
+        "say": ["The bus fee of {amount_due} is due on {due_date}.", "Will you be able to pay by then?"],
+        "tip": "Say the amount and the date slowly.",
+        "opts": [{"label": "Will pay", "to": "promise"}, {"label": "Already paid", "to": "already"}, {"label": "Has a question", "to": "question"}]
+      },
+      {
+        "id": "question",
+        "title": "Bus question",
+        "stage": 1,
+        "say": ["Sure. What would you like to know?"],
+        "tip": "Route, stop or timing questions: note them for the transport office. Do not guess.",
+        "opts": [{"label": "Will pay", "to": "promise"}, {"label": "Stopping the bus", "to": "stopping"}, {"label": "Needs the office", "to": "later"}]
+      },
+      {
+        "id": "promise",
+        "title": "Will pay on date",
+        "stage": 5,
+        "result": "will_pay_on",
+        "say": ["Thank you. Please tell me the date, and I will note it.", "You can pay at the office or online."],
+        "check": ["Write every way to pay that your institute accepts (office counter, UPI, bank transfer, cheque) and the office hours."]
+      },
+      {
+        "id": "already",
+        "title": "Says already paid",
+        "stage": 5,
+        "result": "already_paid",
+        "say": ["Thank you! I will check this with the accounts office.", "If you have the receipt number or the date you paid, please tell me."]
+      },
+      {
+        "id": "stopping",
+        "title": "Stopping the bus",
+        "stage": 5,
+        "result": "refused",
+        "say": ["Thank you for telling me. I will pass this to the transport office.", "They will tell you how to stop the bus service."],
+        "tip": "Choose the reason \"Stopping the bus\" when you save.",
+        "check": ["Write your rule for stopping the bus service (notice, form, last month charged)."]
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Sorry to trouble you. Have a good day."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["No problem. When is a good time to call you back?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {"label": "The bus comes late", "answer": "I am sorry about that. I will note it and pass it to the transport office today."},
+      {
+        "label": "Can the bus stop be changed?",
+        "answer": "I will pass this to the transport office, and they will tell you if it is possible."
+      },
+      {
+        "check": ["Write your one-way bus fee rule, or remove this answer."],
+        "label": "We use the bus only one way",
+        "answer": "Let me check the fee for one-way use with the office, and I will tell you."
+      },
+      {
+        "label": "Why did the bus fee go up?",
+        "answer": "I understand. The transport office can explain the new fee. Shall I ask them to call you?"
+      },
+      {
+        "check": ["If you want callers to say safety facts (attendant, GPS, driver checks), write only what is true."],
+        "label": "Is the bus safe?",
+        "answer": "I understand your concern. I will ask the transport in-charge to call you and answer it."
+      }
+    ]
+  },
+  {
+    "key": "fees_new_term",
+    "name": "New term fee announcement",
+    "call_type": "fees",
+    "audience": "Parents of current students",
+    "about": "Tell a parent the new term's fee and due date, answer questions, and note a payment date.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "en",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Hello, am I speaking with {name}?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Introduction",
+        "stage": 0,
+        "say": [
+          "This is {me} from {institute}.",
+          "I am calling about {student}'s fee for the new term.",
+          "Is this a good time to talk for two minutes?"
+        ],
+        "opts": [{"label": "Yes", "to": "announce"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "announce",
+        "title": "New term fee",
+        "stage": 4,
+        "say": ["The fee for the new term is {amount_due}, due by {due_date}.", "The full fee details will also come to you in writing."],
+        "tip": "This is information, not a reminder. Keep it light.",
+        "check": ["Say how parents get the full fee details (WhatsApp, app, notice, office)."],
+        "opts": [{"label": "Will pay", "to": "promise"}, {"label": "Has a question", "to": "question"}, {"label": "Already paid", "to": "already"}]
+      },
+      {
+        "id": "question",
+        "title": "Questions",
+        "stage": 4,
+        "say": ["Sure, please ask.", "If I do not know the answer, I will ask the office and call you back."],
+        "tip": "Do not guess about fee heads or discounts. Note the question.",
+        "opts": [{"label": "Will pay", "to": "promise"}, {"label": "Needs the office", "to": "later"}, {"label": "Leaving the school", "to": "leaving"}]
+      },
+      {
+        "id": "promise",
+        "title": "Will pay on date",
+        "stage": 5,
+        "result": "will_pay_on",
+        "say": ["Thank you. Please tell me the date, and I will note it.", "You can pay at the office or online."],
+        "check": ["Write every way to pay that your institute accepts (office counter, UPI, bank transfer, cheque) and the office hours."]
+      },
+      {
+        "id": "already",
+        "title": "Says already paid",
+        "stage": 5,
+        "result": "already_paid",
+        "say": ["Thank you! I will check this with the accounts office.", "If you have the receipt number, please tell me."]
+      },
+      {
+        "id": "leaving",
+        "title": "Leaving",
+        "stage": 5,
+        "result": "refused",
+        "say": ["Thank you for telling me. I will pass this to the office.", "We wish {student} all the best."],
+        "tip": "Choose the reason \"Leaving\" when you save. Do not argue."
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Sorry to trouble you. Have a good day."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["No problem. When is a good time to call you back?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {"label": "Why did the fee go up?", "answer": "I understand. The office can explain the change in detail. Shall I ask them to call you?"},
+      {
+        "check": ["Write your rule for paying in parts (how many parts, by when, who approves), or remove this answer."],
+        "label": "Can I pay in parts?",
+        "answer": "Let me check the rule for this with the office, and I will tell you."
+      },
+      {
+        "check": ["Write your sibling discount rule, or write that there is none."],
+        "label": "Is there a sibling discount?",
+        "answer": "Let me tell you exactly what the school offers for brothers and sisters."
+      },
+      {"label": "What is the last date?", "answer": "The fee is due by {due_date}."},
+      {
+        "check": ["Write what the fee covers (tuition, books, activities) or how parents get the list."],
+        "label": "What does the fee include?",
+        "answer": "I can send you the full list on WhatsApp."
+      }
+    ]
+  },
+  {
+    "key": "admission_enquiry_school",
+    "name": "School admission enquiry follow-up",
+    "call_type": "admission",
+    "audience": "Parents who enquired about admission for a class",
+    "about": "Follow up a parent's admission enquiry for a class, and book a school visit or send the form.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "en",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Hello, am I speaking with {name}?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Introduction",
+        "stage": 0,
+        "say": [
+          "This is {me} from {institute}.",
+          "Thank you for your enquiry about admission in {class} class.",
+          "Is this a good time to talk for two minutes?"
+        ],
+        "opts": [{"label": "Yes", "to": "needs"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "needs",
+        "title": "What they need",
+        "stage": 1,
+        "say": ["Are you still looking for a school for your child?", "What matters most to you in a new school?"],
+        "tip": "Listen. Note what matters to them: distance, teachers, fees, board, activities.",
+        "opts": [{"label": "Still looking", "to": "visit"}, {"label": "Not looking now", "to": "not_now"}]
+      },
+      {
+        "id": "visit",
+        "title": "Visit or form",
+        "stage": 3,
+        "say": [
+          "The best way to decide is to see the school and meet our teachers.",
+          "Would you like to visit? I can also send the admission form on WhatsApp."
+        ],
+        "check": ["Add your visiting days, hours and address, the way callers should say them."],
+        "opts": [{"label": "Book a visit", "to": "booked"}, {"label": "Send the form", "to": "form"}, {"label": "Will think", "to": "later"}]
+      },
+      {
+        "id": "booked",
+        "title": "Visit booked",
+        "stage": 5,
+        "result": "visit_booked",
+        "say": ["Great! Which day and time suits you?", "I will send the address and location on WhatsApp. See you soon, {name}."],
+        "tip": "Note the date. Repeat it back."
+      },
+      {
+        "id": "form",
+        "title": "Form sent",
+        "stage": 5,
+        "result": "form_sent",
+        "say": ["Sure. I am sending the admission form on WhatsApp now.", "Please call us if you have any question."]
+      },
+      {
+        "id": "not_now",
+        "title": "Not looking now",
+        "stage": 5,
+        "result": "not_this_year",
+        "say": ["No problem. Thank you for your time, {name}.", "All the best to your child."],
+        "tip": "If they joined another school, choose Joined elsewhere instead."
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Sorry to trouble you. Have a good day."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["No problem. When is a good time to call you back?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {
+        "check": ["Confirm the campaign's board tag is your school's board, or write the board here."],
+        "label": "Which board is the school?",
+        "answer": "We follow the {board} board."
+      },
+      {
+        "check": ["Add your school timings by class."],
+        "label": "What are the school timings?",
+        "answer": "Let me tell you the timings for {class} class."
+      },
+      {
+        "check": ["Write whether you have a bus and which areas it covers."],
+        "label": "Is there a school bus?",
+        "answer": "Let me tell you about the bus routes. I can also send them on WhatsApp."
+      },
+      {
+        "check": ["Write if seats are open. Never say seats are almost full unless it is true."],
+        "label": "Are seats available?",
+        "answer": "Let me check the seats for {class} class with the office and tell you correctly."
+      },
+      {
+        "check": ["Write the list of documents, or confirm it is sent with the form."],
+        "label": "What documents are needed?",
+        "answer": "I will send the list of documents with the form on WhatsApp."
+      },
+      {
+        "check": ["Write your age rule for each class (mainly Nursery to class 1), or remove this answer."],
+        "label": "What is the age rule?",
+        "answer": "Let me tell you the age rule for {class} class."
+      }
+    ]
+  },
+  {
+    "key": "admission_visit_booking",
+    "name": "Campus visit booking",
+    "call_type": "admission",
+    "audience": "Parents who showed interest in admission",
+    "about": "Invite a family for a campus visit and book a day and time.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "en",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Hello, am I speaking with {name}?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Introduction",
+        "stage": 0,
+        "say": ["This is {me} from {institute}.", "You had asked about admission at our school.", "Is this a good time to talk for two minutes?"],
+        "opts": [{"label": "Yes", "to": "invite"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "invite",
+        "title": "Invite to visit",
+        "stage": 3,
+        "say": ["We would like to invite you and your child to see the campus and meet our teachers.", "Which day would suit you for a visit?"],
+        "tip": "Keep it friendly. A visit helps them decide.",
+        "check": ["Add your visiting days and hours, and how long a visit takes."],
+        "opts": [{"label": "Picks a day", "to": "booked"}, {"label": "Send details first", "to": "form"}, {"label": "Not looking now", "to": "not_now"}]
+      },
+      {
+        "id": "booked",
+        "title": "Visit booked",
+        "stage": 5,
+        "result": "visit_booked",
+        "say": [
+          "Great! Please tell me the day and time, and I will note it.",
+          "I will send the address and location on WhatsApp.",
+          "Please bring your child along."
+        ],
+        "tip": "Repeat the day and time back to them.",
+        "check": ["Add what families should bring, if anything (last report card, photos), or remove this note."]
+      },
+      {
+        "id": "form",
+        "title": "Details sent",
+        "stage": 5,
+        "result": "form_sent",
+        "say": ["Sure. I am sending the details and the admission form on WhatsApp now.", "Can I call you after you have seen them?"]
+      },
+      {
+        "id": "not_now",
+        "title": "Not looking now",
+        "stage": 5,
+        "result": "not_this_year",
+        "say": ["No problem. Thank you for your time, {name}."],
+        "tip": "If they joined another school, choose Joined elsewhere instead."
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Sorry to trouble you. Have a good day."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["No problem. When is a good time to call you back?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {
+        "check": ["Write your visiting days, including weekends if any."],
+        "label": "Can we come on Sunday?",
+        "answer": "Let me tell you the days we are open for visits."
+      },
+      {"label": "Can we meet the principal?", "answer": "I will ask the office if the principal can meet you on that day, and tell you."},
+      {
+        "check": ["Write how long a visit usually takes."],
+        "label": "How long will the visit take?",
+        "answer": "Let me tell you how long a visit usually takes."
+      },
+      {"label": "Should I bring my child?", "answer": "Yes, please bring your child. It helps them see the school too."},
+      {"label": "Can you send the location?", "answer": "Sure, I will send the location on WhatsApp after this call."}
+    ]
+  },
+  {
+    "key": "admission_form_follow_up",
+    "name": "Admission form follow-up",
+    "call_type": "admission",
+    "audience": "Parents who got the admission form but have not submitted it",
+    "about": "Help a parent finish and submit the admission form, or book a visit to the office.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "en",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Hello, am I speaking with {name}?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Introduction",
+        "stage": 0,
+        "say": [
+          "This is {me} from {institute}.",
+          "We had sent you the admission form for {class} class.",
+          "Is this a good time to talk for two minutes?"
+        ],
+        "opts": [{"label": "Yes", "to": "status"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "status",
+        "title": "Form status",
+        "stage": 1,
+        "say": ["Have you had a chance to fill the form?"],
+        "opts": [{"label": "Filled it", "to": "visit"}, {"label": "Not yet", "to": "help"}, {"label": "Not this year", "to": "not_now"}]
+      },
+      {
+        "id": "help",
+        "title": "Help with the form",
+        "stage": 1,
+        "say": ["No problem. Is anything stopping you?", "Do you have a question I can help with?"],
+        "tip": "Common reasons: documents, fee, a doubt about the school. Note the reason.",
+        "opts": [{"label": "Send form again", "to": "resend"}, {"label": "Wants to visit", "to": "visit"}, {"label": "Needs time", "to": "later"}]
+      },
+      {
+        "id": "visit",
+        "title": "Will visit the office",
+        "stage": 5,
+        "result": "visit_booked",
+        "say": ["Thank you! Which day will you come to the office? I will note it.", "Please bring the form and the documents."],
+        "tip": "Note the date. Repeat it back.",
+        "check": ["Write how to submit the form (office, email, website), the office hours and the list of documents."]
+      },
+      {
+        "id": "resend",
+        "title": "Form sent again",
+        "stage": 5,
+        "result": "form_sent",
+        "say": ["Sure. I am sending the form again on WhatsApp now.", "Please call us if you have any question."]
+      },
+      {
+        "id": "not_now",
+        "title": "Not this year",
+        "stage": 5,
+        "result": "not_this_year",
+        "say": ["No problem. Thank you for telling me, {name}.", "All the best to your child."],
+        "tip": "If they joined another school, choose Joined elsewhere instead."
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Sorry to trouble you. Have a good day."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["No problem. When is a good time to call you back?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {"label": "I lost the form", "answer": "No problem. I will send the form again on WhatsApp now."},
+      {
+        "check": ["Write the list of documents."],
+        "label": "Which documents do I need?",
+        "answer": "Let me tell you the list. I can also send it on WhatsApp."
+      },
+      {
+        "check": ["Write the form fee, or write that the form is free."],
+        "label": "Is there a form fee?",
+        "answer": "Let me tell you about the form fee."
+      },
+      {
+        "check": ["Add the real last date. Never say a date that is not fixed."],
+        "label": "What is the last date for the form?",
+        "answer": "Let me tell you the last date for the form."
+      },
+      {
+        "check": ["Write whether the form can be sent online, and how."],
+        "label": "Can I submit it online?",
+        "answer": "Let me tell you how you can submit it."
+      }
+    ]
+  },
+  {
+    "key": "admission_test_slot",
+    "name": "Admission test or counselling slot",
+    "call_type": "admission",
+    "audience": "Parents or students who applied for admission",
+    "about": "Book a slot for the admission test or counselling session.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "en",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Hello, am I speaking with {name}?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Introduction",
+        "stage": 0,
+        "say": [
+          "This is {me} from {institute}.",
+          "I am calling about the next step for admission in {class} class.",
+          "Is this a good time to talk for two minutes?"
+        ],
+        "opts": [{"label": "Yes", "to": "explain"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "explain",
+        "title": "Next step",
+        "stage": 2,
+        "say": [
+          "The next step is a short admission test and a meeting with our counsellor.",
+          "It helps us understand your child and guide you well."
+        ],
+        "tip": "Keep it friendly. It is not an exam to fear.",
+        "check": [
+          "Say \"admission test\", \"counselling session\" or both, the way your institute does it. Add what the test covers and how long it takes."
+        ],
+        "opts": [{"label": "Wants a slot", "to": "slot"}, {"label": "Joined elsewhere", "to": "elsewhere"}, {"label": "Not this year", "to": "not_now"}]
+      },
+      {
+        "id": "slot",
+        "title": "Pick a slot",
+        "stage": 3,
+        "say": ["We have slots on a few days.", "Which day and time suits you?"],
+        "check": ["Write the test or counselling days and times."],
+        "opts": [{"label": "Picks a slot", "to": "booked"}, {"label": "None suits", "to": "later"}]
+      },
+      {
+        "id": "booked",
+        "title": "Slot booked",
+        "stage": 5,
+        "result": "visit_booked",
+        "say": ["Thank you. I have noted the slot.", "I will send the details and the address on WhatsApp."],
+        "tip": "Repeat the day and time back to them.",
+        "check": ["Add what to bring (photo ID, pencil, last report card), or remove this note."]
+      },
+      {
+        "id": "elsewhere",
+        "title": "Joined elsewhere",
+        "stage": 5,
+        "result": "joined_elsewhere",
+        "say": ["Thank you for telling me. All the best to your child, {name}."]
+      },
+      {
+        "id": "not_now",
+        "title": "Not this year",
+        "stage": 5,
+        "result": "not_this_year",
+        "say": ["No problem. Thank you for your time, {name}."]
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Sorry to trouble you. Have a good day."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["No problem. When is a good time to call you back?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {
+        "check": ["Write the subjects and the level of the test."],
+        "label": "What is in the test?",
+        "answer": "Let me tell you what the test covers."
+      },
+      {"label": "Is the test hard?", "answer": "Please do not worry. The test only helps the teachers understand where your child is."},
+      {
+        "check": ["Write the test fee, or write that it is free."],
+        "label": "Is there a fee for the test?",
+        "answer": "Let me tell you about the test fee."
+      },
+      {
+        "check": ["Write how the test is used for admission. Never promise or rule out admission on the call."],
+        "label": "What if my child does not do well?",
+        "answer": "The test only helps us guide your child. The counsellor will talk with you about the next steps."
+      },
+      {
+        "check": ["Confirm the rule for changing a slot."],
+        "label": "Can the slot be changed?",
+        "answer": "Yes. Please call us a day before, and we will give you another slot."
+      }
+    ]
+  },
+  {
+    "key": "readmission_next_year",
+    "name": "Re-admission for next year",
+    "call_type": "admission",
+    "audience": "Parents of current students moving up a class",
+    "about": "Check that a current student will continue next year, and send the re-admission form or book an office visit.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "en",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Hello, am I speaking with {name}?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Introduction",
+        "stage": 0,
+        "say": [
+          "This is {me} from {institute}.",
+          "I am calling about {student}'s re-admission for the next session.",
+          "Is this a good time to talk for two minutes?"
+        ],
+        "opts": [{"label": "Yes", "to": "plan"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "plan",
+        "title": "Continuing?",
+        "stage": 1,
+        "say": ["Re-admission for the next session has started.", "Will {student} continue with us next year?"],
+        "opts": [{"label": "Yes, continuing", "to": "form"}, {"label": "Not sure yet", "to": "unsure"}, {"label": "Leaving", "to": "leaving"}]
+      },
+      {
+        "id": "unsure",
+        "title": "Not sure",
+        "stage": 1,
+        "say": ["No problem. May I ask what you are thinking about?"],
+        "tip": "Listen. Do not push. Note the reason: fees, distance, moving city, another school.",
+        "opts": [{"label": "Will decide later", "to": "later"}, {"label": "Wants to meet teacher", "to": "visit"}, {"label": "Leaving", "to": "leaving"}]
+      },
+      {
+        "id": "form",
+        "title": "Form sent",
+        "stage": 5,
+        "result": "form_sent",
+        "say": ["Thank you! We are happy to have {student} with us.", "I am sending the re-admission form and fee details on WhatsApp now."],
+        "check": ["Write how re-admission is done (form, fee, last date)."]
+      },
+      {
+        "id": "visit",
+        "title": "Visit booked",
+        "stage": 5,
+        "result": "visit_booked",
+        "say": ["Sure. Which day suits you to meet the class teacher? I will note it."],
+        "check": ["Write when teachers can meet parents."]
+      },
+      {
+        "id": "leaving",
+        "title": "Leaving",
+        "stage": 5,
+        "result": "joined_elsewhere",
+        "say": ["Thank you for telling me. We will miss {student}.", "If anything changes, please call us. All the best."],
+        "tip": "Note the reason. Do not argue."
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Sorry to trouble you. Have a good day."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["No problem. When is a good time to call you back?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {
+        "check": ["Add next year's fee for each class, or how parents get it."],
+        "label": "Has the fee changed?",
+        "answer": "Let me tell you the fee for next year. I can also send it on WhatsApp."
+      },
+      {
+        "check": ["Write the re-admission fee, or write that there is none."],
+        "label": "Is there a re-admission fee?",
+        "answer": "Let me tell you about the re-admission fee."
+      },
+      {
+        "check": ["Write your rule for paying in parts (how many parts, by when, who approves), or remove this answer."],
+        "label": "Can we pay later?",
+        "answer": "Let me check with the office and tell you the dates."
+      },
+      {
+        "check": ["Write how parents get the transfer certificate."],
+        "label": "We are moving to another city",
+        "answer": "Thank you for telling me. We will miss {student}. The office will help you with the transfer certificate."
+      },
+      {
+        "label": "We are not happy with the school",
+        "answer": "I am sorry to hear that, and thank you for telling me. May I ask what went wrong? I will pass it to the principal."
+      }
+    ]
+  },
+  {
+    "key": "demo_class_invite",
+    "name": "Demo class invite (coaching)",
+    "call_type": "admission",
+    "audience": "Students or parents who enquired at a coaching institute",
+    "about": "Invite a student who enquired to a demo class, and book a day.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "en",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Hello, am I speaking with {name}?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Introduction",
+        "stage": 0,
+        "say": ["This is {me} from {institute}.", "You had asked about our {course} classes.", "Is this a good time to talk for two minutes?"],
+        "opts": [{"label": "Yes", "to": "need"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "need",
+        "title": "What they need",
+        "stage": 1,
+        "say": ["May I ask which class the student is in?", "Which subjects or exams do you need help with?"],
+        "tip": "Listen. Note the subjects and the exam. Do not promise marks or ranks.",
+        "opts": [{"label": "Told me", "to": "demo"}, {"label": "Not looking now", "to": "not_now"}]
+      },
+      {
+        "id": "demo",
+        "title": "Demo class",
+        "stage": 2,
+        "say": ["We have a free demo class, so you can see how we teach before you decide.", "Which day suits you?"],
+        "check": ["Confirm the demo class is free, and add the demo days, times and place (or the online link)."],
+        "opts": [{"label": "Books a demo", "to": "booked"}, {"label": "Send details", "to": "form"}, {"label": "Not now", "to": "later"}]
+      },
+      {
+        "id": "booked",
+        "title": "Demo booked",
+        "stage": 5,
+        "result": "visit_booked",
+        "say": ["Great! I have noted the day and time.", "I will send the address and timing on WhatsApp."],
+        "tip": "Repeat the day and time back to them."
+      },
+      {
+        "id": "form",
+        "title": "Details sent",
+        "stage": 5,
+        "result": "form_sent",
+        "say": ["Sure. I am sending the course and batch details on WhatsApp now.", "Can I call you after you have seen them?"]
+      },
+      {
+        "id": "not_now",
+        "title": "Not looking now",
+        "stage": 5,
+        "result": "not_this_year",
+        "say": ["No problem. Thank you for your time, {name}."],
+        "tip": "If they joined another institute, choose Joined elsewhere instead."
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Sorry to trouble you. Have a good day."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["No problem. When is a good time to call you back?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {
+        "check": ["Confirm the demo class is free."],
+        "label": "Is the demo really free?",
+        "answer": "Yes, the demo class is free. There is no need to pay anything to attend."
+      },
+      {
+        "check": ["Write whether you run online demos."],
+        "label": "Can I attend online?",
+        "answer": "Let me tell you if an online demo is possible."
+      },
+      {
+        "check": ["Add the teachers' names and experience. Write only what is true."],
+        "label": "Who teaches the class?",
+        "answer": "Let me tell you about the teacher for this subject."
+      },
+      {
+        "check": ["Write only what your institute really offers (tests, doubt classes, notes)."],
+        "label": "Will my marks improve?",
+        "answer": "We cannot promise marks. We give regular classes, practice and doubt-solving, and you can see your progress in our tests."
+      },
+      {"check": ["Add your batch timings."], "label": "What are the batch timings?", "answer": "Let me tell you the batch timings."}
+    ]
+  },
+  {
+    "key": "course_sales_enquiry",
+    "name": "Course sales to an enquiry",
+    "call_type": "sales",
+    "audience": "People who enquired about a course",
+    "about": "Call a person who enquired about a course, understand their goal and help them decide.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "en",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Hello, am I speaking with {name}?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Introduction",
+        "stage": 0,
+        "say": [
+          "This is {me} from {institute}.",
+          "You had asked about our {course} course through {source}.",
+          "Is this a good time to talk for two minutes?"
+        ],
+        "opts": [{"label": "Yes", "to": "need"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "need",
+        "title": "Their goal",
+        "stage": 1,
+        "say": ["What made you look at this course?", "What do you want it to help you with?"],
+        "tip": "Let them talk. Note their goal in their own words.",
+        "opts": [{"label": "Told me", "to": "pitch"}, {"label": "Not looking now", "to": "no"}]
+      },
+      {
+        "id": "pitch",
+        "title": "The course",
+        "stage": 2,
+        "say": ["Thank you. Our {course} course can help with that.", "Here are the batch timings and the fee.", "Would you like to join?"],
+        "tip": "Link the course to the goal they told you.",
+        "check": [
+          "Add 2 or 3 short lines: what the course covers, how long it runs, online or in class, batch timings and the fee. No promises of jobs, marks or ranks."
+        ],
+        "opts": [{"label": "Wants to join", "to": "joined"}, {"label": "Wants to think", "to": "think"}, {"label": "Not for them", "to": "no"}]
+      },
+      {
+        "id": "joined",
+        "title": "Joined",
+        "stage": 5,
+        "result": "joined",
+        "say": ["Great! I will send the joining steps on WhatsApp now.", "Welcome, {name}!"],
+        "check": ["Say how they pay and confirm a seat (office, payment link)."]
+      },
+      {
+        "id": "think",
+        "title": "Will think",
+        "stage": 5,
+        "result": "will_think",
+        "say": ["Sure. I will send the details on WhatsApp.", "Can I call you again in two days?"]
+      },
+      {
+        "id": "no",
+        "title": "Not interested",
+        "stage": 5,
+        "result": "not_interested",
+        "say": ["No problem. Thank you for your time, {name}."],
+        "tip": "Note the reason if they give one."
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Sorry to trouble you. Have a good day."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["No problem. When is a good time to call you back?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {
+        "check": ["Add what the fee includes and any way to pay in parts."],
+        "label": "It costs too much",
+        "answer": "I understand. Can I tell you what is included in the fee?"
+      },
+      {
+        "check": ["Add your real class timings, including weekend batches if any."],
+        "label": "I have no time",
+        "answer": "I understand. Can I tell you the class timings? Some people join on weekends."
+      },
+      {
+        "check": ["Write only what your institute really offers for jobs. Never promise a job."],
+        "label": "Will I get a job?",
+        "answer": "We do not promise a job. We help you learn the skills and prepare for interviews."
+      },
+      {
+        "check": ["Write what certificate is given, by whom, or that there is none."],
+        "label": "Is there a certificate?",
+        "answer": "Let me tell you about the certificate."
+      },
+      {
+        "check": ["Write when demo classes run, or remove this answer."],
+        "label": "Can I see a demo first?",
+        "answer": "Sure. Let me tell you when the next demo class is."
+      },
+      {
+        "check": ["Write whether classes are online, in class or both."],
+        "label": "Is it online or in class?",
+        "answer": "Let me tell you how the classes run."
+      }
+    ]
+  },
+  {
+    "key": "cold_call_list",
+    "name": "Cold call (bought or shared list)",
+    "call_type": "sales",
+    "audience": "People on a contact list who never asked us to call",
+    "about": "An honest first call to someone who did not contact us: say who we are and why, ask permission, and make it easy to say no.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "en",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Hello, am I speaking with {name}?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Honest introduction",
+        "stage": 0,
+        "say": [
+          "This is {me} calling from {institute}.",
+          "This is a sales call about our {course} course.",
+          "Is it okay if I take one minute to tell you about it?"
+        ],
+        "tip": "Be honest and short. If they say no, thank them and end the call.",
+        "opts": [{"label": "Okay, go ahead", "to": "ask"}, {"label": "Not interested", "to": "no"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "ask",
+        "title": "Are they looking?",
+        "stage": 1,
+        "say": ["Thank you. Are you, or someone in your family, looking for {course} at the moment?"],
+        "opts": [{"label": "Maybe, tell me", "to": "pitch"}, {"label": "Not now", "to": "no"}, {"label": "Asks about number", "to": "source"}]
+      },
+      {
+        "id": "source",
+        "title": "Where the number came from",
+        "stage": 1,
+        "say": ["We got your number from {source}.", "If you do not want calls from us, I will stop them right away."],
+        "tip": "Never guess or hide where the number came from.",
+        "opts": [{"label": "Okay, continue", "to": "pitch"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "pitch",
+        "title": "Short pitch",
+        "stage": 2,
+        "say": ["In short, {institute} teaches {course}.", "Would you like me to send the details on WhatsApp?"],
+        "tip": "Send on WhatsApp only if they say yes.",
+        "check": ["Add 2 short lines: what the course is, who it is for, online or in class. No promises of jobs, marks or ranks."],
+        "opts": [{"label": "Yes, send", "to": "interested"}, {"label": "No, thanks", "to": "no"}]
+      },
+      {
+        "id": "interested",
+        "title": "Interested",
+        "stage": 5,
+        "result": "interested",
+        "say": ["Thank you! I am sending the details on WhatsApp now.", "May I call you after you have seen them?"]
+      },
+      {
+        "id": "no",
+        "title": "Not interested",
+        "stage": 5,
+        "result": "not_interested",
+        "say": ["No problem at all. Thank you for your time.", "Have a good day."],
+        "tip": "If they ask not to be called again, choose Do not call again."
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Sorry to trouble you. Have a good day."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["No problem. When is a good time to call you back?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {"label": "I am not interested", "answer": "No problem at all. Thank you for your time. Would you like us to stop calling this number?"},
+      {
+        "label": "How did you get my name?",
+        "answer": "Your name came with your number from {source}. If you prefer, I will take both off our list now."
+      },
+      {
+        "label": "Why should I choose you?",
+        "answer": "That is a fair question. I can send you the details on WhatsApp, so you can compare and decide in your own time."
+      },
+      {
+        "check": ["Add your website address, or remove the website part."],
+        "label": "Send me something in writing",
+        "answer": "Sure. I will send the details on WhatsApp, and you can also see our website."
+      },
+      {
+        "check": ["Write whether classes are online, in class or both."],
+        "label": "Is it online or in class?",
+        "answer": "Let me tell you how the classes run."
+      }
+    ]
+  },
+  {
+    "key": "webinar_follow_up",
+    "name": "Webinar or seminar follow-up",
+    "call_type": "sales",
+    "audience": "People who registered for or attended a webinar or seminar",
+    "about": "Thank an attendee, ask how the session was, and offer the course details.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "en",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Hello, am I speaking with {name}?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Introduction",
+        "stage": 0,
+        "say": ["This is {me} from {institute}.", "Thank you for joining {source} on {source_date}.", "Is this a good time to talk for two minutes?"],
+        "opts": [{"label": "Yes", "to": "feedback"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "feedback",
+        "title": "How was it?",
+        "stage": 1,
+        "say": ["How did you find the session? Was it useful?", "Are you thinking of taking the {course} course?"],
+        "tip": "Listen to their view first. Note any question they had.",
+        "opts": [{"label": "Interested", "to": "details"}, {"label": "Wants to think", "to": "think"}, {"label": "Not for me", "to": "no"}]
+      },
+      {
+        "id": "details",
+        "title": "Course details",
+        "stage": 2,
+        "say": ["Here are the next batch details.", "Would you like to join?"],
+        "check": ["Add the next batch start date, timings and fee. Mention a webinar offer only if it is real, with its real end date."],
+        "opts": [{"label": "Wants to join", "to": "joined"}, {"label": "Send details", "to": "think"}, {"label": "Not for me", "to": "no"}]
+      },
+      {
+        "id": "joined",
+        "title": "Joined",
+        "stage": 5,
+        "result": "joined",
+        "say": ["Great! I will send the joining steps on WhatsApp now.", "Welcome, {name}!"],
+        "check": ["Say how they pay and confirm a seat (office, payment link)."]
+      },
+      {
+        "id": "think",
+        "title": "Will think",
+        "stage": 5,
+        "result": "will_think",
+        "say": ["Sure. I will send the details on WhatsApp.", "Can I call you again in two days?"]
+      },
+      {
+        "id": "no",
+        "title": "Not interested",
+        "stage": 5,
+        "result": "not_interested",
+        "say": ["No problem. Thank you for joining the session, {name}."],
+        "tip": "Note the reason if they give one."
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Sorry to trouble you. Have a good day."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["No problem. When is a good time to call you back?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {
+        "check": ["Write whether a recording is shared, and how."],
+        "label": "I missed the session",
+        "answer": "No problem. I can send you the details, and the recording if we have one."
+      },
+      {
+        "check": ["Write whether slides are shared."],
+        "label": "Can I get the slides?",
+        "answer": "Let me check, and I will send them on WhatsApp if we share them."
+      },
+      {
+        "check": ["Confirm you have a course plan to send."],
+        "label": "The session was too basic",
+        "answer": "Thank you for telling me. The full course goes deeper. Shall I send you the course plan?"
+      },
+      {
+        "check": ["Write the real offer and its end date, or write that there is no offer. Never invent one."],
+        "label": "Is the webinar offer still on?",
+        "answer": "Let me tell you exactly what applies today."
+      },
+      {
+        "check": ["Write only what your institute really offers for jobs. Never promise a job."],
+        "label": "Will I get a job?",
+        "answer": "We do not promise a job. We help you learn the skills and prepare for interviews."
+      }
+    ]
+  },
+  {
+    "key": "offer_ending",
+    "name": "Fee offer ending (honest)",
+    "call_type": "sales",
+    "audience": "People who enquired earlier and have not joined",
+    "about": "Tell a past enquiry about a real fee offer and its real end date, without pressure.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "en",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Hello, am I speaking with {name}?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Introduction",
+        "stage": 0,
+        "say": ["This is {me} from {institute}.", "You had asked about our {course} course earlier.", "Is this a good time to talk for two minutes?"],
+        "opts": [{"label": "Yes", "to": "offer"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "offer",
+        "title": "The offer",
+        "stage": 2,
+        "say": ["I wanted to let you know about a fee offer on this course.", "The offer has a fixed end date."],
+        "tip": "Say the end date once, calmly. The choice is theirs.",
+        "check": ["Write the exact offer and its real end date, as the institute has approved it. Never say an offer ends if it does not."],
+        "opts": [{"label": "Tell me more", "to": "details"}, {"label": "Wants to think", "to": "think"}, {"label": "Not interested", "to": "no"}]
+      },
+      {
+        "id": "details",
+        "title": "Offer details",
+        "stage": 4,
+        "say": ["Here are the details of the offer.", "Would you like to join, or think it over? There is no pressure."],
+        "check": ["Add the offer terms: the normal fee, the offer fee, who can get it and the end date."],
+        "opts": [{"label": "Wants to join", "to": "joined"}, {"label": "Wants to think", "to": "think"}, {"label": "Not for them", "to": "no"}]
+      },
+      {
+        "id": "joined",
+        "title": "Joined",
+        "stage": 5,
+        "result": "joined",
+        "say": ["Great! I will send the joining steps on WhatsApp now.", "Welcome, {name}!"],
+        "check": ["Say how they pay and confirm a seat (office, payment link)."]
+      },
+      {
+        "id": "think",
+        "title": "Will think",
+        "stage": 5,
+        "result": "will_think",
+        "say": [
+          "Sure, take your time. I will send the details on WhatsApp.",
+          "If you decide after the offer is over, you can still join at the normal fee."
+        ]
+      },
+      {
+        "id": "no",
+        "title": "Not interested",
+        "stage": 5,
+        "result": "not_interested",
+        "say": ["No problem. Thank you for your time, {name}."]
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Sorry to trouble you. Have a good day."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["No problem. When is a good time to call you back?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {
+        "check": ["Confirm that callers cannot extend the offer."],
+        "label": "Can you extend the offer for me?",
+        "answer": "I cannot change the offer myself. If you join after it ends, the normal fee applies."
+      },
+      {
+        "check": ["Confirm the offer is on your website or known to the office."],
+        "label": "Is this offer real?",
+        "answer": "Yes. You can check it with our office or on our website before you pay."
+      },
+      {
+        "label": "Why do I have to decide now?",
+        "answer": "You do not have to. The offer has an end date, but the choice is yours. You can join later at the normal fee."
+      },
+      {"label": "Will the offer come again?", "answer": "I do not know about future offers, so I will not promise one."},
+      {
+        "check": ["Add the normal fee and the offer fee."],
+        "label": "What is the normal fee?",
+        "answer": "Let me tell you the normal fee and the offer fee."
+      }
+    ]
+  },
+  {
+    "key": "absence_call",
+    "name": "Absence call to parents",
+    "call_type": "absence",
+    "audience": "Parents of a student absent today",
+    "about": "Check that an absent student is safe and well, note the reason and when they will be back.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "en",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Hello, am I speaking with {name}?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Introduction",
+        "stage": 0,
+        "say": [
+          "This is {me} from {institute}.",
+          "{student} is not in school today. We are calling to check that all is well.",
+          "Is this a good time for a minute?"
+        ],
+        "tip": "Speak gently. This is a caring call.",
+        "opts": [{"label": "Yes", "to": "reason"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "reason",
+        "title": "Reason",
+        "stage": 1,
+        "say": ["Is {student} unwell, or is there another reason?"],
+        "tip": "Be kind. Do not ask for medical details. Note only what they choose to share.",
+        "opts": [{"label": "Gives a reason", "to": "when"}, {"label": "Did not know", "to": "alert"}, {"label": "Has a concern", "to": "alert"}]
+      },
+      {
+        "id": "when",
+        "title": "Coming back",
+        "stage": 3,
+        "say": ["Thank you for telling me.", "When will {student} come back to school?"],
+        "opts": [{"label": "Gives a date", "to": "will_come"}, {"label": "Not sure", "to": "reason_given"}]
+      },
+      {
+        "id": "will_come",
+        "title": "Will come on date",
+        "stage": 5,
+        "result": "will_come_on",
+        "say": ["Thank you. I have noted it.", "The class teacher will help {student} with the work missed."],
+        "check": ["Say how missed work is shared (class teacher, diary, WhatsApp group), or remove the second line."]
+      },
+      {
+        "id": "reason_given",
+        "title": "Reason noted",
+        "stage": 5,
+        "result": "reason_given",
+        "say": ["Thank you. I have noted it for the class teacher.", "Please let the school know when {student} is coming back."],
+        "tip": "Choose the reason: Sick, Travel or Other."
+      },
+      {
+        "id": "alert",
+        "title": "Needs follow-up",
+        "stage": 5,
+        "result": "needs_counsellor",
+        "say": ["Thank you for telling me. I will inform the class teacher right away.", "Someone from the school will call you back soon."],
+        "tip": "If the parent did not know about the absence, tell the class teacher or principal as soon as the call ends.",
+        "check": ["Write who the caller must tell at once when a parent did not know about the absence, and how (phone, in person)."]
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Sorry to trouble you. Have a good day."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["No problem. When is a good time to call you back?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {"label": "My child is unwell", "answer": "I am sorry to hear that. We hope {student} feels better soon. Please take care."},
+      {
+        "check": ["Confirm you call for every absence, or change this answer."],
+        "label": "Why call for just one day?",
+        "answer": "We call every parent when a child is absent. It is only to make sure the child is safe."
+      },
+      {"label": "What did my child miss?", "answer": "The class teacher can share the work. I will ask them to send it."},
+      {
+        "check": ["Write your leave note rule (note, application, medical paper after some days)."],
+        "label": "Is a leave note needed?",
+        "answer": "Let me tell you the leave rule."
+      },
+      {
+        "label": "My child has a problem at school",
+        "answer": "Thank you for telling me. I will ask the class teacher or counsellor to call you. When is a good time?"
+      }
+    ]
+  },
+  {
+    "key": "ptm_event_reminder",
+    "name": "PTM or event reminder",
+    "call_type": "event",
+    "audience": "Parents of current students",
+    "about": "Remind a parent about a parent-teacher meeting or school event, and note if they are coming.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "en",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Hello, am I speaking with {name}?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Introduction",
+        "stage": 0,
+        "say": [
+          "This is {me} from {institute}.",
+          "I am calling about the parent-teacher meeting for {student}.",
+          "Is this a good time to talk for two minutes?"
+        ],
+        "check": ["Change \"parent-teacher meeting\" if this is another event (annual day, sports day, workshop)."],
+        "opts": [{"label": "Yes", "to": "details"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "details",
+        "title": "Date and time",
+        "stage": 3,
+        "say": ["The meeting is at the school, on the date and time in the notice.", "Will you be able to come?"],
+        "check": ["Add the date, time and place, the way callers should say them."],
+        "opts": [{"label": "Coming", "to": "coming"}, {"label": "Not sure", "to": "maybe"}, {"label": "Cannot come", "to": "not_coming"}]
+      },
+      {
+        "id": "coming",
+        "title": "Coming",
+        "stage": 5,
+        "result": "coming",
+        "say": ["Thank you! We look forward to seeing you."],
+        "check": ["Add what to bring (diary, report card), or remove this note."]
+      },
+      {
+        "id": "maybe",
+        "title": "Maybe",
+        "stage": 5,
+        "result": "maybe",
+        "say": ["No problem. I will send the details on WhatsApp.", "Please come if you can."]
+      },
+      {
+        "id": "not_coming",
+        "title": "Not coming",
+        "stage": 5,
+        "result": "not_coming",
+        "say": ["Thank you for telling me.", "If you like, the class teacher can talk with you on the phone instead."],
+        "check": ["Say what parents can do if they cannot come (another slot, a call with the teacher), or remove the second line."]
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Sorry to trouble you. Have a good day."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["No problem. When is a good time to call you back?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {
+        "check": ["Write whether other slots are possible."],
+        "label": "Can I come at another time?",
+        "answer": "Let me check if there is another slot, and I will tell you."
+      },
+      {
+        "check": ["Write whether phone or video meetings are possible."],
+        "label": "Can I join by phone or video?",
+        "answer": "Let me check with the class teacher and tell you."
+      },
+      {
+        "check": ["Confirm who may come in place of a parent."],
+        "label": "Can someone else come instead?",
+        "answer": "Yes, another family member can come."
+      },
+      {"label": "What will be discussed?", "answer": "The teacher will talk about {student}'s progress and answer your questions."},
+      {
+        "check": ["Write whether students come to the meeting."],
+        "label": "Should I bring my child?",
+        "answer": "Let me tell you if children should come."
+      }
+    ]
+  },
+  {
+    "key": "feedback_survey",
+    "name": "Parent feedback survey",
+    "call_type": "feedback",
+    "audience": "Parents of current students",
+    "about": "Ask a parent for a 1 to 5 rating and one comment, and pass on any complaint.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "en",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Hello, am I speaking with {name}?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Introduction",
+        "stage": 0,
+        "say": [
+          "This is {me} from {institute}.",
+          "We are asking parents for feedback, so we can improve.",
+          "Is this a good time to talk for two minutes?"
+        ],
+        "opts": [{"label": "Yes", "to": "rating"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "rating",
+        "title": "Rating",
+        "stage": 1,
+        "say": ["On a scale of 1 to 5, where 5 is very good, how happy are you with {institute}?"],
+        "tip": "Note the number they say. Do not argue with any answer.",
+        "opts": [{"label": "Gave a rating", "to": "why"}, {"label": "Prefers not to say", "to": "refused"}]
+      },
+      {
+        "id": "why",
+        "title": "Comment",
+        "stage": 1,
+        "say": ["Thank you. What is one thing we do well?", "And one thing we can do better?"],
+        "tip": "Write their words in the note. Do not explain or defend.",
+        "opts": [{"label": "Told me", "to": "thanks"}, {"label": "Has a complaint", "to": "complaint"}]
+      },
+      {
+        "id": "thanks",
+        "title": "Rating given",
+        "stage": 5,
+        "result": "rated",
+        "say": ["Thank you very much, {name}. Your feedback helps us improve."]
+      },
+      {
+        "id": "complaint",
+        "title": "Complaint",
+        "stage": 5,
+        "result": "rated",
+        "say": ["Thank you for telling me, and I am sorry about this.", "I will pass it to the right person, and they will get back to you."],
+        "check": ["Write who handles complaints and how parents hear back."]
+      },
+      {
+        "id": "refused",
+        "title": "Refused",
+        "stage": 5,
+        "result": "refused",
+        "say": ["No problem at all. Thank you for your time, {name}."]
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Sorry to trouble you. Have a good day."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["No problem. When is a good time to call you back?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {
+        "check": ["Confirm who sees the feedback."],
+        "label": "Who will see my answers?",
+        "answer": "Your feedback is shared with the school team, so we can improve. We do not share it outside the school."
+      },
+      {"label": "Will anything change?", "answer": "I cannot promise a change, but every comment goes to the school team."},
+      {"label": "Why are you asking me?", "answer": "We are calling many parents to hear how we are doing. Your view matters to us."},
+      {"label": "I have a complaint", "answer": "I am sorry to hear that. Please tell me, and I will pass it to the right person."},
+      {
+        "check": ["Confirm this number receives WhatsApp messages, or name another way."],
+        "label": "Can I give feedback in writing?",
+        "answer": "Yes. You can send it on WhatsApp to this number, and I will pass it on."
+      }
+    ]
+  },
+  {
+    "key": "renewal_reenrolment",
+    "name": "Renewal for the next term",
+    "call_type": "renewal",
+    "audience": "Students or parents of a current course or batch",
+    "about": "Ask if a student will continue next term, and note when they will renew.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "en",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Hello, am I speaking with {name}?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Introduction",
+        "stage": 0,
+        "say": [
+          "This is {me} from {institute}.",
+          "I am calling about {student}'s {course} classes for the next term.",
+          "Is this a good time to talk for two minutes?"
+        ],
+        "opts": [{"label": "Yes", "to": "ask"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "ask",
+        "title": "Continuing?",
+        "stage": 1,
+        "say": ["The current term is ending soon.", "Will {student} continue with us next term?"],
+        "check": ["Add when the current term ends and the next one starts."],
+        "opts": [{"label": "Yes, continuing", "to": "fee"}, {"label": "Not sure yet", "to": "decide"}, {"label": "Not continuing", "to": "not_renewing"}]
+      },
+      {
+        "id": "fee",
+        "title": "Fee and date",
+        "stage": 4,
+        "say": ["Thank you! The fee for the next term is {amount_due}, due by {due_date}.", "Would you like to renew now, or on a date?"],
+        "opts": [{"label": "Renews now", "to": "renewed"}, {"label": "Gives a date", "to": "decide"}, {"label": "Needs time", "to": "later"}]
+      },
+      {
+        "id": "renewed",
+        "title": "Renewed",
+        "stage": 5,
+        "result": "renewed",
+        "say": ["Thank you! I will send the payment details and the new timetable on WhatsApp."],
+        "check": ["Write every way to pay that your institute accepts (office counter, UPI, bank transfer, cheque) and the office hours."]
+      },
+      {
+        "id": "decide",
+        "title": "Will renew on date",
+        "stage": 5,
+        "result": "will_renew_on",
+        "say": ["No problem. Which date suits you? I will note it."],
+        "tip": "Repeat the date back to them."
+      },
+      {
+        "id": "not_renewing",
+        "title": "Not renewing",
+        "stage": 5,
+        "result": "not_renewing",
+        "say": ["Thank you for telling me, and thank you for being with us.", "May I ask the main reason? It helps us improve."],
+        "tip": "Note the reason. Do not argue or offer discounts you cannot give."
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Sorry to trouble you. Have a good day."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["No problem. When is a good time to call you back?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {
+        "check": ["Write your rule for paying in parts (how many parts, by when, who approves), or remove this answer."],
+        "label": "Can I pay later?",
+        "answer": "Let me check the dates with the office and tell you."
+      },
+      {
+        "label": "My child's marks did not improve",
+        "answer": "Thank you for being honest. I will ask the teacher to talk with you about {student}'s progress and a plan."
+      },
+      {"label": "Has the fee changed?", "answer": "The fee for the next term is {amount_due}. I can send the details on WhatsApp."},
+      {
+        "check": ["Add the batch timings for the next term."],
+        "label": "Can we change the batch time?",
+        "answer": "Let me check which batches have space and tell you."
+      },
+      {
+        "check": ["Write any real renewal discount, or write that there is none."],
+        "label": "Is there a discount for renewing?",
+        "answer": "Let me tell you exactly what applies, so there is no confusion."
+      }
+    ]
+  },
+  {
+    "key": "result_discussion_invite",
+    "name": "Report card discussion invite",
+    "call_type": "event",
+    "audience": "Parents of current students, after results or a report card",
+    "about": "Invite a parent to meet the class teacher about the report card, without discussing marks on the call.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "en",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Hello, am I speaking with {name}?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Introduction",
+        "stage": 0,
+        "say": ["This is {me} from {institute}.", "I am calling about {student}'s report card.", "Is this a good time to talk for two minutes?"],
+        "opts": [{"label": "Yes", "to": "invite"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]
+      },
+      {
+        "id": "invite",
+        "title": "Invite",
+        "stage": 3,
+        "say": [
+          "The class teacher would like to meet you to talk about {student}'s progress and next steps.",
+          "We are meeting every parent of the class.",
+          "Will you be able to come?"
+        ],
+        "tip": "Do not discuss marks on this call. This call is only to book the meeting.",
+        "check": ["Add the meeting days, times and place. Remove \"We are meeting every parent\" if you invite only some parents."],
+        "opts": [{"label": "Coming", "to": "coming"}, {"label": "Not sure", "to": "maybe"}, {"label": "Cannot come", "to": "not_coming"}]
+      },
+      {
+        "id": "coming",
+        "title": "Coming",
+        "stage": 5,
+        "result": "coming",
+        "say": ["Thank you! We look forward to meeting you."],
+        "check": ["Add what to bring (report card, diary), or remove this note."]
+      },
+      {
+        "id": "maybe",
+        "title": "Maybe",
+        "stage": 5,
+        "result": "maybe",
+        "say": ["No problem. I will send the details on WhatsApp.", "Please come if you can."]
+      },
+      {
+        "id": "not_coming",
+        "title": "Not coming",
+        "stage": 5,
+        "result": "not_coming",
+        "say": ["Thank you for telling me.", "If you like, the class teacher can talk with you on the phone instead."]
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Sorry to trouble you. Have a good day."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["No problem. When is a good time to call you back?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {
+        "check": ["Remove \"This meeting is for every parent\" if you invite only some parents."],
+        "label": "Is my child doing badly?",
+        "answer": "This meeting is for every parent. The teacher will share how {student} is doing and answer your questions."
+      },
+      {
+        "label": "Can you tell me the marks now?",
+        "answer": "I do not have the marks with me. The teacher will go through them with you at the meeting."
+      },
+      {
+        "check": ["Write whether other days are possible."],
+        "label": "Can we meet another day?",
+        "answer": "Let me check another day with the class teacher and tell you."
+      },
+      {"label": "Can I talk on the phone instead?", "answer": "Yes. I can ask the teacher to call you at a good time. When suits you?"},
+      {
+        "check": ["Write how report cards are given (at the meeting, app, sent home)."],
+        "label": "Will we get the report card?",
+        "answer": "Let me tell you how the report card is given."
+      }
+    ]
+  },
+  {
+    "key": "fees_reminder_polite_hinglish",
+    "name": "Fee reminder before the due date (Hinglish)",
+    "call_type": "fees",
+    "audience": "Parents of current students",
+    "about": "Hinglish version of \"Fee reminder before the due date\": a friendly reminder and a date when the parent will pay.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "hinglish",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Namaste, kya meri baat {name} ji se ho rahi hai?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Haan ji", "to": "intro"}, {"label": "Galat number", "to": "wrong"}, {"label": "Abhi busy", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Introduction",
+        "stage": 0,
+        "say": ["Main {me}, {institute} se.", "{student} ki fees ke baare mein call kiya hai.", "Kya abhi do minute baat ho sakti hai?"],
+        "opts": [{"label": "Haan, boliye", "to": "reminder"}, {"label": "Abhi nahi", "to": "later"}, {"label": "Call mat karo", "to": "stop"}]
+      },
+      {
+        "id": "reminder",
+        "title": "Reminder",
+        "stage": 4,
+        "say": ["Bas ek chhota sa reminder hai.", "{amount_due} ki fees {due_date} tak jama karni hai.", "Kya tab tak jama ho jayegi?"],
+        "tip": "Say the amount and the date slowly. Do not rush.",
+        "opts": [{"label": "Jama kar denge", "to": "promise"}, {"label": "Jama kar di", "to": "already"}, {"label": "Time chahiye", "to": "time"}]
+      },
+      {
+        "id": "time",
+        "title": "Needs more time",
+        "stage": 4,
+        "say": ["Koi baat nahi, batane ke liye shukriya.", "Aapke liye kaun si date theek rahegi?"],
+        "tip": "Listen first. Do not argue. Any honest date is fine.",
+        "opts": [{"label": "Date di", "to": "promise"}, {"label": "Abhi nahi ho payega", "to": "refused"}, {"label": "Call mat karo", "to": "stop"}]
+      },
+      {
+        "id": "promise",
+        "title": "Will pay on date",
+        "stage": 5,
+        "result": "will_pay_on",
+        "say": ["Shukriya. Date bata dijiye, hum note kar lete hain.", "Fees office mein ya online jama ho sakti hai."],
+        "tip": "Repeat the date and the amount back to them.",
+        "check": [
+          "Write every way to pay that your institute accepts (office counter, UPI, bank transfer, cheque) and the office hours, in Hinglish."
+        ]
+      },
+      {
+        "id": "already",
+        "title": "Says already paid",
+        "stage": 5,
+        "result": "already_paid",
+        "say": ["Bahut shukriya! Hum accounts office se check kar lete hain.", "Receipt number ya jama karne ki date ho, to bata dijiye."],
+        "tip": "Write the receipt number or date in the note."
+      },
+      {
+        "id": "refused",
+        "title": "Cannot pay now",
+        "stage": 5,
+        "result": "refused",
+        "say": ["Hum samajh sakte hain. Office ko bata dete hain.", "Aapke time ke liye shukriya, {name} ji."],
+        "tip": "Note the reason in their words. Be kind."
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Maaf kijiye, pareshani ke liye sorry. Aapka din achha ho."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["Koi baat nahi. Aapko kab call karna theek rahega?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Pareshani ke liye maaf kijiye. Hum aapko dobara call nahi karenge.", "Aapka din achha ho."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {
+        "check": ["Write your rule for paying in parts (how many parts, by when, who approves), in Hinglish, or remove this answer."],
+        "label": "Kya fees kishton mein de sakte hain?",
+        "answer": "Iske liye office ka rule check karke aapko batate hain."
+      },
+      {"label": "Amount phir se bata dijiye", "answer": "Ji zaroor. {amount_due} jama karne hain, {due_date} tak."},
+      {
+        "check": [
+          "Write every way to pay that your institute accepts (office counter, UPI, bank transfer, cheque) and the office hours, in Hinglish."
+        ],
+        "label": "Online de sakte hain?",
+        "answer": "Ji haan, online bhi de sakte hain aur office mein bhi. Details WhatsApp par bhej dete hain."
+      },
+      {
+        "check": ["Confirm the office can share a break-up of the fee."],
+        "label": "Fees itni zyada kyun hai?",
+        "answer": "Hum samajhte hain. Fees ki poori details WhatsApp par bhej dete hain, aur accounts office har cheez samjha dega."
+      },
+      {
+        "check": ["Write your late fee rule (amount and the date it starts) in Hinglish, or write that there is no late fee."],
+        "label": "Late fee lagegi kya?",
+        "answer": "Rule aapko theek se batate hain, taaki koi confusion na ho."
+      }
+    ]
+  },
+  {
+    "key": "fees_overdue_hinglish",
+    "name": "Overdue fee reminder (Hinglish)",
+    "call_type": "fees",
+    "audience": "Parents whose fee is past the due date",
+    "about": "Hinglish version of \"Overdue fee reminder\": a calm call to get a date for a fee past its due date.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "hinglish",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Namaste, kya meri baat {name} ji se ho rahi hai?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Haan ji", "to": "intro"}, {"label": "Galat number", "to": "wrong"}, {"label": "Abhi busy", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Introduction",
+        "stage": 0,
+        "say": ["Main {me}, {institute} se.", "{student} ki fees ke baare mein call kiya hai.", "Kya abhi do minute baat ho sakti hai?"],
+        "opts": [{"label": "Haan, boliye", "to": "due"}, {"label": "Abhi nahi", "to": "later"}, {"label": "Call mat karo", "to": "stop"}]
+      },
+      {
+        "id": "due",
+        "title": "Fee pending",
+        "stage": 4,
+        "say": [
+          "Hamare record mein {amount_due} ki fees {due_date} ko due thi.",
+          "Abhi tak jama nahi hui hai. Kabhi kabhi reh jaata hai.",
+          "Aap kab tak jama kar payenge?"
+        ],
+        "tip": "Speak calmly. Many parents simply forgot.",
+        "opts": [{"label": "Date di", "to": "promise"}, {"label": "Jama kar di", "to": "already"}, {"label": "Koi problem hai", "to": "problem"}]
+      },
+      {
+        "id": "problem",
+        "title": "Has a problem",
+        "stage": 4,
+        "say": ["Hum samajh sakte hain. Batane ke liye shukriya.", "Kya abhi thoda aur baaki baad mein dene se madad hogi?"],
+        "tip": "Listen first. Do not argue. Never talk about the child in a bad way.",
+        "check": ["Write your rule for paying in parts (how many parts, by when, who approves), in Hinglish, or remove the second line."],
+        "opts": [{"label": "Date di", "to": "promise"}, {"label": "Abhi nahi ho payega", "to": "refused"}, {"label": "Call mat karo", "to": "stop"}]
+      },
+      {
+        "id": "promise",
+        "title": "Will pay on date",
+        "stage": 5,
+        "result": "will_pay_on",
+        "say": ["Shukriya. Date aur amount bata dijiye, hum note kar lete hain.", "Fees office mein ya online jama ho sakti hai."],
+        "tip": "Repeat the date and the amount back to them.",
+        "check": [
+          "Write every way to pay that your institute accepts (office counter, UPI, bank transfer, cheque) and the office hours, in Hinglish."
+        ]
+      },
+      {
+        "id": "already",
+        "title": "Says already paid",
+        "stage": 5,
+        "result": "already_paid",
+        "say": [
+          "Shukriya, aur pareshani ke liye sorry. Hum accounts office se check kar lete hain.",
+          "Receipt number ya jama karne ki date ho, to bata dijiye."
+        ],
+        "tip": "Write the receipt number or date in the note."
+      },
+      {
+        "id": "refused",
+        "title": "Cannot pay now",
+        "stage": 5,
+        "result": "refused",
+        "say": ["Hum samajh sakte hain. Office ko bata dete hain, woh aapse baat karenge.", "Aapke time ke liye shukriya, {name} ji."],
+        "tip": "Note the reason in their words. Be kind."
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Maaf kijiye, pareshani ke liye sorry. Aapka din achha ho."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["Koi baat nahi. Aapko kab call karna theek rahega?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Pareshani ke liye maaf kijiye. Hum aapko dobara call nahi karenge.", "Aapka din achha ho."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {"label": "Sorry, bhool gaye the", "answer": "Koi baat nahi, ho jaata hai. Aapke liye kaun si date theek rahegi?"},
+      {
+        "label": "Is mahine paise ki dikkat hai",
+        "answer": "Hum samajhte hain. Jo date aapke liye theek ho, bata dijiye, hum note kar lete hain."
+      },
+      {
+        "check": ["Write your rule for paying in parts (how many parts, by when, who approves), in Hinglish, or remove this answer."],
+        "label": "Kishton mein de sakte hain?",
+        "answer": "Iske liye office ka rule check karke aapko batate hain."
+      },
+      {
+        "check": ["Write who decides on late fee waivers, in Hinglish, or remove this answer if there is no late fee."],
+        "label": "Late fee maaf ho sakti hai?",
+        "answer": "Yeh hum khud tay nahi kar sakte. Aapki request office tak pahuncha dete hain, woh aapko batayenge."
+      },
+      {
+        "label": "Phir se call kyun kiya?",
+        "answer": "Dobara call ke liye maaf kijiye. Record mein fees abhi bhi baaki dikh rahi hai. Agar jama kar di hai, to date bata dijiye, hum match kar lenge."
+      },
+      {"label": "School aakar jama kar denge", "answer": "Theek hai ji. Kis din aayenge? Hum note kar lete hain."}
+    ]
+  },
+  {
+    "key": "admission_enquiry_school_hinglish",
+    "name": "School admission enquiry follow-up (Hinglish)",
+    "call_type": "admission",
+    "audience": "Parents who enquired about admission for a class",
+    "about": "Hinglish version of \"School admission enquiry follow-up\": book a school visit or send the form.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "hinglish",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Namaste, kya meri baat {name} ji se ho rahi hai?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Haan ji", "to": "intro"}, {"label": "Galat number", "to": "wrong"}, {"label": "Abhi busy", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Introduction",
+        "stage": 0,
+        "say": [
+          "Main {me}, {institute} se.",
+          "Aapne {class} class mein admission ke baare mein poocha tha, uske liye shukriya.",
+          "Kya abhi do minute baat ho sakti hai?"
+        ],
+        "opts": [{"label": "Haan, boliye", "to": "needs"}, {"label": "Abhi nahi", "to": "later"}, {"label": "Call mat karo", "to": "stop"}]
+      },
+      {
+        "id": "needs",
+        "title": "What they need",
+        "stage": 1,
+        "say": ["Kya aap abhi bhi bachche ke liye school dekh rahe hain?", "Naye school mein aapke liye sabse zaroori kya hai?"],
+        "tip": "Listen. Note what matters to them: distance, teachers, fees, board, activities.",
+        "opts": [{"label": "Haan, dekh rahe hain", "to": "visit"}, {"label": "Abhi nahi", "to": "not_now"}]
+      },
+      {
+        "id": "visit",
+        "title": "Visit or form",
+        "stage": 3,
+        "say": [
+          "Sabse achha hai ki aap ek baar school dekh lein aur teachers se mil lein.",
+          "Kya aap visit karna chahenge? Admission form WhatsApp par bhi bhej sakte hain."
+        ],
+        "check": ["Add your visiting days, hours and address in Hinglish, the way callers should say them."],
+        "opts": [{"label": "Visit book karo", "to": "booked"}, {"label": "Form bhejo", "to": "form"}, {"label": "Sochenge", "to": "later"}]
+      },
+      {
+        "id": "booked",
+        "title": "Visit booked",
+        "stage": 5,
+        "result": "visit_booked",
+        "say": ["Bahut badhiya! Kaun sa din aur time theek rahega?", "Address aur location WhatsApp par bhej dete hain. Milte hain, {name} ji."],
+        "tip": "Note the date. Repeat it back."
+      },
+      {
+        "id": "form",
+        "title": "Form sent",
+        "stage": 5,
+        "result": "form_sent",
+        "say": ["Ji zaroor. Admission form abhi WhatsApp par bhej rahe hain.", "Koi bhi sawaal ho, to call kar lijiye."]
+      },
+      {
+        "id": "not_now",
+        "title": "Not looking now",
+        "stage": 5,
+        "result": "not_this_year",
+        "say": ["Koi baat nahi. Aapke time ke liye shukriya, {name} ji.", "Bachche ko all the best."],
+        "tip": "If they joined another school, choose Joined elsewhere instead."
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Maaf kijiye, pareshani ke liye sorry. Aapka din achha ho."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["Koi baat nahi. Aapko kab call karna theek rahega?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Pareshani ke liye maaf kijiye. Hum aapko dobara call nahi karenge.", "Aapka din achha ho."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {
+        "check": ["Confirm the campaign's board tag is your school's board, or write the board here."],
+        "label": "School kaun se board ka hai?",
+        "answer": "Hamara school {board} board ka hai."
+      },
+      {
+        "check": ["Add your school timings by class, in Hinglish."],
+        "label": "School ki timing kya hai?",
+        "answer": "{class} class ki timing aapko batate hain."
+      },
+      {
+        "check": ["Write whether you have a bus and which areas it covers, in Hinglish."],
+        "label": "School bus hai kya?",
+        "answer": "Bus ke routes aapko batate hain, WhatsApp par bhi bhej sakte hain."
+      },
+      {
+        "check": ["Write if seats are open. Never say seats are almost full unless it is true."],
+        "label": "Seat khaali hai kya?",
+        "answer": "{class} class ki seats office se check karke aapko sahi batate hain."
+      },
+      {
+        "check": ["Write the list of documents, or confirm it is sent with the form."],
+        "label": "Kaun se documents chahiye?",
+        "answer": "Documents ki list form ke saath WhatsApp par bhej dete hain."
+      }
+    ]
+  },
+  {
+    "key": "cold_call_list_hinglish",
+    "name": "Cold call, bought or shared list (Hinglish)",
+    "call_type": "sales",
+    "audience": "People on a contact list who never asked us to call",
+    "about": "Hinglish version of \"Cold call (bought or shared list)\": honest, permission first, easy to say no.",
+    "tags": {"class_labels": [], "boards": []},
+    "language": "hinglish",
+    "steps": [
+      {
+        "id": "open",
+        "title": "Opening",
+        "start": true,
+        "stage": 0,
+        "say": ["Namaste, kya meri baat {name} ji se ho rahi hai?"],
+        "tip": "Smile before you speak. Speak slowly.",
+        "opts": [{"label": "Haan ji", "to": "intro"}, {"label": "Galat number", "to": "wrong"}, {"label": "Abhi busy", "to": "later"}]
+      },
+      {
+        "id": "intro",
+        "title": "Honest introduction",
+        "stage": 0,
+        "say": ["Main {me}, {institute} se.", "Yeh hamare {course} course ke baare mein ek sales call hai.", "Kya ek minute baat ho sakti hai?"],
+        "tip": "Be honest and short. If they say no, thank them and end the call.",
+        "opts": [{"label": "Haan, boliye", "to": "ask"}, {"label": "Interest nahi hai", "to": "no"}, {"label": "Call mat karo", "to": "stop"}]
+      },
+      {
+        "id": "ask",
+        "title": "Are they looking?",
+        "stage": 1,
+        "say": ["Shukriya. Kya aap ya aapke ghar mein koi abhi {course} seekhna chahta hai?"],
+        "opts": [{"label": "Shayad, bataiye", "to": "pitch"}, {"label": "Abhi nahi", "to": "no"}, {"label": "Number kahan se mila?", "to": "source"}]
+      },
+      {
+        "id": "source",
+        "title": "Where the number came from",
+        "stage": 1,
+        "say": ["Aapka number hamein {source} se mila hai.", "Agar aap call nahi chahte, to hum abhi band kar dete hain."],
+        "tip": "Never guess or hide where the number came from.",
+        "opts": [{"label": "Theek hai, boliye", "to": "pitch"}, {"label": "Call mat karo", "to": "stop"}]
+      },
+      {
+        "id": "pitch",
+        "title": "Short pitch",
+        "stage": 2,
+        "say": ["Short mein, {institute} mein {course} sikhaya jaata hai.", "Kya details WhatsApp par bhej dein?"],
+        "tip": "Send on WhatsApp only if they say yes.",
+        "check": ["Add 2 short lines in Hinglish: what the course is, who it is for, online or in class. No promises of jobs, marks or ranks."],
+        "opts": [{"label": "Haan, bhejo", "to": "interested"}, {"label": "Nahi, shukriya", "to": "no"}]
+      },
+      {
+        "id": "interested",
+        "title": "Interested",
+        "stage": 5,
+        "result": "interested",
+        "say": ["Shukriya! Details abhi WhatsApp par bhej rahe hain.", "Dekhne ke baad ek baar call kar sakte hain?"]
+      },
+      {
+        "id": "no",
+        "title": "Not interested",
+        "stage": 5,
+        "result": "not_interested",
+        "say": ["Koi baat nahi. Aapke time ke liye shukriya.", "Aapka din achha ho."],
+        "tip": "If they ask not to be called again, choose Do not call again."
+      },
+      {
+        "id": "wrong",
+        "title": "Wrong person",
+        "stage": 5,
+        "result": "wrong_number",
+        "say": ["Maaf kijiye, pareshani ke liye sorry. Aapka din achha ho."]
+      },
+      {
+        "id": "later",
+        "title": "Call back later",
+        "stage": 5,
+        "result": "call_back_later",
+        "say": ["Koi baat nahi. Aapko kab call karna theek rahega?"],
+        "tip": "Note the day and time they give."
+      },
+      {
+        "id": "stop",
+        "title": "Do not call again",
+        "stage": 5,
+        "result": "do_not_call",
+        "say": ["Pareshani ke liye maaf kijiye. Hum aapko dobara call nahi karenge.", "Aapka din achha ho."],
+        "tip": "Do not argue or ask why."
+      }
+    ],
+    "pushbacks": [
+      {
+        "label": "Mujhe interest nahi hai",
+        "answer": "Koi baat nahi. Aapke time ke liye shukriya. Kya hum is number par call karna band kar dein?"
+      },
+      {
+        "label": "Mera naam kahan se mila?",
+        "answer": "Aapka naam aur number {source} se mila hai. Aap chahein to dono abhi list se hata dete hain."
+      },
+      {
+        "label": "Aapko hi kyun chunein?",
+        "answer": "Achha sawaal hai. Details WhatsApp par bhej dete hain, aap aaram se compare karke decide kijiye."
+      },
+      {
+        "check": ["Add your website address, or remove the website part."],
+        "label": "Kuch likh kar bhejo",
+        "answer": "Ji zaroor. Details WhatsApp par bhej dete hain, aur aap hamari website bhi dekh sakte hain."
+      },
+      {
+        "check": ["Write whether classes are online, in class or both, in Hinglish."],
+        "label": "Online hai ya class mein?",
+        "answer": "Classes kaise chalti hain, woh aapko batate hain."
+      }
+    ]
+  }
+]
