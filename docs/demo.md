@@ -134,3 +134,10 @@ campaign (₹ due on its lead list, although it was collected).
   node -e 'const {createClient}=require("@supabase/supabase-js");const db=createClient(process.env.SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY);(async()=>{const {data}=await db.auth.admin.listUsers({perPage:1000});for(const u of data.users.filter(u=>/\.sunrise@example\.com$/.test(u.email))){await db.auth.admin.deleteUser(u.id);console.log("deleted",u.email);}})()'
   ```
 - The demo logins hold seats only in the demo institute; do not use them for anything else.
+
+## Reset from anywhere (no laptop terminal)
+
+The project has a server function `demo-reset` (supabase/functions/demo-reset). Signed in as the demo owner, a POST to
+`https://ehkjtowrcsplidjjjjca.supabase.co/functions/v1/demo-reset` rebuilds the demo institute with today's dates
+(about a minute). It refuses every other login. It runs the seed pinned to commit 1898f1b; after changing
+demo_seed.sql, update SEED_URL in the function and deploy it again.
