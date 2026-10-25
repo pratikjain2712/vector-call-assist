@@ -121,4 +121,4 @@ const test = base.test.extend({
   page: async ({ page, backend }, use) => { await pointAtTestStack(page, backend); await use(page); },
 });
 
-module.exports = { test, expect: base.expect, env, isFake, fakePairing, adminDb, userDb, uploadedRows, signInOnApp, intoWorkspace };
+module.exports = { test, expect: base.expect, env, isFake, fakePairing, adminDb, userDb, uploadedRows, signInOnApp, intoWorkspace, pointAtTestStack };

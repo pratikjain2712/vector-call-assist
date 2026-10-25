@@ -1562,6 +1562,87 @@ function createFakeBackend(world) {
   })();
   // end Phase A.2: fees
 
+  // presence
+  // The call state on the caller screen (20261025190000_presence_call_state.sql): report_presence with the call
+  // state and its start (the old two-argument call still works), kept per seat in db.seatPresence, and Home's and
+  // Callers' "now" worked out from it with the rules of home_seat_status. A status a test sets with
+  // adminTabs.setPresence() still wins. Every report is also kept in db.presenceReports.
+  const presence = (() => {
+    db.seatPresence = {};   // seat id -> { seen_at, online_since, phone_ok, phone_offline_since, call_state, call_started_at, state_at }
+    const STATES = ['none', 'dialling', 'connected', 'wrapup', 'unconfirmed'];
+    const MIN = 60e3;
+    RPC.report_presence = (u, a) => {
+      const s = u && seatOf(u.id);
+      if (!s) return pgFail('42501', 'no active seat for this login');
+      const st = a.p_call_state == null ? (a.p_on_call ? 'unconfirmed' : 'none') : a.p_call_state;
+      if (!STATES.includes(st)) return pgFail('22023', 'call state must be none, dialling, connected, wrapup or unconfirmed');
+      const now = Date.now();
+      const ok = a.p_phone_ok !== false;
+      const live = ['dialling', 'connected', 'unconfirmed'].includes(st);
+      let started = a.p_call_started_at ? Date.parse(a.p_call_started_at) : null;
+      if (st === 'none' || !Number.isFinite(started)) started = null;
+      else if (started > now) started = now;
+      else if (started < now - 12 * 60 * MIN) started = null;
+      const p = db.seatPresence[s.id];
+      const fresh = !!p && p.seen_at >= now - 3 * MIN;
+      db.seatPresence[s.id] = {
+        seen_at: now,
+        online_since: fresh ? p.online_since : now,
+        phone_ok: ok,
+        phone_offline_since: ok ? null : (fresh && !p.phone_ok && p.phone_offline_since ? p.phone_offline_since : now),
+        call_state: st,
+        call_started_at: st === 'none' ? null : started || (fresh && p.call_state !== 'none' && p.call_started_at) || (live ? now : null),
+        state_at: fresh && p.call_state === st ? p.state_at : now,
+      };
+      db.presenceReports.push({ seat_id: s.id, on_call: live, phone_ok: ok, call_state: st, call_started_at: a.p_call_started_at || null, at: now });
+      return json(200, null);
+    };
+    const startOfToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
+    const lastCall = (seatId) => {
+      const times = db.outcomes.filter((r) => !r.corrects_id && r.seat_id === seatId).map((r) => Date.parse(r.dialled_at || r.uploaded_at))
+        .concat((db.saved || []).filter((r) => r.seat_id === seatId).map((r) => Date.parse(r.saved_at)))
+        .filter((t) => t >= startOfToday());
+      return times.length ? Math.max(...times) : null;
+    };
+    const iso = (t) => (t == null ? null : new Date(t).toISOString());
+    const secs = (t) => (t == null ? null : Math.max(0, Math.floor((Date.now() - t) / 1000)));
+    // home_seat_status, in short.
+    function statusOf(seatId) {
+      const p = db.seatPresence[seatId];
+      const now = Date.now();
+      const recent = !!p && p.seen_at >= now - 3 * MIN;
+      const last = lastCall(seatId);
+      if (recent && !p.phone_ok) return { status: 'phone_offline', since: iso(p.phone_offline_since || p.seen_at) };
+      if (recent && ['dialling', 'connected', 'unconfirmed'].includes(p.call_state)) {
+        const since = p.call_started_at || p.state_at || last;
+        return { status: 'on_call', call_state: p.call_state, confirmed: p.call_state !== 'unconfirmed', since: iso(since), seconds: secs(since) };
+      }
+      if (recent && p.call_state === 'wrapup' && p.state_at >= now - 10 * MIN) {
+        return { status: 'wrapup', call_state: 'wrapup', since: iso(p.state_at), seconds: secs(p.state_at) };
+      }
+      const ref = Math.max(last || 0, recent && p.online_since >= startOfToday() ? p.online_since : 0);
+      if (!ref) return { status: 'not_started' };
+      const mins = Math.floor((now - ref) / MIN);
+      return mins >= 15 ? { status: 'idle', since: iso(ref), idle_minutes: mins } : { status: 'ready', since: iso(ref) };
+    }
+    // Home and Callers: a seat with presence rows and no status set by the test gets the worked-out one.
+    const nowOf = (seatId, given) => (db.presence[seatId] || !db.seatPresence[seatId] ? given : statusOf(seatId));
+    const wrap = (name, patch) => {
+      const prev = RPC[name];
+      RPC[name] = (u, a) => {
+        const res = prev(u, a);
+        if (res.status !== 200 || !res.body) return res;
+        const body = JSON.parse(res.body);
+        patch(body);
+        return json(200, body);
+      };
+    };
+    wrap('admin_home_summary', (b) => (b.callers || []).forEach((c) => { c.now = nowOf(c.seat_id, c.now); }));
+    wrap('admin_callers', (rows) => rows.forEach((r) => { if (r.now_status) r.now_status = nowOf(r.seat_id, r.now_status); }));
+    return { statusOf };
+  })();
+  // end presence
+
   async function handle(route) {
     const req = route.request();
     const url = new URL(req.url());
@@ -1667,6 +1748,7 @@ function createFakeBackend(world) {
     WA_LEADS,
     // end Phase A: whatsapp
     fees,   // Phase A.2: fees (addAccounts, aarav, diya, balance; data in db.fees)
+    presence,   // presence (statusOf; reports in db.presenceReports, rows in db.seatPresence)
   };
 }
 
