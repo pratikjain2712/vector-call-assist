@@ -139,5 +139,5 @@ campaign (₹ due on its lead list, although it was collected).
 
 The project has a server function `demo-reset` (supabase/functions/demo-reset). Signed in as the demo owner, a POST to
 `https://ehkjtowrcsplidjjjjca.supabase.co/functions/v1/demo-reset` rebuilds the demo institute with today's dates
-(about a minute). It refuses every other login. It runs the seed pinned to commit 1898f1b; after changing
+(about a minute). It refuses every other login. It runs the seed pinned to commit 6e7fb04; after changing
 demo_seed.sql, update SEED_URL in the function and deploy it again.
