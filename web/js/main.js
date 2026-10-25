@@ -2195,7 +2195,7 @@ function renderPicker() {
       const b = el("button", "campitem"); b.type = "button"; b.dataset.campaign = c.campaign_id;
       if (camp.id === c.campaign_id) b.setAttribute("aria-current", "true");
       b.appendChild(el("strong", "", c.name + (c.status === "paused" ? " " + I18n.t("a2.paused") : "")));
-      const tags = CampaignPicker.tagLine(c);
+      const tags = CampaignPicker.tagLine(c, camp.filter, { classes: I18n.t("a2.allClasses"), boards: I18n.t("a2.allBoards") });
       b.appendChild(el("span", "sub", [tags, c.call_type_label].filter(Boolean).join(" · ")));
       const n = CampaignPicker.waiting(c);
       b.appendChild(el("span", "waitn" + (n ? "" : " none"), I18n.t("a2.waitingN", { n: n })));

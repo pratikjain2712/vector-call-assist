@@ -47,13 +47,23 @@ test("picker: filter choices are the tags in use, classes in school order, board
   assert.deepEqual(o.boards, ["CBSE", "ICSE"]);
 });
 
-test("picker: filters by purpose, class and board together; untagged campaigns do not match a tag filter", () => {
-  assert.deepEqual(ids(Picker.filter(LIST, { class_label: "8th" })), ["f8c", "f8i", "e"]);
+test("picker: filters by purpose, class and board together; a campaign without a tag is for everyone and matches it", () => {
+  assert.deepEqual(ids(Picker.filter(LIST, { class_label: "8th" })), ["f8c", "f8i", "s", "e", "r"]);
   assert.deepEqual(ids(Picker.filter(LIST, { class_label: "8th", purpose: "fees" })), ["f8c", "f8i"]);
   assert.deepEqual(ids(Picker.filter(LIST, { class_label: "8TH", purpose: "fees", board: "cbse" })), ["f8c"]);
-  assert.deepEqual(ids(Picker.filter(LIST, { board: "CBSE" })), ["f8c", "f10", "e"]);
+  assert.deepEqual(ids(Picker.filter(LIST, { board: "CBSE" })), ["a", "f8c", "f10", "s", "e", "r"]);
   assert.deepEqual(ids(Picker.filter(LIST, { purpose: "", class_label: "", board: "" })), ids(LIST));
-  assert.deepEqual(ids(Picker.filter(LIST, { purpose: "sales", board: "ICSE" })), []);
+  assert.deepEqual(ids(Picker.filter(LIST, { purpose: "sales", board: "ICSE" })), ["s"]);
+  assert.deepEqual(ids(Picker.filter(LIST, { purpose: "admissions", class_label: "8th" })), []);
+});
+
+test("picker: under a class or board filter, an untagged campaign says All classes / All boards", () => {
+  assert.equal(Picker.tagLine(LIST[4], { class_label: "8th" }), "All classes");
+  assert.equal(Picker.tagLine(LIST[4], { class_label: "8th", board: "CBSE" }), "All classes · All boards");
+  assert.equal(Picker.tagLine(LIST[0], { board: "CBSE" }), "LKG · All boards");
+  assert.equal(Picker.tagLine(LIST[1], { class_label: "8th", board: "CBSE" }), "8th · CBSE");
+  assert.equal(Picker.tagLine(LIST[4], { class_label: "8th" }, { classes: "सभी कक्षाएँ" }), "सभी कक्षाएँ");
+  assert.equal(Picker.tagLine(LIST[4], {}), "");
 });
 
 test("picker: waiting = own due leads plus the pool; tag line; a saved filter is checked against the choices", () => {
@@ -82,6 +92,13 @@ test("placeholders: values from the lead, its extra fields, the campaign, the mo
     name: "Sunita Sharma", me: "Priya", institute: "Sunrise Public School", student: "Aarav", class: "8th", board: "CBSE",
     amount_due: "₹18,000", due_date: "31 October", course: "Spoken English", source: "the enquiry form on our website", source_date: "12 October",
   });
+});
+
+test("placeholders: {due_date} from my_call_queue's lead due_date (ledger leads), after the lead's own extra field", () => {
+  assert.equal(P.values({ lead: { name: "X", due_date: "2026-10-15", extra: {} } }).due_date, "15 October");
+  assert.equal(P.values({ lead: { name: "X", due_date: "2026-10-15", extra: { "Due date": "2026-11-05" } } }).due_date, "5 November");
+  assert.equal(P.values({ lead: { name: "X", due_date: null, extra: {} }, campaign: { fees_due_by: "2026-10-31" } }).due_date, "31 October");
+  assert.equal(P.values({ lead: { name: "X", extra: {} } }).due_date, "");
 });
 
 test("placeholders: the ledger balance stands in for the amount; hidden money fills nothing; the date added is the source date", () => {

@@ -1,7 +1,7 @@
 'use strict';
 /* Settings tab of the admin app (web/admin.html), Sprint 10: call types and their result buttons (add a type,
    add or remove an institute's own results), the institute's name and time zone, "Hide money everywhere"
-   (owners), the plan (trial days left, seats, add-ons from my_features, AI drafts used), WhatsApp (an empty
+   (owners), the plan (trial days left, seats, add-ons from my_features; AI drafts used for platform admins only), WhatsApp (an empty
    section that js/admin/settings-whatsapp.js fills when it exists), the signed-in admin's password, the terms
    they accepted, and the admin activity log.
    Reads: admin_list_call_types, admin_institute_settings (20261024100023; my_trial_status and my_features on an
@@ -600,10 +600,18 @@
     });
   }
 
-  // AI drafts used this month, from the scripts feature's admin_ai_usage() (optional).
+  // AI drafts used this month, from the scripts feature's admin_ai_usage() (optional). Phase A.2: the AI script
+  // maker is the Vector team's tool (the Library view), so only platform admins (is_platform_admin) see the count;
+  // institutes get the ready script library and see nothing about AI here.
   async function loadAiUsage() {
+    const mine = ctx;
+    $('plan-ai').textContent = '';
+    let platform = false;
+    try { platform = (await ctx.rpc('is_platform_admin')) === true; } catch (err) { platform = false; }
+    if (ctx !== mine || !platform) return;
     try {
       const text = aiUsageText(await ctx.rpc('admin_ai_usage'));
+      if (ctx !== mine) return;
       $('plan-ai').textContent = text ? text + '.' : '';
     } catch (err) {
       $('plan-ai').textContent = ctx.isMissing(err) ? 'AI draft use shows here once the AI script maker is set up.' : '';

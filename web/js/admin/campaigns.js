@@ -553,7 +553,7 @@
     if (seats.length) return;
     try {
       const data = rows(await rpc('admin_seat_list', { p_institute: ctx.institute.id }));
-      seats = data.filter((s) => s.status === 'active');
+      seats = data.filter((s) => s.status === 'active' && s.role !== 'accounts');   // Accounts seats make no calls
     } catch (err) { seats = []; }
   }
 

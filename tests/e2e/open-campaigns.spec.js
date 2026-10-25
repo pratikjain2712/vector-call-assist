@@ -61,7 +61,9 @@ test('a caller filters open campaigns by class 8th and Fees, gets a pool lead wi
 
   // Filter: class 8th, then Fees.
   await picker.locator('.campchip[data-filter="class_label"][data-value="8th"]').click();
-  await expect(picker.locator('h3')).toHaveText(['Fees (1)', 'Admissions (1)']);
+  // The untagged sales campaign is for every class: it stays, marked "All classes".
+  await expect(picker.locator('h3')).toHaveText(['Fees (1)', 'Admissions (1)', 'Sales (1)']);
+  await expect(picker.locator('.campitem', { hasText: 'Spoken English leads' })).toContainText('All classes · Sales');
   await picker.locator('.campchip[data-filter="purpose"][data-value="fees"]').click();
   await expect(picker.locator('.campchip[data-filter="purpose"][data-value="fees"]')).toHaveAttribute('aria-pressed', 'true');
   const items = picker.locator('.picklist .campitem');

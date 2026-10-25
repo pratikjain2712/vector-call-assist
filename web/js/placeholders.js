@@ -69,7 +69,9 @@
     return { source: src, date: dateText(d, true), longDate: dateText(d, false) };
   }
 
-  /* ctx: { name, me, institute, lead, campaign, money, ledger }. lead: { name, extra, created_at };
+  /* ctx: { name, me, institute, lead, campaign, money, ledger }. lead: { name, extra, created_at, due_date };
+     due_date: the lead's own (extra), else my_call_queue's due_date (campaign fees_due_by or the student's oldest
+     unpaid fee item), else the campaign's fees_due_by.
      campaign: { class_label, board, fees_due_by }; money: lead_money() row; ledger: lead_ledger() row.
      Returns { key: text } with "" for every value that is not known. */
   function values(ctx) {
@@ -87,7 +89,7 @@
       class: cleanClass(extraValue(ex, EXTRA.class) || camp.class_label || ""),
       board: extraValue(ex, EXTRA.board) || String(camp.board || "").trim(),
       amount_due: amount,
-      due_date: dateText(extraValue(ex, EXTRA.due_date) || camp.fees_due_by || "", false),
+      due_date: dateText(extraValue(ex, EXTRA.due_date) || l.due_date || camp.fees_due_by || "", false),
       course: extraValue(ex, EXTRA.course),
       source: src.source,
       source_date: src.source ? src.longDate : dateText(extraValue(ex, EXTRA.source_date), false),

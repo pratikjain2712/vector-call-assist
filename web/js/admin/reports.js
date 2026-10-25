@@ -591,14 +591,18 @@
   }
   const rangeText = (f) => S.formatDate(f.fromDay) + ' to ' + S.formatDate(f.toDay);
 
-  // Campaign and caller lists for the filters. A failure leaves "All" only.
+  // Campaign and caller lists for the filters (owners and managers). A failure leaves "All" only and says so.
+  // Accounts seats are not callers, so they are not in the caller list.
   async function loadFilterLists() {
     const mine = ctx;
+    let failed = false;
     const [camps, seats] = await Promise.all([
-      ctx.client.from('campaigns').select('id, name, status').order('name').then((r) => (r.error ? [] : r.data || []), () => []),
-      ctx.rpc('admin_seat_list', { p_institute: ctx.institute.id }).then((d) => d || [], () => []),
+      ctx.client.from('campaigns').select('id, name, status').order('name')
+        .then((r) => { if (r.error) { failed = true; return []; } return r.data || []; }, () => { failed = true; return []; }),
+      ctx.rpc('admin_seat_list', { p_institute: ctx.institute.id }).then((d) => d || [], () => { failed = true; return []; }),
     ]);
     if (ctx !== mine) return;
+    if (failed) say('rp-msg', 'Could not load the campaign and caller lists, so the filters show "All" only. Reload to try again.', true);
     const fill = (sel, first, items) => {
       const keep = sel.value;
       sel.textContent = '';
@@ -610,7 +614,7 @@
       id: c.id, text: c.name + (c.status === 'draft' ? ' (draft)' : c.status === 'closed' ? ' (closed)' : ''),
     })));
     fill($('rp-caller'), 'All callers', seats
-      .filter((s) => s.status !== 'invited')
+      .filter((s) => s.status !== 'invited' && s.role !== 'accounts' && s.access_role !== 'accounts')
       .sort((a, b) => String(a.label).localeCompare(String(b.label)))
       .map((s) => ({ id: s.seat_id, text: (s.label || 'No name') + (s.status === 'revoked' ? ' (removed)' : '') })));
   }
@@ -1161,14 +1165,16 @@
       $('rp-from').value = d.from;
       $('rp-to').value = d.to;
       $('week-start').value = T.weekStart(new Date());
-      loadFilterLists();
       if (accounts) {
-        // Accounts: Fees collection only; nothing that would ask an owner/manager function and show its refusal.
+        // Accounts: Fees collection only, for every campaign and caller; no campaign or caller lists (the caller
+        // list is an owner/manager function), and nothing that would show its refusal.
         scriptsReady = Promise.resolve();
+        $('rp-campaign').closest('label').hidden = true;
         $('rp-caller').closest('label').hidden = true;
         pick('fees');
         return;
       }
+      loadFilterLists();
       loadFeatures();
       scriptsReady = loadScripts();
       const route = ctx.route();

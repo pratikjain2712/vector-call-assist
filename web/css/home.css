@@ -606,7 +606,20 @@ html:not(.has-3d) .stage-card > .said { border-radius: 28px; }
 .insight-row { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: clamp(1.4rem, 3vw, 2.2rem); align-items: start; margin-top: clamp(2.4rem, 5vw, 3.6rem); }
 @media (max-width: 960px) { .insight-row { grid-template-columns: minmax(0, 1fr); } }
 
-/* AI script maker */
+/* Ready script library: small HTML mock-ups of the library and a common answer. */
+.libcard { padding: 1rem 1.1rem; display: grid; gap: .7rem; font-size: .9rem; color: var(--text); }
+.libfilters { display: flex; flex-wrap: wrap; gap: .4rem; }
+.libchip { font-size: .74rem; font-weight: 700; border-radius: 999px; padding: .25em .75em; border: 1px solid var(--line-strong); color: var(--muted); background: var(--surface); }
+.libchip.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+.liblist { display: grid; gap: 0; }
+.liblist li { display: grid; gap: .1rem; padding: .55rem 0; border-top: 1px solid var(--line); min-width: 0; }
+.liblist li:first-child { border-top: 0; }
+.liblist b { color: var(--ink); font-family: var(--display); font-weight: 700; }
+.libmeta { font-size: .78rem; color: var(--muted); }
+.libq { font-family: var(--display); font-weight: 700; color: var(--ink); font-size: 1rem; }
+.liba { line-height: 1.45; }
+
+/* Ready script library: the numbered list */
 .steps-list { display: grid; gap: .9rem; counter-reset: st; margin-top: .4rem; }
 .steps-list li { counter-increment: st; position: relative; padding-left: 2.6rem; color: var(--text); }
 .steps-list li::before {

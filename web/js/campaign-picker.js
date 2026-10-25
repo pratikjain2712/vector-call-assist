@@ -13,8 +13,15 @@
   /* Leads waiting now: the caller's own due leads plus the pool's (open campaigns hand those out next). */
   function waiting(c) { return Math.max(0, Number(c && c.my_leads_due) || 0) + Math.max(0, Number(c && c.pool_leads_due) || 0); }
 
-  /* "8th · CBSE", or "" without tags. */
-  function tagLine(c) { return [clean(c && c.class_label), clean(c && c.board)].filter(Boolean).join(" · "); }
+  /* "8th · CBSE", or "" without tags. With a class or board filter set (f), a campaign without that tag applies to
+     everyone, so it says so: words.classes ("All classes") or words.boards ("All boards"). */
+  function tagLine(c, f, words) {
+    const w = Object.assign({ classes: "All classes", boards: "All boards" }, words || {});
+    const want = f || {};
+    const cls = clean(c && c.class_label) || (clean(want.class_label) ? w.classes : "");
+    const brd = clean(c && c.board) || (clean(want.board) ? w.boards : "");
+    return [cls, brd].filter(Boolean).join(" · ");
+  }
 
   // Classes in school order where we can tell (Nursery, LKG, UKG, 1st … 12th), then the rest by name.
   const EARLY = { nursery: -3, "pre-nursery": -4, lkg: -2, ukg: -1 };
@@ -39,14 +46,14 @@
   }
 
   /* The campaigns that match every filter set: f = { purpose, class_label, board } ("" or null = any). A campaign
-     with no class or board tag does not match a class or board filter. */
+     with no class tag is for every class, so it matches any class filter; the same for the board. */
   function filter(list, f) {
     const want = f || {};
     const eq = (a, b) => clean(a).toLowerCase() === clean(b).toLowerCase();
     return (list || []).filter((c) =>
       (!want.purpose || purposeOf(c) === want.purpose) &&
-      (!clean(want.class_label) || eq(c.class_label, want.class_label)) &&
-      (!clean(want.board) || eq(c.board, want.board)));
+      (!clean(want.class_label) || !clean(c.class_label) || eq(c.class_label, want.class_label)) &&
+      (!clean(want.board) || !clean(c.board) || eq(c.board, want.board)));
   }
 
   /* [{ purpose, campaigns }] in the order Fees, Admissions, Sales, Others; campaigns keep the list's order

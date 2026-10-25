@@ -551,6 +551,10 @@
     });
     $('edit-campaign-none').hidden = restricted.length > 0;
     $('edit-campaign-save').hidden = !restricted.length || s.status !== 'active' || !known;
+    // An Accounts seat makes no calls: no campaigns, leads to move or send back.
+    const accounts = role === 'accounts';
+    $('edit-campaigns').hidden = accounts;
+    $('edit-move').hidden = accounts;
 
     // Role and money: owners only.
     $('edit-owner').hidden = !owner || !known;
@@ -561,7 +565,7 @@
     // Move leads: to another active caller, or back to the shared list.
     const to = $('move-to');
     to.textContent = '';
-    seats.filter((x) => x.status === 'active' && x.seat_id !== s.seat_id)
+    seats.filter((x) => x.status === 'active' && x.seat_id !== s.seat_id && roleOf(fullSeat(x)) !== 'accounts')
       .forEach((x) => to.appendChild(el('option', { value: x.seat_id, text: x.label })));
     to.appendChild(el('option', { value: '', text: 'Nobody: back to the shared list' }));
     const camp = $('move-campaign');
@@ -572,7 +576,7 @@
     rel.textContent = '';
     rel.appendChild(el('option', { value: '', text: 'All campaigns' }));
     campaigns.forEach((c) => rel.appendChild(el('option', { value: c.id, text: c.name })));
-    $('edit-release').hidden = s.status !== 'active';
+    $('edit-release').hidden = s.status !== 'active' || accounts;
 
     // Phone and seat. Removing an owner is for owners only.
     $('edit-reset-phone').hidden = !(s.status === 'active' && (s.device_kinds || []).includes('phone'));
@@ -642,11 +646,17 @@
     const camp = campaignId ? campaigns.find((c) => c.id === campaignId) : null;
     let count = null;
     try {
-      let q = ctx.client.from('leads').select('id', { count: 'exact', head: true })
-        .eq('assigned_seat_id', s.seat_id).in('status', ['new', 'callback', 'promised']).eq('do_not_call', false);
-      if (campaignId) q = q.eq('campaign_id', campaignId);
-      const { count: n, error } = await q;
-      if (!error && typeof n === 'number') count = n;
+      // The same leads admin_release_leads sends back: open leads in campaigns that are not closed (the
+      // campaigns list holds exactly those). Without that list the count is left out.
+      const open = campaignId ? [campaignId] : (extrasDone ? campaigns.map((c) => c.id) : null);
+      if (open && !open.length) count = 0;
+      else if (open) {
+        const q = ctx.client.from('leads').select('id', { count: 'exact', head: true })
+          .eq('assigned_seat_id', s.seat_id).in('status', ['new', 'callback', 'promised']).eq('do_not_call', false)
+          .in('campaign_id', open);
+        const { count: n, error } = await q;
+        if (!error && typeof n === 'number') count = n;
+      }
     } catch (err) { count = null; }
     if (!ctx) return;
     if (count === 0) {

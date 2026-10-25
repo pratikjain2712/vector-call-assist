@@ -342,9 +342,11 @@ function createFakeBackend(world) {
       caller: 'Rep 2', ledger_state: 'paid', paid_amount: 12000, paid_on: 2, paid_mode: 'upi', lead_status: 'done' },
   };
   const ledgerMoney = (v) => (db.reports.money ? v : null);
+  // admin_fees_ledger and admin_promises_ledger: owners, managers and accounts seats (can_read_ledger).
+  const ledgerReader = (u, inst) => { const s = u && seatOf(u.id); return !!s && ['admin', 'accounts'].includes(s.role) && s.institute_id === inst; };
   Object.assign(RPC, {
     admin_fees_ledger: (u, a) => {
-      if (!requireAdmin(u, a.p_institute)) return reportsDenied();
+      if (!ledgerReader(u, a.p_institute)) return reportsDenied();
       if (!a.p_from || !a.p_to || a.p_from > a.p_to) return pgErr(400, '22023', 'the from date must be on or before the to date');
       const L = db.ledgerReports;
       const day = (n) => reportsDay(n);
@@ -363,7 +365,7 @@ function createFakeBackend(world) {
       });
     },
     admin_promises_ledger: (u, a) => {
-      if (!requireAdmin(u, a.p_institute)) return reportsDenied();
+      if (!ledgerReader(u, a.p_institute)) return reportsDenied();
       const L = db.ledgerReports;
       const rows = db.reports.promises.map((p) => Object.assign({}, p, L.states[p.name] || {})).concat([L.paid]);
       return json(200, rows.map((p) => ({ ...p, amount: ledgerMoney(p.amount), paid_amount: ledgerMoney(p.paid_amount),
@@ -656,8 +658,13 @@ function createFakeBackend(world) {
       const c = db.campaigns.find((x) => x.id === a.p_campaign);
       if (res.status !== 200 || !c) return res;
       const body = JSON.parse(res.body);
+      // 20261025180000: the campaign's fees_due_by, and each lead's due_date (fees_due_by, else the test's lead.due_date).
       return json(200, Object.assign(body, { open_to_all: c.open_to_all === true, class_label: c.class_label || null, board: c.board || null,
-        leads: body.leads.map((l) => Object.assign({ student_id: null }, l)) }));
+        fees_due_by: c.fees_due_by || null,
+        leads: body.leads.map((l) => {
+          const row = db.leads.find((x) => x.id === l.id) || {};
+          return Object.assign({ student_id: null }, l, { due_date: c.fees_due_by || row.due_date || null });
+        }) }));
     }),
     campaign_script_version: a2AsMember((u, a) => a2Base.campaign_script_version(u, a)),
     next_free_lead: (u, a) => {
@@ -745,8 +752,10 @@ function createFakeBackend(world) {
         if (!s || s.institute_id !== a.p_institute) return deny();
         return json(200, db.seats.filter((x) => x.institute_id === a.p_institute).map((x) => ({
           seat_id: x.id, label: x.label, access_role: roleOf(x), can_see_money: !!x.can_see_money, status: x.status,
-          campaigns: campaignsOf(x.id).map((c) => ({ id: c.id, name: c.name, status: c.status })),
-          calls_today: callsToday(x.id), calls_target: null, now_status: x.status === 'active' ? (db.presence[x.id] || { status: 'not_started' }) : null })));
+          campaigns: x.role === 'accounts' ? [] : campaignsOf(x.id).map((c) => ({ id: c.id, name: c.name, status: c.status })),
+          calls_today: callsToday(x.id), calls_target: null,
+          // 20261025180000: an Accounts seat is not a caller (no campaigns, no "now" status).
+          now_status: x.status === 'active' && x.role !== 'accounts' ? (db.presence[x.id] || { status: 'not_started' }) : null })));
       },
       admin_set_seat_role: (u, a) => {
         if (!owner(u)) return deny('only an owner of this institute can change roles');
@@ -916,10 +925,13 @@ function createFakeBackend(world) {
         const s = seat(u);
         if (!s) return deny('no active seat for this login');
         const fills = db.answerFills[s.institute_id] || {};
-        return json(200, db.commonAnswers.filter((x) => x.active).sort((x, y) => x.label.localeCompare(y.label)).map((x) => {
+        // The library's own order (sort_order in the database: the most asked first). A test may set
+        // db.commonAnswers to rows in the answer shape (check, filled) instead of the table shape (checks, active).
+        return json(200, db.commonAnswers.filter((x) => x.active !== false).map((x) => {
           const fill = fills[x.key] || null;
-          return { key: x.key, label: x.label, answer: fill || x.answer, tags: x.tags, fallback: x.fallback, result: x.result,
-            check: x.checks, filled: !x.checks.length || !!fill };
+          const checks = x.checks || x.check || [];
+          return { key: x.key, label: x.label, answer: fill || x.answer, tags: x.tags || [], fallback: x.fallback || null, result: x.result || null,
+            check: checks, filled: typeof x.filled === 'boolean' ? x.filled : !checks.length || !!fill };
         }));
       },
       admin_fill_common_answer: (u, a) => {
@@ -1055,8 +1067,11 @@ function createFakeBackend(world) {
       if (p === '/rest/v1/leads' && method === 'HEAD') {
         const s = adminOf(u);
         const statuses = (url.searchParams.get('status') || '').replace(/^in\.\(|\)$/g, '').split(',').filter(Boolean);
+        const camps = (url.searchParams.get('campaign_id') || '').startsWith('in.')
+          ? url.searchParams.get('campaign_id').replace(/^in\.\(|\)$/g, '').split(',').filter(Boolean) : null;
         const n = !s ? 0 : db.leads.filter((l) => l.institute_id === s.institute_id && l.assigned_seat_id === eq('assigned_seat_id')
-          && (!statuses.length || statuses.includes(l.status)) && !l.do_not_call && (!eq('campaign_id') || l.campaign_id === eq('campaign_id'))).length;
+          && (!statuses.length || statuses.includes(l.status)) && !l.do_not_call
+          && (camps ? camps.includes(l.campaign_id) : !eq('campaign_id') || l.campaign_id === eq('campaign_id'))).length;
         return { status: 200, body: '', headers: { 'content-range': '*/' + n, 'access-control-expose-headers': 'content-range' } };
       }
       return null;
@@ -1303,6 +1318,7 @@ function createFakeBackend(world) {
       source: st.source, ...hide(balance(st), money), money_hidden: !money });
     const label = (seatId) => (db.seats.find((x) => x.id === seatId) || {}).label || null;
 
+    const pvpReports = RPC.promises_vs_payments;
     Object.assign(RPC, {
       accounts_students: (u, a) => {
         const s = reader(u);
@@ -1479,8 +1495,12 @@ function createFakeBackend(world) {
           by_mode: Object.values(modes).sort((x, y) => x.mode.localeCompare(y.mode)).map((m) => ({ ...m, amount: money ? m.amount : null })), by_day: [] });
       },
       promises_vs_payments: (u, a) => {
+        // The reports block (above) answers for the Insights campaigns a test links to the ledger
+        // (db.ledgerReports.pvp) and for campaigns this block does not hold.
+        if (db.ledgerReports && db.ledgerReports.pvp[a.p_campaign]) return pvpReports(u, a);
         const s = reader(u);
         const c = s && db.campaigns.find((x) => x.id === a.p_campaign && x.institute_id === s.institute_id);
+        if (!c && s && s.role === 'admin') return pvpReports(u, a);
         if (!c) return pgErr(403, '42501', 'campaign not found');
         const money = moneyFor(s);
         const rows = F.calls.filter((x) => x.campaign_id === c.id && x.promised_date && x.promised_amount > 0).map((x) => {

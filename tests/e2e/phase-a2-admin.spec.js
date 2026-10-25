@@ -123,6 +123,12 @@ test('Callers: "Back to pool" says how many leads go back, and the role select h
   backend.db.campaigns.push(campaign);
   ['new', 'callback', 'done'].forEach((status, i) => backend.db.leads.push({ id: crypto.randomUUID(), campaign_id: campaign.id,
     institute_id: campaign.institute_id, name: 'Lead ' + i, phone: '+9198765432' + (10 + i), extra: {}, assigned_seat_id: rep1.id, status }));
+  // A lead still open in a closed campaign is not sent back, so it is not counted either.
+  const closed = { id: crypto.randomUUID(), institute_id: env().institutes.a, name: 'September fees', call_type_id: null, status: 'closed',
+    open_to_all: true, share_mode: 'next_free', created_at: new Date().toISOString() };
+  backend.db.campaigns.push(closed);
+  backend.db.leads.push({ id: crypto.randomUUID(), campaign_id: closed.id, institute_id: closed.institute_id, name: 'Old lead', phone: '+919876543299',
+    extra: {}, assigned_seat_id: rep1.id, status: 'callback' });
 
   await signInAdmin(page, '#callers');
   await expect(page.locator('#invite-note')).toContainText('This is the only step');
@@ -145,6 +151,7 @@ test('Callers: "Back to pool" says how many leads go back, and the role select h
   await page.locator('#confirm-go').click();
   await expect(page.locator('#status')).toHaveText('2 leads of "Rep 1" back in the pool.');
   expect(backend.db.leads.filter((l) => l.campaign_id === campaign.id && l.assigned_seat_id === rep1.id).map((l) => l.status)).toEqual(['done']);
+  expect(backend.db.leads.find((l) => l.name === 'Old lead').assigned_seat_id).toBe(rep1.id);
 
   // The role select has Accounts, with its one-line explanation.
   await page.locator('#seat-body tr[data-seat="' + rep1.id + '"]').getByRole('button', { name: 'Edit', exact: true }).click();
@@ -158,6 +165,20 @@ test('Callers: "Back to pool" says how many leads go back, and the role select h
   await page.locator('#confirm-go').click();
   await expect(page.locator('#status')).toHaveText('"Rep 1" is now accounts.');
   expect(backend.db.seats.find((s) => s.id === rep1.id).role).toBe('accounts');
+
+  // An Accounts seat stays in the seats list with its role, but is not a caller: no "now" status, no Back to pool,
+  // no campaigns or leads to move, and nobody can move leads to it.
+  const row = page.locator('#seat-body tr[data-seat="' + rep1.id + '"]');
+  await expect(row).toContainText('Accounts');
+  await expect(row.locator('td').nth(4)).toHaveText('');
+  await expect(row.getByRole('button', { name: 'Back to pool: leads of Rep 1' })).toHaveCount(0);
+  await expect(page.locator('#edit-campaigns')).toBeHidden();
+  await expect(page.locator('#edit-move')).toBeHidden();
+  await expect(page.locator('#edit-release')).toBeHidden();
+  await page.locator('#seat-body tr[data-seat="' + env().seatInfo.rep2.id + '"]').getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(page.locator('#edit-move')).toBeVisible();
+  await expect(page.locator('#move-to option')).not.toContainText(['Rep 1']);
+  await expect(page.locator('#move-to')).not.toContainText('Rep 1');
 });
 
 test('Settings: the owner fills in the common answers that need institute facts', async ({ page, backend }) => {

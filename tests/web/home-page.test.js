@@ -109,3 +109,14 @@ test('home page: hero chips, menu button, demo phone and timeline wire to elemen
   }
   assert.ok((html.match(/data-cta="/g) || []).length >= 6, 'sections carry data-cta');
 });
+
+test('home page: institutes get the ready script library; the AI script maker is not promised to them', () => {
+  assert.match(html, /id="library"/, 'the Ready script library section');
+  assert.match(html, /26\+ ready scripts/);
+  assert.match(html, /English and Hinglish/);
+  assert.match(html, /Where did you get my number\?/);
+  assert.match(html, /new scripts on request/i);
+  assert.doesNotMatch(html, /AI script maker|Make with AI|AI drafts|id="ai"/, 'no AI script maker for institutes');
+  assert.doesNotMatch(html, /your own or AI/, 'How it works step 3 does not offer AI');
+  assert.doesNotMatch(html, /img\/ai-(form|check)\.webp/);
+});

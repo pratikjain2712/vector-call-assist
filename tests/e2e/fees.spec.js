@@ -132,6 +132,14 @@ test('Accounts: only Fees and Reports; a UPI payment, its receipt, its reversal,
   expect(made.args.p_script).toBe(backend.db.fees.scripts[0].id);
   expect(made.leads).toBe(3);   // Aarav, Kabir and Isha
   expect(backend.db.campaigns.find((c) => c.id === made.id).status).toBe('running');
+
+  // Reports: Fees collection from the ledger, for every campaign and caller; Accounts gets no campaign or caller
+  // filter (those lists are for owners and managers) and no error.
+  await page.locator('#tab-link-reports').click();
+  await expect(page.locator('#fees-msg')).toContainText('Collected and paid after a call');
+  await expect(page.locator('#rp-campaign')).toBeHidden();
+  await expect(page.locator('#rp-caller')).toBeHidden();
+  await expect(page.locator('#rp-msg')).toHaveText('');
   expect(errors).toEqual([]);
 });
 
