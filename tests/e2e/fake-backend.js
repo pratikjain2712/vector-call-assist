@@ -725,6 +725,203 @@ function createFakeBackend(world) {
   })();
   // /Phase A: admin
 
+  // Phase A.2: admin. The central template library and common answers (20261025140000_template_library.sql),
+  // read from supabase/templates/*.json; institute fills of common answers; platform admins (db.platformAdmins:
+  // user ids, empty unless a test adds one); open campaigns with class / board tags and "Return follow-ups to the
+  // pool after N hours" (the new admin_create_campaign / admin_update_campaign arguments of
+  // 20261025130000_ledger_open_campaigns.sql); "Back to pool" (admin_release_leads) and the Accounts role.
+  // Same inputs, answer shapes and checks as the migrations, in short. Wraps the older blocks' functions.
+  const phaseA2Admin = (() => {
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const readJson = (f) => JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'supabase', 'templates', f), 'utf8'));
+    db.templates = readJson('library.json').map((t) => ({ key: t.key, name: t.name, call_type: t.call_type, audience: t.audience || null,
+      about: t.about || null, class_labels: (t.tags && t.tags.class_labels) || [], boards: (t.tags && t.tags.boards) || [],
+      language: t.language || 'en', steps: t.steps, pushbacks: t.pushbacks || [], version: 1, active: true, updated_at: new Date().toISOString() }));
+    db.commonAnswers = readJson('common_answers.json').map((a) => ({ key: a.key, label: a.label, answer: a.answer, fallback: a.fallback || null,
+      result: a.result || null, checks: a.check || [], tags: a.tags || [], active: true, updated_at: new Date().toISOString() }));
+    db.answerFills = {};        // institute id -> { answer key: text }
+    db.platformAdmins = [];     // user ids of the Vector team
+    const BOARDS = ['CBSE', 'ICSE', 'State', 'IB', 'IGCSE', 'Other'];
+    const board = (v) => { const s = String(v || '').trim().replace(/\s+board$/i, '').toLowerCase(); return BOARDS.find((b) => b.toLowerCase() === s) || null; };
+    const isPA = (u) => !!u && db.platformAdmins.includes(u.id);
+    const seat = (u) => u && seatOf(u.id);
+    const adminOf = (u) => { const s = seat(u); return s && s.role === 'admin' ? s : null; };
+    const deny = (m) => pgErr(403, '42501', m);
+    const bad = (m) => pgErr(400, '22023', m);
+    const marks = (list) => (list || []).filter((x) => x && Array.isArray(x.check) && x.check.length).length;
+    const typeOf = (key) => SCRIPT_TYPES.find((t) => t.key === key) || (db.callTypes || []).find((t) => t.key === key && t.built_in) || null;
+    const body = (res) => { try { return JSON.parse(res.body); } catch (e) { return null; } };
+    const prev = { create: RPC.admin_create_campaign, update: RPC.admin_update_campaign, role: RPC.admin_set_seat_role };
+
+    Object.assign(RPC, {
+      is_platform_admin: (u) => json(200, isPA(u)),
+      list_script_templates: (u, a) => {
+        if (!isPA(u) && !seat(u)) return deny('sign in with an active seat to see the template library');
+        let b = null;
+        if (a.p_board && String(a.p_board).trim()) { b = board(a.p_board); if (!b) return bad('board must be CBSE, ICSE, State, IB, IGCSE or Other'); }
+        const cls = String(a.p_class_label || '').trim().toLowerCase();
+        const all = !!a.p_include_inactive && isPA(u);
+        const order = (k) => { const t = typeOf(k); return t ? t.sort_order : 10000; };
+        return json(200, db.templates
+          .filter((t) => (t.active || all) && (!a.p_call_type || t.call_type === a.p_call_type) && (!a.p_language || t.language === a.p_language)
+            && (!cls || !t.class_labels.length || t.class_labels.some((c) => c.toLowerCase() === cls)) && (!b || !t.boards.length || t.boards.includes(b)))
+          .sort((x, y) => order(x.call_type) - order(y.call_type) || x.name.localeCompare(y.name) || x.language.localeCompare(y.language))
+          .map((t) => ({ ...t, call_type_label: (typeOf(t.call_type) || {}).label || null, check_marks: marks(t.steps) + marks(t.pushbacks) })));
+      },
+      my_common_answers: (u) => {
+        const s = seat(u);
+        if (!s) return deny('no active seat for this login');
+        const fills = db.answerFills[s.institute_id] || {};
+        return json(200, db.commonAnswers.filter((x) => x.active).sort((x, y) => x.label.localeCompare(y.label)).map((x) => {
+          const fill = fills[x.key] || null;
+          return { key: x.key, label: x.label, answer: fill || x.answer, tags: x.tags, fallback: x.fallback, result: x.result,
+            check: x.checks, filled: !x.checks.length || !!fill };
+        }));
+      },
+      admin_fill_common_answer: (u, a) => {
+        const s = adminOf(u);
+        if (!s) return deny('only an owner or manager can fill in common answers');
+        const x = db.commonAnswers.find((y) => y.key === a.p_key && y.active);
+        if (!x) return bad('that common answer was not found');
+        if (!x.checks.length) return bad('this answer needs no facts from your institute');
+        const text = String(a.p_answer || '').replace(/\s+/g, ' ').trim();
+        const fills = db.answerFills[s.institute_id] = db.answerFills[s.institute_id] || {};
+        if (!text) { delete fills[x.key]; return json(200, false); }
+        if (text.length > 600) return bad('keep the answer to 600 characters');
+        fills[x.key] = text;
+        return json(200, true);
+      },
+      platform_upsert_template: (u, a) => {
+        if (!isPA(u)) return deny('only the Vector team can change the template library');
+        const key = String(a.p_key || '').trim().toLowerCase();
+        if (!/^[a-z][a-z0-9_]{1,59}$/.test(key)) return bad('the key is 2 to 60 lowercase letters, numbers or _');
+        if (!typeOf(a.p_call_type)) return bad('the call type must be a built-in type (sales, fees, admission …)');
+        if (!Array.isArray(a.p_steps) || !a.p_steps.length || a.p_steps.length > 30) return bad('a template needs 1 to 30 steps');
+        const boards = [];
+        for (const x of a.p_boards || []) { const b = board(x); if (!b) return bad('board must be CBSE, ICSE, State, IB, IGCSE or Other'); if (!boards.includes(b)) boards.push(b); }
+        const row = { key, name: String(a.p_name || '').trim(), call_type: a.p_call_type, audience: a.p_audience || null, about: a.p_about || null,
+          class_labels: [...new Set((a.p_class_labels || []).map((c) => String(c).trim()).filter(Boolean))], boards, language: a.p_language || 'en',
+          steps: a.p_steps, pushbacks: a.p_pushbacks || [], active: a.p_active !== false, updated_at: new Date().toISOString() };
+        const old = db.templates.find((t) => t.key === key);
+        if (!old) { db.templates.push({ ...row, version: 1 }); return json(200, 1); }
+        const changed = JSON.stringify([old.steps, old.pushbacks, old.name, old.call_type, old.language]) !== JSON.stringify([row.steps, row.pushbacks, row.name, row.call_type, row.language]);
+        Object.assign(old, row, { version: old.version + (changed ? 1 : 0) });
+        return json(200, old.version);
+      },
+      platform_upsert_common_answer: (u, a) => {
+        if (!isPA(u)) return deny('only the Vector team can change the template library');
+        const key = String(a.p_key || '').trim().toLowerCase();
+        if (!/^[a-z][a-z0-9_]{1,59}$/.test(key)) return bad('the key is 2 to 60 lowercase letters, numbers or _');
+        if (!String(a.p_label || '').trim() || !String(a.p_answer || '').trim()) return bad('the label and the answer are needed');
+        const row = { key, label: a.p_label.trim(), answer: a.p_answer.trim(), fallback: a.p_fallback || null, result: a.p_result || null,
+          checks: (a.p_checks || []).filter(Boolean), tags: (a.p_tags || []).map((t) => String(t).toLowerCase()), active: a.p_active !== false, updated_at: new Date().toISOString() };
+        const old = db.commonAnswers.find((x) => x.key === key);
+        if (old) Object.assign(old, row); else db.commonAnswers.push(row);
+        return json(200, null);
+      },
+      // Open campaigns: the new arguments. An open campaign shares "next free" and starts without members.
+      admin_create_campaign: (u, a) => {
+        if (a.p_board && !board(a.p_board)) return bad('board must be CBSE, ICSE, State, IB, IGCSE or Other');
+        if (a.p_class_label && String(a.p_class_label).trim().length > 20) return bad('class must be 1 to 20 characters');
+        const res = prev.create(u, a);
+        if (res.status !== 200) return res;
+        const c = db.campaigns.find((x) => x.id === body(res));
+        const open = a.p_open_to_all !== false;
+        Object.assign(c, { open_to_all: open, class_label: String(a.p_class_label || '').trim() || null, board: board(a.p_board),
+          share_mode: a.p_share_mode || (open ? 'next_free' : 'equal'), release_after_hours: 24 });
+        return res;
+      },
+      admin_update_campaign: (u, a) => {
+        const s = adminOf(u);
+        const c = s && db.campaigns.find((x) => x.id === a.p_campaign && x.institute_id === s.institute_id);
+        if (!c) return prev.update(u, a);
+        if (a.p_board && !board(a.p_board)) return bad('board must be CBSE, ICSE, State, IB, IGCSE or Other');
+        if (a.p_release_after_hours !== undefined && a.p_release_after_hours !== null
+          && !(Number.isInteger(a.p_release_after_hours) && a.p_release_after_hours >= 1 && a.p_release_after_hours <= 720)) {
+          return bad('release after hours must be 1 to 720');
+        }
+        const open = a.p_open_to_all === undefined || a.p_open_to_all === null ? c.open_to_all === true : !!a.p_open_to_all;
+        let startOpen = false;
+        if (open && a.p_status === 'running' && c.status === 'draft' && c.status !== 'closed') {
+          if (!db.leads.some((l) => l.campaign_id === c.id)) return bad('add leads before you start');
+          startOpen = true;
+        }
+        const res = prev.update(u, startOpen ? { ...a, p_status: null } : a);
+        if (res.status !== 200) return res;
+        if (startOpen) c.status = 'running';
+        if (a.p_open_to_all !== undefined && a.p_open_to_all !== null) c.open_to_all = !!a.p_open_to_all;
+        if (a.p_class_label !== undefined && a.p_class_label !== null) c.class_label = String(a.p_class_label).trim() || null;
+        if (a.p_board !== undefined && a.p_board !== null) c.board = board(a.p_board);
+        if (a.p_release_after_hours) c.release_after_hours = a.p_release_after_hours;
+        return res;
+      },
+      admin_release_leads: (u, a) => {
+        const s = adminOf(u);
+        if (!s) return deny('only an owner or manager can send leads back to the pool');
+        const from = db.seats.find((x) => x.id === a.p_seat && x.institute_id === s.institute_id);
+        if (!from) return deny('caller not found');
+        let n = 0;
+        db.leads.filter((l) => l.assigned_seat_id === from.id && isOpen(l) && !l.do_not_call && (!a.p_campaign || l.campaign_id === a.p_campaign)).forEach((l) => {
+          const c = db.campaigns.find((x) => x.id === l.campaign_id);
+          if (!c || c.status === 'closed' || c.institute_id !== s.institute_id) return;
+          l.assigned_seat_id = null;
+          n++;
+        });
+        return json(200, n);
+      },
+      admin_set_seat_role: (u, a) => {
+        if (a.p_role !== 'accounts') return prev.role(u, a);
+        const res = prev.role(u, { ...a, p_role: 'manager' });
+        if (res.status !== 200) return res;
+        const x = db.seats.find((y) => y.id === a.p_seat);
+        Object.assign(x, { role: 'accounts', access_role: 'accounts', can_see_money: false });
+        return res;
+      },
+    });
+
+    // REST: the campaigns of the Callers tab with open_to_all, the common answers table (Library view) and the
+    // count of a caller's open leads ("Back to pool"). Returns a full fulfill object, or null.
+    function route(p, method, url, u, body) {
+      const eq = (k) => (url.searchParams.get(k) || '').replace(/^eq\./, '');
+      if (p === '/rest/v1/campaigns' && method === 'GET' && url.searchParams.get('institute_id')) {
+        const s = adminOf(u);
+        const inst = eq('institute_id');
+        const not = (url.searchParams.get('status') || '').replace(/^neq\./, '');
+        const rows = s && s.institute_id === inst ? db.campaigns.filter((c) => c.institute_id === inst && c.status !== not) : [];
+        return json(200, rows.map((c) => ({ id: c.id, name: c.name, status: c.status, open_to_all: c.open_to_all === true })).sort((x, y) => x.name.localeCompare(y.name)));
+      }
+      // The seat-admin Edge Function's invite (supabase/functions/seat-admin, invite_seat): roles rep, admin
+      // (a manager) and accounts (owners only), within the seat limit (10 here).
+      if (p === '/functions/v1/seat-admin' && method === 'POST' && body && body.action === 'invite') {
+        const s = adminOf(u);
+        const role = { rep: 'rep', caller: 'rep', admin: 'admin', manager: 'admin', accounts: 'accounts' }[body.role];
+        if (!s || s.institute_id !== body.institute) return json(403, { error: 'You are not allowed to do that.' });
+        if (!role || !body.email || !body.label) return json(400, { error: 'Give the institute, a valid email, a label and a role.' });
+        const owner = (s.access_role || 'owner') === 'owner';
+        if (role === 'accounts' && !owner) return json(403, { error: 'Only an owner can add an Accounts seat.' });
+        if (db.seats.filter((x) => x.institute_id === s.institute_id && x.status !== 'revoked').length >= 10) return json(400, { error: 'all 10 seats are in use' });
+        const seat = { id: crypto.randomUUID(), institute_id: s.institute_id, user_id: null, label: body.label, role, status: 'invited',
+          access_role: role === 'rep' ? 'caller' : role === 'admin' ? 'manager' : 'accounts', invite_email: String(body.email).toLowerCase() };
+        db.seats.push(seat);
+        return json(200, { ok: true, seat_id: seat.id, email_sent: true });
+      }
+      if (p === '/rest/v1/common_answers' && method === 'GET') {
+        return json(200, isPA(u) || seat(u) ? db.commonAnswers.slice().sort((x, y) => x.label.localeCompare(y.label)) : []);
+      }
+      if (p === '/rest/v1/leads' && method === 'HEAD') {
+        const s = adminOf(u);
+        const statuses = (url.searchParams.get('status') || '').replace(/^in\.\(|\)$/g, '').split(',').filter(Boolean);
+        const n = !s ? 0 : db.leads.filter((l) => l.institute_id === s.institute_id && l.assigned_seat_id === eq('assigned_seat_id')
+          && (!statuses.length || statuses.includes(l.status)) && !l.do_not_call && (!eq('campaign_id') || l.campaign_id === eq('campaign_id'))).length;
+        return { status: 200, body: '', headers: { 'content-range': '*/' + n, 'access-control-expose-headers': 'content-range' } };
+      }
+      return null;
+    }
+    return { route };
+  })();
+  // /Phase A.2: admin
+
   // Phase A: insights-extra. Weekly brief, script test and practice (migration 20261024100026). State is in
   // db.ix so a test can change it (for example take the Scripts add-on away). Functions another block already
   // defines are kept.
@@ -952,6 +1149,12 @@ function createFakeBackend(world) {
     if (p === '/rest/v1/call_outcomes' && method === 'GET') {
       return send(json(200, u ? db.outcomes.filter((r) => { const s = seatOf(u.id); return s && r.seat_id === s.id; }) : []));
     }
+    // Phase A.2: admin. The AI script maker is for the Vector team only; the library's REST reads.
+    if (p === '/functions/v1/ai-script-draft' && method === 'POST' && !(u && db.platformAdmins.includes(u.id))) {
+      return send(json(403, { error: 'The AI script maker is for the Vector team. Pick a ready script from the template library.', code: 'not_platform_admin' }));
+    }
+    { const r = phaseA2Admin.route(p, method, url, u, body); if (r) return route.fulfill({ ...r, headers: { 'access-control-allow-origin': '*', ...(r.headers || {}) } }); }
+    // /Phase A.2: admin
     // Phase A: scripts
     const scriptsOut = scriptsRoute(p, method, url, body, u, req);
     if (scriptsOut) return send(scriptsOut);

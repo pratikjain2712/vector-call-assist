@@ -640,6 +640,11 @@ export async function handle(deps) {
   if (!token) return { status: 401, body: { error: 'Sign in again.' } };
   const user = await db.userFromToken(token);
   if (!user) return { status: 401, body: { error: 'Sign in again.' } };
+  // Phase A.2: the AI script maker is for the Vector team (platform_admins) only; institutes pick from the
+  // template library. Their own admin seat still carries the monthly limit and the cost log.
+  if (typeof db.isPlatformAdmin === 'function' && !(await db.isPlatformAdmin())) {
+    return { status: 403, body: { error: 'The AI script maker is for the Vector team. Pick a ready script from the template library.', code: 'not_platform_admin' } };
+  }
   const seat = await db.activeSeat();
   if (!seat || seat.role !== 'admin') return { status: 403, body: { error: 'Only an admin can use the AI script maker.' } };
   if (!(await db.hasFeature(seat.institute_id, 'ai_drafts'))) {

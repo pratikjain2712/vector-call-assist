@@ -7,7 +7,9 @@
 //          log if it answers "server not configured".
 //
 // Request:  POST with "Authorization: Bearer <the admin's access token>" and a JSON body:
-//   {action:"invite",     institute, email, label, role}   role is "admin" or "rep"
+//   {action:"invite",     institute, email, label, role}   role is "rep" (caller), "admin" (manager; the first
+//                                                          admin is the owner) or "accounts" (owners only, A.2).
+//                                                          "caller" and "manager" are read as "rep" and "admin"
 //   {action:"reassign",   seat, email}
 //   {action:"revoke",     seat}
 //   {action:"reset_pairing", seat, kind}                   kind is "phone" or "laptop"
@@ -35,7 +37,9 @@ type DbError = { code?: string; message?: string };
 function dbFailure(err: DbError | null): Response {
   const code = err?.code ?? "";
   if (code === "P0001") return reply(400, { error: err?.message ?? "Not done." });
-  if (code === "42501") return reply(403, { error: "You are not allowed to do that." });
+  if (code === "42501") {
+    return reply(403, { error: /accounts/i.test(err?.message ?? "") ? "Only an owner can add an Accounts seat." : "You are not allowed to do that." });
+  }
   if (code === "23505") return reply(409, { error: "This email already has an invited seat here." });
   console.error("seat-admin database error", code, err?.message);
   return reply(500, { error: "Something went wrong. Try again." });
@@ -99,13 +103,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (whoErr || !who?.user) return reply(401, { error: "Sign in first." });
 
   const action = typeof body.action === "string" ? body.action : "";
+  // Phase A.2: the roles invite_seat takes. It checks the seat limit and that only an owner adds Accounts.
+  const inviteRole = (v: unknown): string | null =>
+    ({ rep: "rep", caller: "rep", admin: "admin", manager: "admin", accounts: "accounts" } as Record<string, string>)[
+      typeof v === "string" ? v : ""
+    ] ?? null;
 
   if (action === "invite") {
     const institute = typeof body.institute === "string" && UUID.test(body.institute) ? body.institute : null;
     const email = text(body, "email", 254)?.toLowerCase() ?? null;
     const label = text(body, "label", 80);
-    const role = typeof body.role === "string" ? body.role : "";
-    if (!institute || !email || !EMAIL.test(email) || !label || (role !== "admin" && role !== "rep")) {
+    const role = inviteRole(body.role);
+    if (!institute || !email || !EMAIL.test(email) || !label || !role) {
       return reply(400, { error: "Give the institute, a valid email, a label and a role." });
     }
     const { data: seatId, error } = await db.rpc("invite_seat", {

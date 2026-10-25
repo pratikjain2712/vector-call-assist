@@ -190,3 +190,24 @@ test("the Campaigns tab builds DOM without HTML strings and keeps its CSS under 
   assert.ok(html.indexOf("js/lead-upload.js") < html.indexOf("js/admin/campaigns.js"));
   assert.ok(html.indexOf("js/import-check.js") < html.indexOf("js/lead-upload.js"));
 });
+
+// Phase A.2: open campaigns and class / board tags (web/js/admin/campaigns.js).
+test("an open campaign starts without callers; tags and the pool hours are checked", () => {
+  const ok = { name: "Nov fees", typeId: "t", target: "", leadCount: 3, seatCount: 0 };
+  assert.equal(C.formProblem({ ...ok, openToAll: true }, true), "");
+  assert.equal(C.formProblem({ ...ok, openToAll: false }, true), "Pick at least one caller before you start.");
+  assert.equal(C.formProblem({ ...ok, openToAll: true, classLabel: "x".repeat(21) }, false), "Keep the class to 20 characters.");
+  assert.equal(C.classFromChoice("8th", "ignored"), "8th");
+  assert.equal(C.classFromChoice("custom", " Nursery "), "Nursery");
+  assert.equal(C.classFromChoice("", ""), "");
+  assert.equal(C.tagsText({ class_label: "8th", board: "CBSE" }), "8th · CBSE");
+  assert.equal(C.tagsText({ class_label: null, board: "ICSE" }), "ICSE");
+  assert.equal(C.tagsText({}), "");
+  assert.equal(C.whoCanCall({ open_to_all: true }), "All callers");
+  assert.equal(C.whoCanCall({ open_to_all: false }), "Only chosen callers");
+  assert.equal(C.releaseProblem("24"), "");
+  assert.equal(C.releaseProblem(""), "");
+  assert.match(C.releaseProblem("0"), /1 to 720/);
+  assert.match(C.releaseProblem("721"), /1 to 720/);
+  assert.match(C.releaseProblem("2.5"), /1 to 720/);
+});

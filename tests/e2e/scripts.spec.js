@@ -1,6 +1,7 @@
-// The Scripts tab (web/js/admin/scripts.js and web/js/script-editor.js): the list, starting from a template,
-// "Check this" marks blocking publishing, ending results and pushbacks, the AI script maker (draft, Make simpler,
-// Open in editor) and the read-only list without the Scripts add-on. Uses the fake backend (the Edge Function
+// The Scripts tab (web/js/admin/scripts.js and web/js/script-editor.js): the list, starting from a template of
+// the shared library, "Check this" marks blocking publishing, ending results and pushbacks, the AI script maker
+// (Phase A.2: on the Library view, for the Vector team only: draft, Make simpler, edit as a template, publish to
+// the library) and the read-only list without the Scripts add-on. Uses the fake backend (the Edge Function
 // cannot run in the local stack here).
 const { test, expect, env, isFake } = require('./fixtures');
 
@@ -23,23 +24,23 @@ test('start from the fees template, clear the marks, link endings and publish', 
 
   await page.locator('#scripts-template').click();
   await expect(page.locator('#scripts-template')).toHaveAttribute('aria-expanded', 'true');
-  await page.locator('button[data-template="fees_reminder"]').click();
+  await page.locator('button[data-template="fees_reminder_polite"]').click();
   await expect(page).toHaveURL(/#scripts\?new=template$/);
   await expect(page.locator('#scripts-editor-view')).toBeVisible();
-  await expect(page.locator('#script-name')).toHaveValue('Fees reminder');
+  await expect(page.locator('#script-name')).toHaveValue('Fee reminder before the due date');
   await expect(page.locator('#script-type option:checked')).toHaveText('Fees collection');
   // Every ending names a result of the type.
   await expect(page.locator('#steps fieldset.step').nth(4).locator('[data-field="result"] option:checked')).toHaveText('Will pay on date');
 
   // The template's marks block publishing.
-  await expect(page.locator('#problem-list')).toContainText('Check this (step "reason")');
+  await expect(page.locator('#problem-list')).toContainText('Check this (step "promise")');
   await page.locator('#publish-open').click();
   await expect(page.locator('#editor-msg')).toHaveText('Fix the problems listed above before publishing.');
   await expect(page.locator('#publish-box')).toBeHidden();
 
-  // Clear each mark (two steps and one pushback), then publish.
+  // Clear each mark (one step and five pushbacks), then publish.
   const marks = page.locator('#scripts-editor-view button[data-action="del-mark"]');
-  await expect(marks).toHaveCount(3);
+  await expect(marks).toHaveCount(6);
   while (await marks.count()) await marks.first().click();
   await expect(page.locator('#problems')).toBeHidden();
   await page.locator('#publish-open').click();
@@ -50,18 +51,18 @@ test('start from the fees template, clear the marks, link endings and publish', 
 
   const saved = backend.db.scriptVersions[0];
   expect(saved.published).toBe(true);
-  expect(saved.pushbacks.map((p) => p.label)).toContain('We already paid');
+  expect(saved.pushbacks.map((p) => p.label)).toContain('Can I pay in parts?');
   expect(saved.steps.find((s) => s.id === 'stop').result).toBe('do_not_call');
   expect(saved.steps.find((s) => s.id === 'open').stage).toBe(0);
 
   await page.locator('#editor-back').click();
   await expect(page).toHaveURL(/#scripts$/);
   const row = page.locator('#scripts-body tr').first();
-  await expect(row).toContainText('Fees reminder');
+  await expect(row).toContainText('Fee reminder before the due date');
   await expect(row).toContainText('Fees collection');
   await expect(row).toContainText('v1');
   await expect(row).toContainText('Not used');
-  await row.getByRole('button', { name: 'Edit Fees reminder' }).click();
+  await row.getByRole('button', { name: 'Edit Fee reminder before the due date' }).click();
   await expect(page.locator('#state-line')).toContainText('Live: v1');
   expect(errors).toEqual([]);
 });
@@ -89,9 +90,10 @@ test('an ending must be linked to a result of the type, and a pushback needs an 
   await expect(page.locator('#editor-msg')).toHaveText('Draft saved.');
 });
 
-test('make a script with AI, make a line simpler and open it in the editor', async ({ page, backend }) => {
-  await signInAdmin(page, '#scripts?ai=1');
-  await expect(page.locator('#scripts-ai-view')).toBeVisible();
+test('the Vector team makes a template with AI, makes a line simpler and publishes it to the library', async ({ page, backend }) => {
+  backend.db.platformAdmins.push(env().users.admin.id);
+  await signInAdmin(page, '#scripts?library=1');
+  await expect(page.locator('#scripts-library-view')).toBeVisible();
   await expect(page.locator('#ai-usage')).toHaveText('0 of 20 AI drafts used this month');
   await page.locator('#ai-make').click();
   await expect(page.locator('#ai-msg')).toHaveText('Write what the call is for.');
@@ -103,7 +105,7 @@ test('make a script with AI, make a line simpler and open it in the editor', asy
   await page.locator('#ai-make').click();
   await expect(page.locator('#ai-draft-title')).toHaveText('Draft: Fees reminder Class 10');
   await expect(page.locator('#ai-score')).toContainText('Easy to read');
-  await expect(page.locator('#ai-checks')).toContainText('Check 1 thing before you publish');
+  await expect(page.locator('#ai-checks')).toContainText('1 "Check this" mark');
   await expect(page.locator('#ai-usage')).toHaveText('1 of 20 AI drafts used this month');
   expect(backend.db.aiRequests[0].brief).toMatchObject({ call_type: 'fees', audience: 'Parents', language: 'simple_english', facts: 'Fee ₹18,000. Due 31 Oct.' });
 
@@ -111,16 +113,20 @@ test('make a script with AI, make a line simpler and open it in the editor', asy
   await expect(page.locator('#ai-steps')).toContainText('Simpler: open');
   await expect(page.locator('#ai-msg')).toHaveText('Line made simpler.');
 
+  // "Edit as a template" fills the library form; a "Check this" mark may stay (institutes fill it in).
   await page.locator('#ai-open').click();
-  await expect(page).toHaveURL(/#scripts\?new=draft$/);
-  await expect(page.locator('#script-name')).toHaveValue('Fees reminder Class 10');
-  await expect(page.locator('#script-type option:checked')).toHaveText('Fees collection');
-  await expect(page.locator('#steps')).toContainText('"₹9,000" is not in the facts you gave');
-  await page.locator('#save-draft').click();
-  await expect(page.locator('#editor-msg')).toContainText('Draft saved. It has 1 thing to fix');
-  await page.locator('#editor-back').click();
-  await expect(page.locator('#scripts-body tr').first()).toContainText('1 to check');
-  await expect(page.locator('#scripts-body tr').first()).toContainText('Draft');
+  await expect(page.locator('#lib-name')).toHaveValue('Fees reminder Class 10');
+  await expect(page.locator('#lib-key')).toHaveValue('fees_reminder_class_10');
+  await expect(page.locator('#lib-type option:checked')).toHaveText('Fees collection');
+  await expect(page.locator('#lib-steps')).toHaveValue(/is not in the facts you gave/);
+  await expect(page.locator('#lib-marks')).toHaveText('1 "Check this" mark for institutes to fill in.');
+  await page.locator('#lib-classes').fill('10th');
+  await page.locator('input.lib-board[value="CBSE"]').check();
+  await page.locator('#lib-publish').click();
+  await expect(page.locator('#lib-form-msg')).toHaveText('Published "Fees reminder Class 10" to the library as v1. Institutes see it now.');
+  const saved = backend.db.templates.find((t) => t.key === 'fees_reminder_class_10');
+  expect(saved).toMatchObject({ call_type: 'fees', class_labels: ['10th'], boards: ['CBSE'], language: 'en', version: 1 });
+  await expect(page.locator('#lib-body')).toContainText('Fees reminder Class 10');
 });
 
 test('without the Scripts add-on the list is read-only', async ({ page, backend }) => {
@@ -131,7 +137,7 @@ test('without the Scripts add-on the list is read-only', async ({ page, backend 
   await expect(page.locator('#scripts-addon')).toContainText('Add Scripts to use this.');
   await expect(page.locator('#new-script')).toBeDisabled();
   await expect(page.locator('#scripts-template')).toBeDisabled();
-  await expect(page.locator('#scripts-ai')).toBeDisabled();
+  await expect(page.locator('#scripts-library-open')).toBeHidden();
   await expect(page.locator('#scripts-body tr').first()).toContainText('Old script');
   await expect(page.locator('#scripts-body')).not.toContainText('Edit');
   // A typed link to the editor shows the list instead.
@@ -140,18 +146,21 @@ test('without the Scripts add-on the list is read-only', async ({ page, backend 
   await expect(page.locator('#scripts-editor-view')).toBeHidden();
 });
 
-test('the Scripts tab fits a phone screen', async ({ page }) => {
+test('the Scripts tab fits a phone screen', async ({ page, backend }) => {
   await page.setViewportSize({ width: 375, height: 740 });
   await signInAdmin(page);
   const noSideScroll = async () => expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
   await page.locator('#scripts-template').click();
   await noSideScroll();
-  await page.locator('button[data-template="course_sales"]').click();
+  await page.locator('button[data-template="course_sales_enquiry"]').click();
   await expect(page.locator('#scripts-editor-view')).toBeVisible();
   await noSideScroll();
   await page.locator('#editor-back').click();
-  await page.locator('#scripts-ai').click();
-  await expect(page.locator('#scripts-ai-view')).toBeVisible();
+  // The Library view (Vector team) fits too.
+  backend.db.platformAdmins.push(env().users.admin.id);
+  await page.reload();
+  await page.locator('#scripts-library-open').click();
+  await expect(page.locator('#scripts-library-view')).toBeVisible();
   await noSideScroll();
   // Keyboard: the form can be sent with the keyboard.
   await page.locator('#ai-purpose').fill('Invite students to the next batch.');

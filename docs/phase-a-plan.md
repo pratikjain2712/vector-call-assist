@@ -163,7 +163,7 @@ Decisions (25 Oct): payments are recorded by a new Accounts role (and owners), c
 - [ ] S · Answer search (/) and the helper column work for every script, not only the built-in one
 - [ ] M · Open campaigns: campaigns open to all callers by default, optional restriction to chosen callers; tags for class (e.g. 8th) and board (CBSE, ICSE, State); open campaigns hand out the next free lead
 - [ ] M · Caller: campaign picker grouped and filtered by type, class and board; the campaign's script loads on pick
-- [ ] S · Admin: adding a caller is the only step; no campaign membership needed
+- [x] S · Admin: adding a caller is the only step; no campaign membership needed
 - [ ] L · Ledger: students (class, section, board, admission no, parents and phones), fee items (head, amount, due date, academic year), payments (amount, date, mode UPI/cash/cheque/card/bank, reference, recorded by; corrections by reversal, never deleted), balance per student
 - [ ] S · Accounts role: records payments, sees money and the ledger; cannot change callers or campaigns
 - [ ] M · Admin Fees tab: students list with filters and balance, student page (fees, payments, calls), record payment, receipt, Excel import of students and fees
@@ -172,8 +172,8 @@ Decisions (25 Oct): payments are recorded by a new Accounts role (and owners), c
 - [ ] M · Reports, Home and Insights: collected = ledger payments; promised vs actually paid; promises kept measured against the ledger
 - [ ] S · Caller lead card shows the ledger: balance, last payment (amount, date, mode)
 - [ ] M · Demo data: students, fee plans and payments; campaigns tagged by class and board and open to all callers
-- [ ] L · Central template library: the Vector team writes and updates templates (AI on our side); every institute picks from the shared library (by purpose, class, board, language); new or changed templates reach all institutes without a release
-- [ ] S · AI script maker moves to the Vector team's own page; institutes get the library and the editor instead (pricing copy updated)
+- [x] L · Central template library: the Vector team writes and updates templates (AI on our side); every institute picks from the shared library (by purpose, class, board, language); new or changed templates reach all institutes without a release
+- [x] S · AI script maker moves to the Vector team's own page; institutes get the library and the editor instead (pricing copy updated)
 - [ ] S · Placeholders filled on the call: {name}, {me}, {institute}, {student}, {class}, {board}, {amount_due}, {due_date}, {course}, {source}, {source_date}
 - [ ] M · Common answers in every script's search and helper column, e.g. "Where did you get my number?" (answered from the lead's source and date), "Is this a sales call?", "I'm on DND", "Don't call again"; the lead card shows where the lead came from
 - [ ] S · Cold-calling templates: permission first, honest source, easy exit

@@ -11,19 +11,54 @@
    admin_move_leads (campaign functions, 20261024100020), and seat changes through ctx.seatAction (the
    seat-admin Edge Function). The database checks the admin (or owner) on every call. A function the database
    does not have yet shows "not available yet".
+   Phase A.2: adding a caller is the only step (invite by email; open campaigns need no membership, so the
+   campaign ticks in "Edit caller" are for campaigns restricted to chosen callers only); "Back to pool" per
+   caller (admin_release_leads, with a confirmation that says how many leads go back); the role select has
+   "Accounts" (admin_set_seat_role 'accounts': records fee payments, sees the Fees tab only).
    Only counts, timings and the notes the supervisors wrote are shown. No money on this tab.
    The pure helpers below are also loaded by tests/web/admin-callers.test.js (Node, no DOM). */
 (function () {
   // ---------- pure helpers ----------
 
-  const ROLE_LABELS = { owner: 'Owner', manager: 'Manager', caller: 'Caller' };
+  const ROLE_LABELS = { owner: 'Owner', manager: 'Manager', caller: 'Caller', accounts: 'Accounts' };
 
   // The role as shown: 'Owner', 'Manager' or 'Caller'. Old seats without access_role: an admin was an owner.
   function roleOf(seat) {
     const s = seat || {};
     if (ROLE_LABELS[s.access_role]) return s.access_role;
+    if (s.role === 'accounts') return 'accounts';
     return s.role === 'admin' ? 'owner' : 'caller';
   }
+
+  // What each role does, in one line (the role select and the confirmation).
+  const ROLE_HELP = {
+    owner: 'can do everything, including money settings and roles',
+    manager: 'runs campaigns and callers, and sees money only if you allow it',
+    caller: 'only makes calls',
+    accounts: 'records fee payments and sees the Fees tab only; cannot change callers or campaigns',
+  };
+
+  // The confirmation text of "Back to pool": with the count when it is known.
+  function releaseText(label, count, campaignName) {
+    const where = campaignName ? ' in "' + campaignName + '"' : ' in every campaign that is not closed';
+    const n = Number(count);
+    const what = count !== null && count !== undefined && Number.isFinite(n)
+      ? (n === 1 ? '1 lead' : n + ' leads') + ' not finished yet'
+      : 'Every lead not finished yet';
+    return what + ' of "' + label + '"' + where + ' go back to the pool, so any caller can take them. Call backs and promises keep their date and history.';
+  }
+  // The roles the invite form offers, as the seat-admin Edge Function takes them ('admin' becomes a manager:
+  // an institute's first admin is its owner, every later one a manager). Accounts: owners only.
+  const INVITE_ROLES = [
+    { value: 'rep', label: 'Caller', role: 'caller' },
+    { value: 'admin', label: 'Manager', role: 'manager' },
+    { value: 'accounts', label: 'Accounts', role: 'accounts' },
+  ];
+  function inviteRoleHelp(value) {
+    const r = INVITE_ROLES.find((x) => x.value === value) || INVITE_ROLES[0];
+    return (r.role === 'accounts' ? 'An accounts seat' : 'A ' + r.label.toLowerCase()) + ' ' + ROLE_HELP[r.role] + '.';
+  }
+  const releasedText = (label, n) => (Number(n) === 1 ? '1 lead' : (Number(n) || 0) + ' leads') + ' of "' + label + '" back in the pool.';
   const roleLabel = (seat) => ROLE_LABELS[roleOf(seat)];
 
   // The member list of one campaign after switching one seat on or off, from the admin_callers rows.
@@ -55,7 +90,7 @@
     return '';
   }
 
-  const pure = { ROLE_LABELS, roleOf, roleLabel, membersAfter, campaignChanges, nowText };
+  const pure = { ROLE_LABELS, ROLE_HELP, INVITE_ROLES, inviteRoleHelp, roleOf, roleLabel, membersAfter, campaignChanges, nowText, releaseText, releasedText };
   if (typeof module !== 'undefined' && module.exports) { module.exports = pure; return; }
 
   // ---------- the tab (browser only) ----------
@@ -180,12 +215,12 @@
       el('form', { id: 'invite-form', className: 'row wrap' }, [
         field('Work email', el('input', { id: 'invite-email', type: 'email', autocomplete: 'off', required: true })),
         field('Seat label', el('input', { id: 'invite-label', type: 'text', maxlength: '60', placeholder: 'Rep 4', required: true })),
-        field('Role', el('select', { id: 'invite-role' }, [
-          el('option', { value: 'rep', text: 'Rep' }),
-          el('option', { value: 'admin', text: 'Admin' }),
-        ])),
+        field('Role', el('select', { id: 'invite-role', 'aria-describedby': 'invite-role-help' }, INVITE_ROLES.map((r) =>
+          el('option', { value: r.value, text: r.label })))),
         el('button', { type: 'submit', text: 'Add seat' }),
       ]),
+      el('p', { className: 'muted small', id: 'invite-role-help', text: inviteRoleHelp('rep') }),
+      el('p', { className: 'muted small', id: 'invite-note', text: 'This is the only step. The caller signs in with this email and can call every open campaign at once. No campaign to pick.' }),
       msg('invite-msg'),
       el('div', { className: 'scroll' }, [el('table', null, [
         head([['Seat'], ['Role'], ['Campaigns'], ['Status'], ['Now'], ['Devices'], ['Pairing'], ['Last call'], ['Actions']]),
@@ -202,9 +237,10 @@
         el('button', { type: 'button', id: 'edit-close', text: 'Close' }),
       ]),
       el('fieldset', { id: 'edit-campaigns', className: 'edit-block' }, [
-        el('legend', { text: 'Campaigns (can be more than one)' }),
+        el('legend', { text: 'Campaigns for chosen callers only' }),
+        el('p', { className: 'muted small', text: 'Campaigns open to all callers need nothing here: every caller can work them.' }),
         el('div', { id: 'edit-campaign-list', className: 'edit-checks' }),
-        el('p', { id: 'edit-campaign-none', className: 'muted small', hidden: true, text: 'No open campaigns. Make one on the Campaigns tab.' }),
+        el('p', { id: 'edit-campaign-none', className: 'muted small', hidden: true, text: 'No campaign is limited to chosen callers.' }),
         el('div', { className: 'row' }, [el('button', { type: 'button', id: 'edit-campaign-save', text: 'Save campaigns' })]),
         msg('edit-campaign-msg'),
       ]),
@@ -215,15 +251,25 @@
             el('option', { value: 'owner', text: 'Owner' }),
             el('option', { value: 'manager', text: 'Manager' }),
             el('option', { value: 'caller', text: 'Caller' }),
+            el('option', { value: 'accounts', text: 'Accounts' }),
           ])),
           el('button', { type: 'button', id: 'edit-role-save', text: 'Save role' }),
         ]),
         el('p', { className: 'muted small', text: 'Owners can do everything. Managers run campaigns and callers. Callers only make calls.' }),
+        el('p', { className: 'muted small', id: 'edit-role-accounts', text: 'Accounts records fee payments and sees the Fees tab only. It cannot change callers or campaigns.' }),
         el('label', { id: 'edit-money-field', className: 'switch' }, [
           el('input', { type: 'checkbox', id: 'edit-money', role: 'switch' }),
           el('span', { text: 'Can see money (fee amounts and totals)' }),
         ]),
         msg('edit-role-msg'),
+      ]),
+      el('div', { id: 'edit-release', className: 'edit-block' }, [
+        el('h3', { text: 'Back to pool' }),
+        el('p', { className: 'muted small', text: 'For a caller who is away: their leads not finished yet go back to the pool, so other callers take them.' }),
+        el('div', { className: 'row' }, [
+          field('Campaign', el('select', { id: 'release-campaign' })),
+          el('button', { type: 'button', id: 'release-go', text: 'Back to pool' }),
+        ]),
       ]),
       el('div', { id: 'edit-move', className: 'edit-block' }, [
         el('h3', { text: 'Move leads to another caller' }),
@@ -254,6 +300,7 @@
       load();
     });
     $('invite-form').addEventListener('submit', (e) => { e.preventDefault(); reviewInvite(); });
+    $('invite-role').addEventListener('change', () => { $('invite-role-help').textContent = inviteRoleHelp($('invite-role').value); });
     $('progress-form').addEventListener('submit', (e) => { e.preventDefault(); loadProgress(); });
     $('notes-form').addEventListener('submit', (e) => { e.preventDefault(); loadNotes(); });
     $('note-form').addEventListener('submit', addNote);
@@ -263,6 +310,7 @@
     $('edit-role-save').addEventListener('click', askRole);
     $('edit-money').addEventListener('change', askMoney);
     $('move-go').addEventListener('click', askMove);
+    $('release-go').addEventListener('click', () => { const s = seatById(editing); if (s) askRelease(s, $('release-campaign').value || null); });
     $('edit-reset-phone').addEventListener('click', () => { const s = seatById(editing); if (s) askReset(s, 'phone'); });
     $('edit-remove').addEventListener('click', () => { const s = seatById(editing); if (s) askRevoke(s); });
     $('caller-edit').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeEdit(); });
@@ -328,8 +376,12 @@
       else say('seat-extra-msg', 'Could not load roles and campaigns: ' + err.message, true);
     }
     try {
-      const { data, error } = await ctx.client.from('campaigns').select('id, name, status')
+      let { data, error } = await ctx.client.from('campaigns').select('id, name, status, open_to_all')
         .eq('institute_id', inst).neq('status', 'closed').order('name');
+      if (error) {   // a database before open campaigns (A.2): every campaign is for its members
+        ({ data, error } = await ctx.client.from('campaigns').select('id, name, status')
+          .eq('institute_id', inst).neq('status', 'closed').order('name'));
+      }
       if (error) throw new Error(error.message);
       camps = data || [];
     } catch (err) { camps = []; }
@@ -382,6 +434,11 @@
     if (s.seat_id === ctx.seat.id) { box.appendChild(el('span', { text: 'This is you', className: 'muted' })); return box; }
     if (s.status === 'revoked') { box.appendChild(el('span', { text: 'Revoked', className: 'muted' })); return box; }
     box.appendChild(button('Edit', () => openEdit(s.seat_id)));
+    if (s.status === 'active' && roleOf(fullSeat(s)) !== 'accounts') {
+      const b = button('Back to pool', () => askRelease(s, null));
+      b.setAttribute('aria-label', 'Back to pool: leads of ' + s.label);
+      box.appendChild(b);
+    }
     // Only an owner changes an owner's seat.
     if (roleOf(fullSeat(s)) === 'owner' && !iAmOwner()) return box;
     box.appendChild(button('Reassign', () => askReassign(s)));
@@ -400,12 +457,14 @@
     const mail = $('invite-email').value.trim();
     const label = $('invite-label').value.trim();
     const role = $('invite-role').value;
+    const r = INVITE_ROLES.find((x) => x.value === role) || INVITE_ROLES[0];
     if (!A.EMAIL.test(mail)) { say('invite-msg', 'Enter a valid email address.', true); return; }
+    if (role === 'accounts' && !iAmOwner()) { say('invite-msg', 'Only an owner can add an Accounts seat.', true); return; }
     if (!label) { say('invite-msg', 'Give the seat a label, such as Rep 4.', true); return; }
     say('invite-msg', '');
     ctx.confirm({
       title: 'Add an invited seat',
-      text: 'Add seat "' + label + '" as ' + role + ' for ' + mail + '. The person claims it by signing in with that email. It uses one of the institute\'s seats.',
+      text: 'Add seat "' + label + '" as ' + r.label.toLowerCase() + ' for ' + mail + ': ' + inviteRoleHelp(role) + ' The person claims it by signing in with that email. It uses one of the institute\'s seats.',
       button: 'Add seat',
       run: () => ctx.seatAction({ action: 'invite', institute: ctx.institute.id, email: mail, label: label, role: role }),
       done: (out) => 'Seat "' + label + '" added for ' + mail + '.' +
@@ -483,14 +542,15 @@
     const list = $('edit-campaign-list');
     list.textContent = '';
     const mine = new Set((s.campaigns || []).map((c) => c.id));
-    campaigns.forEach((c) => {
+    const restricted = campaigns.filter((c) => c.open_to_all !== true);
+    restricted.forEach((c) => {
       list.appendChild(el('label', { className: 'check' }, [
         el('input', { type: 'checkbox', value: c.id, checked: mine.has(c.id), disabled: s.status !== 'active' || !known }),
         el('span', { text: c.name + (c.status === 'draft' ? ' (draft)' : c.status === 'paused' ? ' (paused)' : '') }),
       ]));
     });
-    $('edit-campaign-none').hidden = campaigns.length > 0;
-    $('edit-campaign-save').hidden = !campaigns.length || s.status !== 'active' || !known;
+    $('edit-campaign-none').hidden = restricted.length > 0;
+    $('edit-campaign-save').hidden = !restricted.length || s.status !== 'active' || !known;
 
     // Role and money: owners only.
     $('edit-owner').hidden = !owner || !known;
@@ -508,6 +568,11 @@
     camp.textContent = '';
     camp.appendChild(el('option', { value: '', text: 'All campaigns' }));
     (s.campaigns || []).forEach((c) => camp.appendChild(el('option', { value: c.id, text: c.name })));
+    const rel = $('release-campaign');
+    rel.textContent = '';
+    rel.appendChild(el('option', { value: '', text: 'All campaigns' }));
+    campaigns.forEach((c) => rel.appendChild(el('option', { value: c.id, text: c.name })));
+    $('edit-release').hidden = s.status !== 'active';
 
     // Phone and seat. Removing an owner is for owners only.
     $('edit-reset-phone').hidden = !(s.status === 'active' && (s.device_kinds || []).includes('phone'));
@@ -545,12 +610,10 @@
     const role = $('edit-role').value;
     if (role === roleOf(s)) { say('edit-role-msg', s.label + ' is already ' + ROLE_LABELS[role].toLowerCase() + '.'); return; }
     say('edit-role-msg', '');
-    const what = { owner: 'can do everything, including money settings and roles',
-      manager: 'runs campaigns and callers, and sees money only if you allow it',
-      caller: 'only makes calls' }[role];
+    const what = ROLE_HELP[role];
     ctx.confirm({
       title: 'Make "' + s.label + '" ' + ROLE_LABELS[role].toLowerCase(),
-      text: 'A ' + ROLE_LABELS[role].toLowerCase() + ' ' + what + '. The change starts at their next sign-in or page load.',
+      text: (role === 'accounts' ? 'An accounts seat' : 'A ' + ROLE_LABELS[role].toLowerCase()) + ' ' + what + '. The change starts at their next sign-in or page load.',
       button: 'Change role',
       run: () => rpc('admin_set_seat_role', { p_seat: s.seat_id, p_role: role }),
       done: '"' + s.label + '" is now ' + ROLE_LABELS[role].toLowerCase() + '.',
@@ -570,6 +633,39 @@
       danger: !allow,
       run: () => rpc('admin_set_money_access', { p_seat: s.seat_id, p_allowed: allow }),
       done: allow ? '"' + s.label + '" can now see money.' : '"' + s.label + '" no longer sees money.',
+      reload: load,
+    });
+  }
+
+  // "Back to pool": counts the seat's open leads first (admins read their institute's leads), then asks.
+  async function askRelease(s, campaignId) {
+    const camp = campaignId ? campaigns.find((c) => c.id === campaignId) : null;
+    let count = null;
+    try {
+      let q = ctx.client.from('leads').select('id', { count: 'exact', head: true })
+        .eq('assigned_seat_id', s.seat_id).in('status', ['new', 'callback', 'promised']).eq('do_not_call', false);
+      if (campaignId) q = q.eq('campaign_id', campaignId);
+      const { count: n, error } = await q;
+      if (!error && typeof n === 'number') count = n;
+    } catch (err) { count = null; }
+    if (!ctx) return;
+    if (count === 0) {
+      ctx.status('"' + s.label + '" has no leads waiting' + (camp ? ' in "' + camp.name + '"' : '') + '. Nothing to send back.');
+      return;
+    }
+    ctx.confirm({
+      title: 'Back to pool: "' + s.label + '"',
+      text: releaseText(s.label, count, camp ? camp.name : null),
+      button: 'Back to pool',
+      run: async () => {
+        try {
+          return { released: await ctx.rpc('admin_release_leads', { p_seat: s.seat_id, p_campaign: campaignId }) };
+        } catch (err) {
+          if (ctx.isMissing(err)) throw new Error('Back to pool is ' + T.NOT_YET + '.');
+          throw err;
+        }
+      },
+      done: (out) => releasedText(s.label, Array.isArray(out.released) ? out.released[0] : out.released),
       reload: load,
     });
   }

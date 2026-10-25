@@ -251,7 +251,7 @@
 
   /* ---------- pricing calculator (rupees per seat per month) ---------- */
   (function pricing() {
-    /* Two plans per seat: Vector, and Vector + Scripts (scripts, AI script maker, coaching). 10+ seats: team price. */
+    /* Two plans per seat: Vector, and Vector + Scripts (scripts, the ready script library, coaching). 10+ seats: team price. */
     var PRICE = { basic: { monthly: 499, yearly: 399 }, scripts: { monthly: 799, yearly: 649 } };
     var TEAM_FROM = 10;
     var billing = 'yearly';
@@ -284,7 +284,7 @@
     }
     function nudgeText(n, k, yearly) {
       if (n >= TEAM_FROM) return 'With ' + n + ' seats you get a team price. Start the trial and tell us your team size.';
-      var s = k === 'basic' ? 'Add Scripts and AI to give every caller the guided script and objection answers.' : '';
+      var s = k === 'basic' ? 'Add Scripts to give every caller the guided script and objection answers.' : '';
       if (!yearly) s += (s ? ' ' : '') + 'Yearly billing saves about 20% on every seat.';
       return s || 'Yearly billing is on: about 20% off every seat.';
     }

@@ -1,7 +1,11 @@
 'use strict';
 /* Campaigns tab of the admin app (web/admin.html): the campaign list, one campaign's page (progress, pause,
    resume, close, callers, add more leads) and "New campaign" in 4 steps, as in the mockup: 1 details, 2 script,
-   3 leads, 4 callers; then Save as draft or Start campaign (docs/phase-a-plan.md, Sprint 8).
+   3 leads, 4 who can call; then Save as draft or Start campaign (docs/phase-a-plan.md, Sprint 8).
+   Phase A.2 (open campaigns): step 4 is "All callers" (the default: every caller takes the next free lead, no
+   members needed) or "Only these callers"; step 1 has Class and Board chips (tags callers filter by); the list
+   shows the tags; the campaign page shows who can call, the tags and "Return follow-ups to the pool after N
+   hours" (release_after_hours), all changeable through admin_update_campaign's new arguments.
    Routes: #campaigns (list), #campaigns?id=<campaign> (one campaign), #campaigns?new=1 (New campaign).
    Reads: admin_campaign_list, admin_campaign_detail, admin_list_call_types, admin_seat_list, my_features, and
    the institute's scripts with their live version (table read, as the Scripts tab does).
@@ -93,11 +97,39 @@
       if (!Number.isInteger(n) || n < 1 || n > 10000) return 'The daily target is a number of calls from 1 to 10,000.';
     }
     if (f.moneyInExtra && f.moneyInExtra.length) return 'Column "' + f.moneyInExtra[0] + '" has money in it. Match it to Amount due or untick it.';
+    if (f.classLabel && String(f.classLabel).trim().length > 20) return 'Keep the class to 20 characters.';
     if (starting) {
       if (!f.leadCount) return 'Add a lead sheet before you start.';
-      if (!f.seatCount) return 'Pick at least one caller before you start.';
+      // An open campaign (all callers, Phase A.2) starts without anyone picked.
+      if (f.openToAll !== true && !f.seatCount) return 'Pick at least one caller before you start.';
     }
     return '';
+  }
+
+  // ----- Phase A.2: open campaigns and class / board tags -----
+  const CLASSES = ['6th', '7th', '8th', '9th', '10th', '11th', '12th'];
+  const BOARDS = ['CBSE', 'ICSE', 'State', 'IB', 'IGCSE', 'Other'];
+
+  // The class from the chips: a chip value, the typed class for "Other class", or '' (no tag).
+  function classFromChoice(choice, typed) {
+    if (choice === 'custom') return String(typed || '').trim();
+    return CLASSES.includes(choice) ? choice : '';
+  }
+
+  // "8th · CBSE", "8th", "CBSE" or '' for a campaign without tags.
+  function tagsText(c) {
+    const x = c || {};
+    return [x.class_label, x.board].filter((v) => v && String(v).trim()).join(' · ');
+  }
+
+  // "All callers" or "Only chosen callers". An old campaign without the column was for its members only.
+  const whoCanCall = (c) => (c && c.open_to_all === true ? 'All callers' : 'Only chosen callers');
+
+  // "Return follow-ups to the pool after N hours": a whole number from 1 to 720, or a problem.
+  function releaseProblem(v) {
+    if (v === '' || v === null || v === undefined) return '';
+    const n = Number(v);
+    return Number.isInteger(n) && n >= 1 && n <= 720 ? '' : 'Hours before follow-ups go back to the pool: a whole number from 1 to 720.';
   }
 
   // "220 leads added. 12 bad numbers and 8 repeats skipped." from admin_add_leads counts.
@@ -112,7 +144,7 @@
   }
 
   const pure = { statusLabel, typeTone, dateRange, percent, statusActions, liveVersion, scriptChoices, formProblem,
-    addedText, SCRIPT_TYPE_FILTER };
+    addedText, SCRIPT_TYPE_FILTER, CLASSES, BOARDS, classFromChoice, tagsText, whoCanCall, releaseProblem };
   if (typeof module !== 'undefined' && module.exports) { module.exports = pure; return; }
 
   // ---------- browser ----------
@@ -217,10 +249,15 @@
     const body = $('camp-body');
     body.textContent = '';
     campaigns.forEach((c) => {
-      const callers = rows(c.callers).map((x) => x.label).join(', ');
+      const open = c.open_to_all === true;
+      const callers = open ? 'All callers' : rows(c.callers).map((x) => x.label).join(', ');
       const td = (node, label, cls) => el('td', { 'data-label': label, className: cls || '' }, [node]);
+      const tags = tagsText(c);
       body.appendChild(el('tr', null, [
-        el('td', { 'data-label': 'Campaign', className: 'camp-name', text: c.name }),
+        el('td', { 'data-label': 'Campaign', className: 'camp-name' }, [
+          el('span', { text: c.name }),
+          tags ? el('span', { className: 'tag', text: tags }) : null,
+        ]),
         td(typePill(c.call_type_key, c.call_type_label), 'Type'),
         cell(c.script_name || 'No script', '', 'Script'),
         td(progress(c.leads_called, c.leads_total), 'Called', 'num'),
@@ -283,6 +320,9 @@
       fact('Dates', dateRange(c.start_date, c.end_date)),
       fact('Daily target', c.daily_target ? S.count(c.daily_target) + ' calls' : 'None'),
       fact('Share leads', SHARE[c.share_mode] || c.share_mode),
+      fact('Who can call', whoCanCall(c)),
+      fact('Class and board', tagsText(c) || 'Any'),
+      fact('Follow-ups back to the pool', 'After ' + S.count(c.release_after_hours || 24) + ' working hours without a call'),
     ]));
 
     pane.appendChild(el('h3', { text: 'Progress' }));
@@ -329,7 +369,7 @@
       pane.appendChild(el('div', { className: 'scroll' }, [el('table', { className: 'stack' }, [
         head([['Caller'], ['Leads', 'num'], ['To call', 'num'], ['Called', 'num'], ['Calls today', 'num']]),
         el('tbody', { id: 'camp-d-callers' }, callers.map((m) => el('tr', null, [
-          cell(m.label + (m.status && m.status !== 'active' ? ' (' + m.status + ')' : ''), '', 'Caller'),
+          cell(m.label + (m.status && m.status !== 'active' ? ' (' + m.status + ')' : '') + (m.member === false && c.open_to_all !== true ? ' (not on the list)' : ''), '', 'Caller'),
           cell(S.count(m.leads), 'num', 'Leads'), cell(S.count(m.open), 'num', 'To call'),
           cell(S.count(m.called), 'num', 'Called'), cell(S.count(m.calls_today), 'num', 'Calls today'),
         ]))),
@@ -337,7 +377,10 @@
     } else {
       pane.appendChild(el('p', { className: 'muted', text: 'No callers yet.' }));
     }
-    if (!closed) pane.appendChild(buildCallerEditor(c, callers));
+    if (c.open_to_all === true) {
+      pane.appendChild(el('p', { className: 'muted small', id: 'camp-d-open-note', text: 'Every caller can work this campaign. A caller who stops calling for ' +
+        S.count(c.release_after_hours || 24) + ' working hours gets their due follow-ups taken back into the pool.' }));
+    } else if (!closed) pane.appendChild(buildCallerEditor(c, callers));
     if (!closed) pane.appendChild(buildMoreLeads());
     if (!closed) pane.appendChild(buildDetailsEditor(c));
     sizeBars(pane);
@@ -433,14 +476,31 @@
         el('label', null, ['Daily target (calls)', el('input', { id: 'camp-d-target', type: 'number', min: '1', max: '10000', step: '1',
           inputmode: 'numeric', value: c.daily_target ? String(c.daily_target) : '' })]),
       ]),
+      el('div', { className: 'row' }, [
+        el('label', null, ['Who can call', el('select', { id: 'camp-d-open' }, [
+          el('option', { value: 'all', text: 'All callers' }),
+          el('option', { value: 'some', text: 'Only chosen callers' }),
+        ])]),
+        el('label', null, ['Class', el('input', { id: 'camp-d-class', type: 'text', maxlength: '20', list: 'camp-class-list', value: c.class_label || '', placeholder: 'Any' })]),
+        el('label', null, ['Board', el('select', { id: 'camp-d-board' }, [el('option', { value: '', text: 'Any' })]
+          .concat(BOARDS.map((b) => el('option', { value: b, text: b }))))]),
+      ]),
+      el('datalist', { id: 'camp-class-list' }, CLASSES.map((x) => el('option', { value: x }))),
+      el('label', null, ['Return follow-ups to the pool after (working hours without a call)',
+        el('input', { id: 'camp-d-release', type: 'number', min: '1', max: '720', step: '1', inputmode: 'numeric', value: String(c.release_after_hours || 24) })]),
+      el('p', { className: 'muted small', text: 'Call backs and promises stay with the caller who spoke to the parent. If that caller makes no call in this campaign for this many working hours (Sundays not counted), their due follow-ups go back to the pool for others.' }),
       el('div', { className: 'row' }, [el('button', { type: 'submit', text: 'Save details' })]),
       msg('camp-d-edit-msg'),
     ]);
+    form.querySelector('#camp-d-open').value = c.open_to_all === true ? 'all' : 'some';
+    form.querySelector('#camp-d-board').value = c.board || '';
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (busy) return;
-      const f = { name: $('camp-d-name-in').value, typeId: c.call_type_id, startDate: $('camp-d-startdate').value, endDate: $('camp-d-enddate').value, target: $('camp-d-target').value };
-      const problem = formProblem(f, false);
+      const f = { name: $('camp-d-name-in').value, typeId: c.call_type_id, startDate: $('camp-d-startdate').value, endDate: $('camp-d-enddate').value, target: $('camp-d-target').value,
+        classLabel: $('camp-d-class').value.trim() };
+      const release = $('camp-d-release').value.trim();
+      const problem = formProblem(f, false) || releaseProblem(release);
       if (problem) { say('camp-d-edit-msg', problem, true); return; }
       busy = true;
       try {
@@ -449,6 +509,8 @@
           p_campaign: c.id, p_name: f.name.trim(),
           p_start: f.startDate || null, p_end: f.endDate || null, p_clear_dates: clearDates,
           p_daily_target: f.target === '' ? 0 : Number(f.target),
+          p_open_to_all: $('camp-d-open').value === 'all', p_class_label: f.classLabel, p_board: $('camp-d-board').value,
+          p_release_after_hours: release === '' ? null : Number(release),
         });
         busy = false;
         ctx.status('Details saved for ' + f.name.trim() + '.');
@@ -647,6 +709,17 @@
     ]);
   }
 
+  // A row of chip-like radio buttons: options [[value, label]]; the first is picked. Each input gets the id
+  // <name>-<value or 'any'>.
+  function chipGroup(name, legend, options) {
+    return el('fieldset', { className: 'chips', id: name + '-chips' }, [el('legend', { text: legend })].concat(options.map(([v, t], i) =>
+      el('label', { className: 'chip' }, [
+        el('input', { type: 'radio', name, value: v, id: name + '-' + (v ? v.toLowerCase() : 'any'), checked: i === 0 }),
+        el('span', { text: t }),
+      ]))));
+  }
+  const picked = (name) => { const i = document.querySelector('input[name="' + name + '"]:checked'); return i ? i.value : ''; };
+
   function step(n, title, children) {
     return el('fieldset', { className: 'step', id: 'camp-w-step' + n }, [el('legend', { text: n + ' · ' + title })].concat(children));
   }
@@ -670,7 +743,15 @@
         el('label', null, ['Start', el('input', { id: 'camp-w-startdate', type: 'date' })]),
         el('label', null, ['End', el('input', { id: 'camp-w-enddate', type: 'date' })]),
       ]),
+      chipGroup('camp-w-class', 'Class (callers pick campaigns by class)', [['', 'Any']].concat(CLASSES.map((x) => [x, x]), [['custom', 'Other class']])),
+      el('label', { id: 'camp-w-class-other-field', hidden: true }, ['Other class', el('input', { id: 'camp-w-class-other', type: 'text', maxlength: '20', placeholder: 'Nursery, LKG, B.Com 1st year' })]),
+      chipGroup('camp-w-board', 'Board', [['', 'Any']].concat(BOARDS.map((b) => [b, b]))),
     ]));
+    steps.querySelectorAll('input[name="camp-w-class"]').forEach((i) => i.addEventListener('change', () => {
+      const custom = $('camp-w-class-custom').checked;
+      $('camp-w-class-other-field').hidden = !custom;
+      if (custom) $('camp-w-class-other').focus();
+    }));
 
     const scriptSel = el('select', { id: 'camp-w-script' });
     const scriptLabel = el('span', { id: 'camp-w-script-label', text: 'Script' });
@@ -692,12 +773,24 @@
     steps.appendChild(step(3, 'Leads', [leadPicker('camp-w-leads')]));
 
     const target = el('input', { id: 'camp-w-target', type: 'number', min: '1', max: '10000', step: '1', inputmode: 'numeric', placeholder: '40' });
-    steps.appendChild(step(4, 'Callers', [
-      seatChecks('camp-w-seat', new Set()),
-      el('label', null, ['Share leads', shareSelect('camp-w-share', 'equal', null)]),
+    steps.appendChild(step(4, 'Who can call', [
+      el('div', { className: 'who', role: 'radiogroup', 'aria-label': 'Who can call' }, [
+        el('label', { className: 'check' }, [el('input', { type: 'radio', name: 'camp-w-who', id: 'camp-w-who-all', value: 'all', checked: true }),
+          el('span', null, [el('strong', { text: 'All callers' }), el('span', { className: 'muted small', text: ' Every caller sees this campaign and takes the next free lead. Nothing to set up.' })])]),
+        el('label', { className: 'check' }, [el('input', { type: 'radio', name: 'camp-w-who', id: 'camp-w-who-some', value: 'some' }),
+          el('span', null, [el('strong', { text: 'Only these callers' }), el('span', { className: 'muted small', text: ' Pick who works on it.' })])]),
+      ]),
+      el('div', { id: 'camp-w-some', hidden: true }, [
+        seatChecks('camp-w-seat', new Set()),
+        el('label', null, ['Share leads', shareSelect('camp-w-share', 'equal', null)]),
+      ]),
       el('label', null, ['Daily target (calls a day, all callers)', target]),
       el('p', { className: 'muted small', id: 'camp-w-target-hint' }),
     ]));
+    steps.querySelectorAll('input[name="camp-w-who"]').forEach((i) => i.addEventListener('change', () => {
+      $('camp-w-some').hidden = !$('camp-w-who-some').checked;
+      syncShareText();
+    }));
     steps.querySelectorAll('input.camp-w-seat').forEach((i) => i.addEventListener('change', syncShareText));
     target.addEventListener('input', syncShareText);
     syncShareText();
@@ -745,7 +838,8 @@
     if (!sel) return;
     const built = pickerResult('camp-w-leads');
     const n = built ? built.counts.ready : 0;
-    const callers = checkedSeats('camp-w-seat').length;
+    const open = $('camp-w-who-all') && $('camp-w-who-all').checked;
+    const callers = open ? 0 : checkedSeats('camp-w-seat').length;
     sel.options[0].textContent = LU.equalText(n, callers);
     const t = Number($('camp-w-target').value);
     $('camp-w-target-hint').textContent = t > 0 && callers > 1 ? 'About ' + S.count(Math.ceil(t / callers)) + ' a day for each caller.' : '';
@@ -781,12 +875,16 @@
       startDate: $('camp-w-startdate').value, endDate: $('camp-w-enddate').value, target: $('camp-w-target').value,
       leadCount: built ? built.counts.ready : 0, seatCount: checkedSeats('camp-w-seat').length,
       moneyInExtra: p && p.sheet && p.map ? LU.moneyInExtra(p.sheet.header, p.map.extra) : [],
+      openToAll: $('camp-w-who-all').checked,
+      classLabel: classFromChoice(picked('camp-w-class'), $('camp-w-class-other').value),
+      board: picked('camp-w-board'),
     };
+    if (picked('camp-w-class') === 'custom' && !f.classLabel) { say('camp-w-msg', 'Type the class, or pick one.', true); return; }
     const problem = formProblem(f, start);
     if (problem) { say('camp-w-msg', problem, true); return; }
     const scriptSel = $('camp-w-script');
-    const seatIds = checkedSeats('camp-w-seat');
-    const mode = $('camp-w-share').value;
+    const seatIds = f.openToAll ? [] : checkedSeats('camp-w-seat');
+    const mode = f.openToAll ? null : $('camp-w-share').value;
     busy = true;
     $('camp-w-draft').disabled = true;
     $('camp-w-start').disabled = true;
@@ -798,6 +896,7 @@
         p_name: f.name.trim(), p_call_type: f.typeId, p_script: scriptSel && scriptSel.value ? scriptSel.value : null,
         p_start: f.startDate || null, p_end: f.endDate || null,
         p_daily_target: f.target === '' ? null : Number(f.target), p_share_mode: mode,
+        p_open_to_all: f.openToAll, p_class_label: f.classLabel || null, p_board: f.board || null,
       });
       if (Array.isArray(id)) id = id[0];
       if (built && built.rows.length) {
