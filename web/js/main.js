@@ -258,6 +258,10 @@ const camp = {
   // Phase A: integration. waTemplates: approved WhatsApp templates (my_whatsapp_templates; [] when the institute
   // has no connected number). practice: my_practice() rows, null when unknown or not on this plan.
   waTemplates: [], practice: null, syncAgain: false,
+  // Phase A.2: caller. institute: the institute's name ({institute}); ledger: lead_ledger() rows by lead (memory
+  // only, like money); common: the common answers (js/common-answers.js), the static copy until the database
+  // answers; filter: the picker's purpose, class and board; pickerOpen: the campaign picker is showing.
+  institute: "", ledger: Object.create(null), common: [], commonFrom: "", filter: { purpose: "", class_label: "", board: "" }, pickerOpen: false,
 };
 function refreshPhoneFlags() { phoneCheck = sheet ? ImportCheck.checkPhones(sheet.rows.map((r) => r[sheet.cols.phone])) : null; }
 /* Sheets saved before the callback column existed get it here, so the cell index is never undefined. */
@@ -335,13 +339,26 @@ function leadName() { return sheet ? String(sheet.rows[sheet.idx][sheet.cols.nam
 
 function names() { return { me: $("me-name").value.trim(), name: campOn() ? (campLead() ? campLead().name : "") : $("lead-name").value.trim() }; }
 function plain(text) { const n = names(); return text.replace(/\{name\}/g, n.name || "there").replace(/\{me\}/g, n.me || "your caller"); }
-function fillInto(parent, text) {
+/* Phase A.2: caller. The placeholder values for the call on screen (js/placeholders.js): the campaign lead, its
+   extra fields, money and ledger, the campaign's tags and the institute; on the lead sheet, the row's columns. */
+function fillValues() {
   const n = names();
-  text.split(/(\{name\}|\{me\})/).forEach((part) => {
-    if (part === "{name}" || part === "{me}") {
-      const v = part === "{name}" ? n.name : n.me;
-      parent.appendChild(el("span", v ? "fill" : "fill blank", v || (part === "{name}" ? "lead's name" : "your name")));
-    } else if (part) parent.appendChild(document.createTextNode(part));
+  if (campOn()) {
+    const l = campLead(), c = campCurrent();
+    return Placeholders.values({ name: n.name, me: n.me, institute: camp.institute, lead: l, campaign: Object.assign({}, c || {}, camp.info || {}),
+      money: l ? camp.money[l.id] : null, ledger: l ? camp.ledger[l.id] : null });
+  }
+  const extra = {};
+  if (sheet && !state.practice) sheet.header.forEach((h, i) => { if (h && i !== sheet.cols.name && i !== sheet.cols.phone) extra[h] = sheet.rows[sheet.idx][i]; });
+  return Placeholders.values({ name: n.name, me: n.me, institute: camp.institute, lead: { name: n.name, extra: extra } });
+}
+/* A script line or an answer with its placeholders filled. fallback: the answer's text for when a value is
+   missing. {name} and {me} with no value show a blank box with a hint, as before. */
+function fillInto(parent, text, fallback) {
+  Placeholders.parts(text, fillValues(), { fallback: fallback, hints: true }).forEach((p) => {
+    if (p.hint) parent.appendChild(el("span", "fill blank", p.hint));
+    else if (p.key) parent.appendChild(el("span", "fill", p.value));
+    else parent.appendChild(document.createTextNode(p.text));
   });
 }
 
@@ -1382,10 +1399,19 @@ const GENERIC_SYNONYMS = {
 /* The answers the helper column searches. The built-in script: ANSWERS. Any other script: its own pushback
    answers ({label, answer}), then each step's tip as a hint. A hint is not an objection, so opening it is not
    counted. Built once per script. */
-let scriptSet = null, scriptSetFor = null;
+let scriptSet = null, scriptSetFor = null, scriptSetSig = "";
+/* Phase A.2: caller. Every script also gets the common answers (js/common-answers.js) for its call type, after
+   its own answers; a label the script already answers is not repeated. The built-in script is a sales call. */
+function commonItems(own) {
+  const c = campOn() ? campCurrent() : null;
+  const type = c ? c.call_type_key : ACTIVE === BUILTIN ? "sales" : null;
+  return CommonAnswers.asItems(CommonAnswers.visible(camp.common, type), own.map((a) => a.chip));
+}
 function answerSet() {
-  if (ACTIVE === BUILTIN) return ANSWERS;
-  if (scriptSetFor === ACTIVE) return scriptSet;
+  const sig = camp.commonFrom + "|" + camp.common.length + "|" + (campOn() ? camp.id : "");
+  if (scriptSetFor === ACTIVE && scriptSetSig === sig) return scriptSet;
+  scriptSetSig = sig;
+  if (ACTIVE === BUILTIN) { scriptSet = ANSWERS.concat(commonItems(ANSWERS)); scriptSetFor = ACTIVE; return scriptSet; }
   const out = [], seen = new Set();
   (ACTIVE.pushbacks || []).forEach((p) => {
     const label = p && typeof p.label === "string" ? p.label.trim() : "";
@@ -1402,7 +1428,7 @@ function answerSet() {
     const title = (ACTIVE.titles && ACTIVE.titles[id]) || (n.say[0] || id).replace(/\{name\}|\{me\}/g, "").trim().slice(0, 50);
     out.push({ key: "t:" + id, chip: "Tip: " + title, say: n.tip, hint: true });
   });
-  scriptSet = out; scriptSetFor = ACTIVE;
+  scriptSet = out.concat(commonItems(out.filter((a) => a.push))); scriptSetFor = ACTIVE;
   return out;
 }
 const keyOf = (a) => a.key || a.chip;
@@ -1411,7 +1437,7 @@ function searchAnswers(query) {
   if (!words.length) return [];
   const syn = ACTIVE === BUILTIN ? SYNONYMS : GENERIC_SYNONYMS;
   return answerSet().map((a) => {
-    const name = a.chip.toLowerCase(), text = (a.chip + " " + a.say + " " + (a.tip || "")).toLowerCase();
+    const name = a.chip.toLowerCase(), text = (a.chip + " " + a.say + " " + (a.tip || "") + " " + (a.tags || []).join(" ")).toLowerCase();
     let score = 0;
     for (const w of words) {
       const alts = own(syn, w) || [w];
@@ -1464,7 +1490,8 @@ function openAnswer(a) {
 }
 function renderHelp() {
   const col = $("help-col");
-  col.hidden = ACTIVE === NO_SCRIPT;   // a campaign without a script has nothing to answer from
+  // A campaign without a script still has the common answers (Phase A.2); with none of those either, nothing to show.
+  col.hidden = ACTIVE === NO_SCRIPT && !answerSet().length;
   if (col.hidden) return;
   if (helpNode !== state.node || helpScript !== ACTIVE) { helpNode = state.node; helpScript = ACTIVE; if (!$("help-search").value.trim()) helpOpen = null; }
   const q = $("help-search").value.trim();
@@ -1488,8 +1515,15 @@ function renderHelp() {
     });
     item.appendChild(b);
     if (helpOpen === key) {
-      const ans = el("div", "help-a"); const p = el("p"); fillInto(p, a.say); ans.appendChild(p);
+      const ans = el("div", "help-a"); const p = el("p"); fillInto(p, a.say, a.fallback); ans.appendChild(p);
       if (a.tip) ans.appendChild(el("p", "tip", a.tip));
+      // Phase A.2: caller. A common answer that ends the call ("Do not call me again") saves its result in one tap.
+      const r = a.result && campOn() && campLead() && !state.practice ? campResult(a.result) : null;
+      if (r) {
+        const save = el("button", "plain helpsave", I18n.t("a2.saveAs", { result: r.label })); save.type = "button"; save.id = "help-save";
+        save.addEventListener("click", () => campQuickResult(r.key));
+        ans.appendChild(save);
+      }
       item.appendChild(ans);
     }
     list.appendChild(item);
@@ -1553,6 +1587,7 @@ $("import-v1").addEventListener("click", () => {
 document.addEventListener("keydown", (ev) => {
   if ($("app").hidden) return;
   if (document.querySelector(".modal-wrap:not([hidden])")) return;   // a dialog is open: no script shortcuts   // pairing screen: no script shortcuts
+  if (camp.pickerOpen) return;   // Phase A.2: caller: the campaign picker handles its own keys
   const tag = ev.target.tagName;
   const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
   if ((ev.key === "/" && !typing && !ev.ctrlKey && !ev.metaKey && !ev.altKey) || ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "k")) {
@@ -1753,12 +1788,15 @@ async function campOnCloud(c) {
   if (!c.enabled || !(c.status === "ready" || c.status === "offline") || !c.seatId) {
     if (c.status === "signed_out" || c.status === "no_seat" || c.status === "off") {
       camp.list = []; camp.id = null; camp.lead = null; camp.leads = []; camp.info = null; camp.money = Object.create(null);
+      camp.ledger = Object.create(null); camp.institute = ""; camp.pickerOpen = false;   // Phase A.2: caller
+      if (camp.commonFrom === "db") { camp.commonFrom = ""; loadStaticCommon(); }
       camp.seat = ""; render();
     }
     return;
   }
   if (camp.seat !== c.seatId) {
     camp.seat = c.seatId; camp.lead = null; camp.leads = []; camp.info = null; camp.money = Object.create(null);
+    camp.ledger = Object.create(null);   // Phase A.2: caller
     camp.outbox = (await OfflineStore.get(OfflineStore.keys.outbox(c.seatId))) || [];
     camp.failed = (await OfflineStore.get(OfflineStore.keys.failed(c.seatId))) || [];
   }
@@ -1822,17 +1860,23 @@ async function campPresence() {
 async function campLoadList() {
   const seat = camp.seat;
   const key = OfflineStore.keys.campaigns(seat);
-  const [cs, fs] = await Promise.all([Cloud.myCampaigns(), Cloud.myFeatures()]);
+  const [cs, fs, ts] = await Promise.all([Cloud.myCampaigns(), Cloud.myFeatures(), Cloud.myTrialStatus()]);
   if (seat !== camp.seat) return;
   const cached = (await OfflineStore.get(key)) || {};
+  // Phase A.2: caller. The institute's name for {institute} (my_trial_status), kept with the campaigns.
+  const tsRow = ts && !ts.error ? (Array.isArray(ts.data) ? ts.data[0] : ts.data) : null;
+  camp.institute = tsRow && tsRow.institute_name ? String(tsRow.institute_name) : cached.institute || "";
   if (!cs.error) camp.list = Array.isArray(cs.data) ? cs.data : [];
   else if (!cs.error.code) camp.list = cached.list || [];   // offline: the campaigns seen last time
   else camp.list = [];                                      // e.g. an older database without campaigns
   if (!fs.error) camp.features = Array.isArray(fs.data) ? fs.data : [];
   else if (!fs.error.code) camp.features = cached.features === undefined ? null : cached.features;
   else camp.features = null;
-  if (!cs.error) OfflineStore.set(key, { list: camp.list, features: camp.features });
+  if (!cs.error) OfflineStore.set(key, { list: camp.list, features: camp.features, institute: camp.institute });
   campLoadExtras();
+  campLoadCommon();   // Phase A.2: caller
+  try { camp.filter = JSON.parse(localStorage.getItem(PICK_FILTER_KEY) || "{}") || {}; } catch (e) { camp.filter = {}; }
+  camp.filter = CampaignPicker.validFilter(camp.filter, CampaignPicker.options(camp.list));
 
   let want = null;
   try { want = localStorage.getItem(CAMP_KEY); } catch (e) {}
@@ -1851,10 +1895,13 @@ async function campLoadList() {
 function campPick(id) {
   if (leaveBlocked()) { note(leaveMessage()); render(); return; }
   try { localStorage.setItem(CAMP_KEY, id); } catch (e) {}
+  const wasOpen = camp.pickerOpen;   // Phase A.2: caller: picked in the campaign picker
+  camp.pickerOpen = false;
   camp.id = id; camp.lead = null; camp.leads = []; camp.info = null; camp.pick = null; camp.values = {}; camp.msg = "";
   note("");
   resetCall();
   render();
+  if (wasOpen) $("camp-pick").focus();
   if (campOn()) campRefresh();
   loadPublishedScript();
 }
@@ -1909,7 +1956,9 @@ async function campRefresh(opts) {
   if (id !== camp.id || seat !== camp.seat) return;
   if (!res.error && res.data) {
     const d = res.data;
-    camp.info = { status: d.status, share_mode: d.share_mode, daily_target: d.daily_target, my_calls_today: d.my_calls_today || 0, team_calls_today: d.team_calls_today || 0, at: Date.now() };
+    camp.info = { status: d.status, share_mode: d.share_mode, daily_target: d.daily_target, my_calls_today: d.my_calls_today || 0, team_calls_today: d.team_calls_today || 0, at: Date.now(),
+      // Phase A.2: caller. Open campaigns hand out leads from the pool (next_free_lead); the tags fill {class} and {board}.
+      open_to_all: d.open_to_all === true, class_label: d.class_label || null, board: d.board || null, fees_due_by: d.fees_due_by || null };
     camp.leads = Array.isArray(d.leads) ? d.leads : [];
     camp.offline = false; camp.msg = "";
     Object.keys(camp.money).forEach((k) => { if (camp.money[k] && camp.money[k].offline) delete camp.money[k]; });
@@ -1935,7 +1984,10 @@ async function campEnsureLead(claim) {
   const next = CampaignQueue.callable(view, now)[0] || null;
   if (next) { campShow(next); return; }
   camp.lead = null;
-  if (claim && camp.info && camp.info.share_mode === "next_free" && camp.nextFree && !camp.offline) await campClaimNext();
+  // Phase A.2: caller. An open campaign hands out its pool through next_free_lead() too (released follow-ups first).
+  const c = campCurrent();
+  const pool = camp.info && (camp.info.share_mode === "next_free" || camp.info.open_to_all || (c && c.open_to_all === true));
+  if (claim && pool && camp.nextFree && !camp.offline) await campClaimNext();
 }
 
 /* next_free_lead(p_campaign) is built with the campaigns feature. Its answer may be a lead id, a lead row or a list
@@ -1960,6 +2012,7 @@ function campShow(lead) {
   camp.pick = null; camp.values = {};
   resetCall();
   campMoney(lead.id);
+  if (lead.student_id) campLedger(lead.id);   // Phase A.2: caller
   // A script test gives each lead version A or B: ask again for the lead now on the card.
   const c = campCurrent();
   if (was !== lead.id && c && c.script_id && campHasScripts()) loadPublishedScript();
@@ -1982,8 +2035,192 @@ async function campMoney(leadId) {
   const r = await Cloud.leadMoney(leadId);
   const row = r.error ? null : (Array.isArray(r.data) ? r.data[0] : r.data);
   camp.money[leadId] = r.error ? (r.error.code ? { error: true } : { offline: true }) : (row || { none: true });
-  if (camp.lead && camp.lead.id === leadId) renderCampaign();
+  if (camp.lead && camp.lead.id === leadId) render();   // Phase A.2: the script fills {amount_due} from it
 }
+
+/* ---- Phase A.2: caller ---- */
+
+/* The ledger of a fees lead's student, from lead_ledger(): balance due now and the last payment. The caller sees
+   it for the lead on the call only. Kept in memory for this page only, like money. */
+async function campLedger(leadId) {
+  if (camp.ledger[leadId] !== undefined) return;
+  camp.ledger[leadId] = { loading: true };
+  const r = await Cloud.leadLedger(leadId);
+  const row = r.error ? null : (Array.isArray(r.data) ? r.data[0] : r.data);
+  camp.ledger[leadId] = r.error ? (Cloud.missing(r.error) ? { none: true } : r.error.code ? { error: true } : { offline: true }) : (row || { none: true });
+  if (camp.lead && camp.lead.id === leadId) render();
+}
+
+/* Common answers: the static copy (web/data/common_answers.json) at start, then the institute's copy from the
+   database (my_common_answers) once signed in, when the function exists and has rows. The database copy is kept
+   on this device for offline use. */
+function loadStaticCommon() {
+  fetch("data/common_answers.json").then((r) => (r.ok ? r.json() : [])).then((rows) => {
+    if (camp.commonFrom === "db") return;
+    camp.common = CommonAnswers.normalize(rows, false);
+    camp.commonFrom = "static";
+    renderHelp();
+  }).catch(() => {});
+}
+async function campLoadCommon() {
+  const seat = camp.seat;
+  const key = "common-answers:" + seat;
+  const r = await Cloud.myCommonAnswers();
+  if (seat !== camp.seat) return;
+  let rows = null;
+  if (!r.error && Array.isArray(r.data) && r.data.length) { rows = r.data; OfflineStore.set(key, rows); }
+  else if (r.error && !r.error.code) rows = await OfflineStore.get(key);   // offline: the copy seen last time
+  if (seat !== camp.seat || !Array.isArray(rows) || !rows.length) return;
+  camp.common = CommonAnswers.normalize(rows, true);
+  camp.commonFrom = "db";
+  render();
+}
+
+/* "Save as …" on a common answer: picks that result; saves at once when it needs nothing else (Do not call),
+   otherwise shows its fields to fill in first (Call back later needs the date). */
+function campQuickResult(key) {
+  const r = campResult(key);
+  if (!r || !campLead() || state.practice) return;
+  camp.pick = key;
+  camp.values = {};
+  renderResults();
+  if (!ResultButtons.problems(r, camp.values).length) { campSave(); return; }
+  $("res-msg").textContent = I18n.t("a2.fillThenSave");
+  const f = $("result-panel").querySelector(".resfields input, .resfields select");
+  if (f) { f.scrollIntoView({ block: "center" }); f.focus(); }
+}
+
+/* Where the lead came from, for "Where did you get my number?": "Source: enquiry form on our website · 12 Oct". */
+function campSourceLine(l) {
+  const s = Placeholders.sourceOf(l);
+  if (!s.source && !s.date) return "";
+  if (!s.source) return I18n.t("a2.sourceUnknown", { date: s.date });
+  return I18n.t("a2.source", { source: s.source }) + (s.date ? " · " + s.date : "");
+}
+const PAY_MODES = { upi: "UPI", cash: "cash", cheque: "cheque", card: "card", bank: "bank transfer", other: "other" };
+/* The ledger lines on a fees lead card: balance due now, and the last payment (amount, date, mode). */
+function campLedgerFacts(l, fact) {
+  if (!l.student_id) return;
+  const g = camp.ledger[l.id];
+  const label = I18n.t("a2.balance");
+  if (!g || g.loading) { fact(label, I18n.t("camp.checking"), "money"); return; }
+  if (g.offline) { fact(label, I18n.t("camp.moneyOffline"), "money"); return; }
+  if (g.none || g.error) return;
+  if (g.money_hidden) fact(label, I18n.t("camp.hidden"), "money");
+  else if (g.balance_due_now != null) {
+    const li = fact(label, "", "money ledger");
+    li.appendChild(el("b", "", Placeholders.rupees(Math.max(0, Number(g.balance_due_now)))));
+    if (Number(g.balance_due_now) < 0) li.appendChild(document.createTextNode(" " + I18n.t("a2.advance", { amount: Placeholders.rupees(-Number(g.balance_due_now)) })));
+  }
+  const last = I18n.t("a2.lastPayment");
+  if (!g.last_payment_on) { fact(last, I18n.t("a2.noPayment"), "ledger"); return; }
+  const li = fact(last, "", "ledger");
+  if (g.last_payment_amount != null) li.appendChild(el("b", "", Placeholders.rupees(g.last_payment_amount)));
+  li.appendChild(document.createTextNode((g.last_payment_amount != null ? " " : "") + I18n.t("a2.paidOn", {
+    date: Placeholders.dateText(g.last_payment_on, true), mode: PAY_MODES[g.last_payment_mode] || g.last_payment_mode || PAY_MODES.other })));
+}
+
+/* The campaign picker: campaigns grouped by purpose, filtered by purpose, class and board (js/campaign-picker.js),
+   each with its class · board and how many leads are waiting; "My lead sheet" at the end. */
+const PICK_FILTER_KEY = "vca2-campaign-filter";   // the picker's filters. A per-browser convenience.
+const PURPOSE_LABEL = { fees: "a2.fees", admissions: "a2.admissions", sales: "a2.sales", others: "a2.others" };
+function campSetPicker(open) {
+  if (open && leaveBlocked()) { note(leaveMessage()); return; }
+  camp.pickerOpen = !!open;
+  renderPicker();
+  if (open) {
+    const cur = $("camp-picker").querySelector('.campitem[aria-current="true"]') || $("camp-picker").querySelector(".campitem, .campchip");
+    if (cur) cur.focus();
+  } else $("camp-pick").focus();
+}
+function campSetFilter(name, value) {
+  camp.filter = Object.assign({}, camp.filter, { [name]: camp.filter[name] === value ? "" : value });
+  try { localStorage.setItem(PICK_FILTER_KEY, JSON.stringify(camp.filter)); } catch (e) {}
+  renderPicker();
+  const again = $("camp-picker").querySelector('.campchip[data-filter="' + name + '"][data-value="' + CSS.escape(value) + '"]');
+  if (again) again.focus();
+}
+function renderPicker() {
+  const box = $("camp-picker"), btn = $("camp-pick");
+  const show = camp.pickerOpen && !$("camp-bar").hidden;
+  box.hidden = !show;
+  btn.setAttribute("aria-expanded", String(show));
+  // Drawn again only when something in it changed, so focus stays put while the page refreshes.
+  const sig = show ? JSON.stringify([camp.list, camp.filter, campOn() ? camp.id : "", I18n.lang()]) : "";
+  if (sig === box.dataset.sig) return;
+  box.dataset.sig = sig;
+  box.textContent = "";
+  if (!show) return;
+  const head = el("div", "pickhead");
+  const h = el("h2", "", I18n.t("a2.pickTitle")); h.id = "camp-picker-title";
+  head.appendChild(h);
+  const close = el("button", "plain", I18n.t("a2.close")); close.type = "button"; close.id = "camp-picker-close";
+  close.addEventListener("click", () => campSetPicker(false));
+  head.appendChild(close);
+  box.appendChild(head);
+  const opts = CampaignPicker.options(camp.list);
+  const chips = (name, label, values, text) => {
+    if (values.length < 2 && !camp.filter[name]) return;
+    const row = el("div", "pickfilter"); row.setAttribute("role", "group");
+    const lab = el("span", "label", label); lab.id = "camp-f-" + name; row.setAttribute("aria-labelledby", lab.id);
+    row.appendChild(lab);
+    values.forEach((v) => {
+      const b = el("button", "campchip", text ? text(v) : v); b.type = "button";
+      b.dataset.filter = name; b.dataset.value = v;
+      b.setAttribute("aria-pressed", String(camp.filter[name] === v));
+      b.addEventListener("click", () => campSetFilter(name, v));
+      row.appendChild(b);
+    });
+    box.appendChild(row);
+  };
+  chips("purpose", I18n.t("a2.purpose"), opts.purposes, (p) => I18n.t(PURPOSE_LABEL[p]));
+  chips("class_label", I18n.t("a2.class"), opts.classes);
+  chips("board", I18n.t("a2.board"), opts.boards);
+  const shown = CampaignPicker.filter(camp.list, camp.filter);
+  if (!shown.length) {
+    const p = el("p", "hint", I18n.t("a2.noMatch") + " ");
+    const clear = el("button", "plain", I18n.t("a2.clearFilters")); clear.type = "button"; clear.id = "camp-picker-clear";
+    clear.addEventListener("click", () => { camp.filter = { purpose: "", class_label: "", board: "" }; try { localStorage.removeItem(PICK_FILTER_KEY); } catch (e) {} renderPicker(); });
+    p.appendChild(clear);
+    box.appendChild(p);
+  }
+  CampaignPicker.groups(shown).forEach((g) => {
+    const sec = el("section", "pickgroup");
+    const gh = el("h3", "", I18n.t(PURPOSE_LABEL[g.purpose]) + " (" + g.campaigns.length + ")"); gh.id = "camp-g-" + g.purpose;
+    sec.setAttribute("aria-labelledby", gh.id);
+    sec.appendChild(gh);
+    const ul = el("ul", "picklist");
+    g.campaigns.forEach((c) => {
+      const li = el("li");
+      const b = el("button", "campitem"); b.type = "button"; b.dataset.campaign = c.campaign_id;
+      if (camp.id === c.campaign_id) b.setAttribute("aria-current", "true");
+      b.appendChild(el("strong", "", c.name + (c.status === "paused" ? " " + I18n.t("a2.paused") : "")));
+      const tags = CampaignPicker.tagLine(c);
+      b.appendChild(el("span", "sub", [tags, c.call_type_label].filter(Boolean).join(" · ")));
+      const n = CampaignPicker.waiting(c);
+      b.appendChild(el("span", "waitn" + (n ? "" : " none"), I18n.t("a2.waitingN", { n: n })));
+      b.addEventListener("click", () => campPick(c.campaign_id));
+      li.appendChild(b);
+      ul.appendChild(li);
+    });
+    sec.appendChild(ul);
+    box.appendChild(sec);
+  });
+  const sheetBtn = el("button", "campitem sheetitem", I18n.t("camp.sheetOption")); sheetBtn.type = "button"; sheetBtn.id = "camp-sheet";
+  if (!campOn()) sheetBtn.setAttribute("aria-current", "true");
+  sheetBtn.addEventListener("click", () => campPick(""));
+  box.appendChild(sheetBtn);
+}
+$("camp-pick").addEventListener("click", () => campSetPicker(!camp.pickerOpen));
+$("camp-picker").addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape") { ev.preventDefault(); campSetPicker(false); }
+});
+document.addEventListener("click", (ev) => {
+  if (!camp.pickerOpen || !ev.target.isConnected) return;   // a chip redrawn by its own click is not "outside"
+  if (!$("camp-picker").contains(ev.target) && !$("camp-bar").contains(ev.target)) { camp.pickerOpen = false; renderPicker(); }
+});
+loadStaticCommon();
+/* ---- end Phase A.2: caller ---- */
 
 /* ---- Saving ---- */
 
@@ -2090,18 +2327,21 @@ function renderCampaign() {
   const bar = $("camp-bar"), sel = $("camp-pick");
   bar.hidden = !camp.list.length || !Cloud.hasSeat();
   if (!bar.hidden) {
-    const opts = camp.list.map((c) => [c.campaign_id, c.name + (c.status === "paused" ? " (paused)" : "") + " · " + I18n.t("camp.due", { n: Number(c.my_leads_due) || 0 })])
-      .concat([["", I18n.t("camp.sheetOption")]]);
-    const sig = JSON.stringify(opts);
-    if (sel.dataset.sig !== sig) {
+    // Phase A.2: caller. A button that opens the campaign picker, showing the campaign now picked.
+    const c = on ? campCurrent() : null;
+    const text = c ? c.name + (c.status === "paused" ? " " + I18n.t("a2.paused") : "") : I18n.t("camp.sheetOption");
+    const tags = c ? CampaignPicker.tagLine(c) : "";
+    if (sel.dataset.sig !== text + "|" + tags) {
       sel.textContent = "";
-      opts.forEach(([v, t]) => sel.appendChild(new Option(t, v)));
-      sel.dataset.sig = sig;
+      sel.appendChild(el("span", "pickname", text));
+      if (tags) sel.appendChild(el("span", "picktags", tags));
+      sel.dataset.sig = text + "|" + tags;
     }
-    sel.value = on ? camp.id : "";
     sel.disabled = leaveBlocked();
-    sel.title = sel.disabled ? leaveMessage() : "";
-  }
+    sel.title = sel.disabled ? leaveMessage() : I18n.t("a2.pickHint");
+    if (sel.disabled && camp.pickerOpen) camp.pickerOpen = false;
+  } else camp.pickerOpen = false;
+  renderPicker();
   renderPracticeLink();
   document.querySelector(".work").classList.toggle("campaign", on);
   $("sheet-section").hidden = on;
@@ -2140,7 +2380,10 @@ function renderCampLead() {
   const facts = el("ul", "leadfacts");
   const fact = (k, v, cls) => { const li = el("li", cls || ""); if (k) li.appendChild(el("span", "k", k + ": ")); li.appendChild(document.createTextNode(v)); facts.appendChild(li); return li; };
   fact("", l.phone, "phone");
-  CampaignQueue.extraFields(l.extra).forEach(([k, v]) => fact(k, v));
+  // Phase A.2: caller. The source fields get their own line below, for "Where did you get my number?".
+  const extra = {};
+  if (l.extra && typeof l.extra === "object") Object.keys(l.extra).forEach((k) => { if (!Placeholders.isSourceKey(k)) extra[k] = l.extra[k]; });
+  CampaignQueue.extraFields(extra).forEach(([k, v]) => fact(k, v));
   const m = camp.money[l.id];
   if (m && m.loading) fact(I18n.t("camp.amountDue"), I18n.t("camp.checking"), "money");
   else if (m && m.offline) fact(I18n.t("camp.amountDue"), I18n.t("camp.moneyOffline"), "money");
@@ -2155,9 +2398,12 @@ function renderCampLead() {
     if (l.promised_date) li.appendChild(document.createTextNode(" " + I18n.t("camp.by", { date: campDate(l.promised_date + "T12:00:00+05:30") })));
     li.appendChild(el("span", "reported", " (" + I18n.t("camp.reported") + ")"));
   }
+  campLedgerFacts(l, fact);   // Phase A.2: caller
   const st = CampaignQueue.statusOf(l, Date.now());
   fact("", st.label, "whostate");
   who.appendChild(facts);
+  const src = campSourceLine(l);   // Phase A.2: caller
+  if (src) { const p = el("p", "leadsource", src); p.id = "camp-source"; who.appendChild(p); }
   if (l.last_called_at) {
     const r = campResult(l.last_result_key);
     const bits = [I18n.t("camp.lastCall", { date: campDate(l.last_called_at) })];
@@ -2373,7 +2619,6 @@ function campUpdateActions() {
   save.title = state.practice ? I18n.t("practice.blocked") : !camp.pick ? I18n.t("camp.pickFirst") : "";
 }
 
-$("camp-pick").addEventListener("change", (ev) => campPick(ev.target.value));
 window.addEventListener("online", () => { campSync(); if (campOn()) campRefresh(); });
 setInterval(campSync, 30000);
 setInterval(campPresence, 60000);   // Phase A: integration (admin Home "callers right now")

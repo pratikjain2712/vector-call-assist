@@ -553,3 +553,20 @@ Internal (granted to nobody): `student_balance_rows(p_institute, p_student defau
 **For the demo data:** add students, fee items and payments with the functions above (or with direct inserts as the table owner). If the demo's "Admission confirmed" uses a key other than `admission_done` / `admission_confirmed`, set `call_type_results.creates_student = true` on it. Tag campaigns with `class_label` / `board`.
 <!-- end Phase A.2 -->
 
+
+<!-- Phase A.2: caller -->
+## Phase A.2: caller page
+
+_No migration: callers read the ledger with `lead_ledger(p_lead)` (above)._
+
+| Call | When | Notes |
+|---|---|---|
+| `my_campaigns()` | sign-in, reload | The campaign picker groups by `call_type_key` (fees, admission, sales, others), filters by `class_label` and `board`, shows `my_leads_due + pool_leads_due` as "N waiting" (`web/js/campaign-picker.js`). |
+| `my_call_queue(p_campaign)` | as before | Reads `open_to_all`, `class_label`, `board` (and `fees_due_by` if ever added) and each lead's `student_id`. |
+| `next_free_lead(p_campaign)` | nothing callable in the caller's own queue, and the campaign is open or `next_free` | Rows or a lead id. |
+| `lead_ledger(p_lead)` | a lead with `student_id` on the card | Balance due now and last payment (amount, date, mode); memory only. |
+| `my_trial_status()` | sign-in | `institute_name` fills `{institute}`; kept on the device with the campaigns. |
+| `my_common_answers()` | sign-in | Optional (missing function or no rows: the page uses `web/data/common_answers.json`, a copy of `supabase/templates/common_answers.json`). Rows `{key, label, answer, tags, fallback, result, check, filled}`; an answer with a non-empty `check` shows only when `filled` (or `check_filled`) is true or `check` is empty. |
+
+Placeholders (`web/js/placeholders.js`): `{student}`, `{class}`, `{board}`, `{course}`, `{source}`, `{source_date}`, `{due_date}` come from the lead's `extra` keys (e.g. `student`, `class`, `board`, `course`, `source`, `enquiry date`, `due date`), then the campaign tags; `{source_date}` falls back to `leads.created_at`; `{amount_due}` from `lead_money`, else the ledger balance.
+<!-- end Phase A.2: caller -->

@@ -301,6 +301,11 @@
     myPractice: () => call('my_practice'),
     reportPresence: (onCall, phoneOk) => call('report_presence', { p_on_call: !!onCall, p_phone_ok: phoneOk !== false }),
     client: () => (client && session && seat ? client : null),
+    // Phase A.2: caller. The institute's name for {institute}, the ledger on the fees lead card (balance due now and the
+    // last payment, for the lead on the call only), and the institute's common answers (an older database has none).
+    myTrialStatus: () => call('my_trial_status'),
+    leadLedger: (leadId) => call('lead_ledger', { p_lead: leadId }),
+    myCommonAnswers: () => call('my_common_answers'),
     missing,
     enqueue,
     cancel,
