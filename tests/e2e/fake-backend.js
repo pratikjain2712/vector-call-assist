@@ -446,6 +446,8 @@ function createFakeBackend(world) {
   // db.campaigns and db.leads are shared with the campaigns block above; db.features with the scripts block.
   // db.callerScripts: scripts by id for the caller screen (the scripts block keeps db.scripts as a list).
   db.saved = []; db.callerScripts = {}; db.offline = false; db.presenceReports = [];
+  // The published script of institute B (sheet mode): world.steps unless a test sets db.publishedSteps, and its pushbacks.
+  db.publishedSteps = null; db.publishedPushbacks = [];
   // Members: addCampaign() campaigns carry c.members; campaigns made on the Campaigns tab use db.members.
   const membersOf = (c) => c.members || db.members.filter((m) => m.campaign_id === c.id).map((m) => m.seat_id);
   const memberOf = (u, c) => { const s = u && seatOf(u.id); return s && membersOf(c).includes(s.id) && ['running', 'paused'].includes(c.status) ? s : null; };
@@ -498,7 +500,7 @@ function createFakeBackend(world) {
         arms[a.p_lead] = arm;
         v = c.scriptTest[arm];
       }
-      return json(200, [{ script_id: sc.id, script_name: sc.name || 'Script', version: v.version, steps: v.steps, test_id: arm ? 'test-1' : null, arm }]);
+      return json(200, [{ script_id: sc.id, script_name: sc.name || 'Script', version: v.version, steps: v.steps, test_id: arm ? 'test-1' : null, arm, pushbacks: v.pushbacks || [] }]);
     },
     // Integration: presence for the admin Home tab (20261024100023), kept for tests.
     report_presence: (u, a) => {
@@ -927,11 +929,11 @@ function createFakeBackend(world) {
     // Phase A: caller: one script by id (a campaign's script).
     if (p === '/rest/v1/scripts' && method === 'GET' && url.searchParams.get('id')) {
       const sc = db.callerScripts[(url.searchParams.get('id') || '').replace(/^eq\./, '')];
-      return send(json(200, sc && u ? [{ id: sc.id, script_versions: [{ version: sc.version, steps: sc.steps, published: true }] }] : []));
+      return send(json(200, sc && u ? [{ id: sc.id, script_versions: [{ version: sc.version, steps: sc.steps, pushbacks: sc.pushbacks || [], published: true }] }] : []));
     }
     if (p === '/rest/v1/scripts' && method === 'GET') {
       const inst = (url.searchParams.get('institute_id') || '').replace(/^eq\./, '');
-      const scripts = inst === world.institutes.b && u ? [{ id: world.scriptId, script_versions: [{ version: 1, steps: world.steps, published: true }] }] : [];
+      const scripts = inst === world.institutes.b && u ? [{ id: world.scriptId, script_versions: [{ version: 1, steps: db.publishedSteps || world.steps, pushbacks: db.publishedPushbacks, published: true }] }] : [];
       return send(json(200, scripts));
     }
     if (p === '/rest/v1/call_outcomes' && method === 'POST') {

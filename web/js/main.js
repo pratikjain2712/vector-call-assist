@@ -771,6 +771,15 @@ function renderCallMode() {
   });
   $("clock-aim").textContent = ACTIVE === BUILTIN ? CALL_MODES[callMode].aim : campOn() ? "" : "aim 10 to 12 min";
 }
+/* What the helper column needs from a published or campaign script, besides its FLOW: the pushback answers
+   ({label, answer}) and each step's title (the adapter keeps say and tip, not the title). */
+function scriptExtras(got) {
+  const titles = Object.create(null);
+  (Array.isArray(got.steps) ? got.steps : []).forEach((x) => {
+    if (x && typeof x.id === "string" && typeof x.title === "string" && x.title.trim()) titles[x.id] = x.title.trim();
+  });
+  return { pushbacks: Array.isArray(got.pushbacks) ? got.pushbacks : [], titles: titles };
+}
 async function loadPublishedScript() {
   const mine = ++scriptFetch;
   if (campOn()) { await loadCampaignScript(mine); return; }   // Phase A: caller
@@ -778,7 +787,7 @@ async function loadPublishedScript() {
   if (mine !== scriptFetch) return;            // a later check has started, and its answer counts
   const flow = got ? ScriptAdapter.adaptSteps(got.steps) : null;
   if (got && !flow) note("This published script cannot be shown in the call page, so the built-in script is in use.");
-  wanted = flow ? { flow: flow, start: ScriptAdapter.startStepId(got.steps), scriptId: got.scriptId, version: got.version } : BUILTIN;
+  wanted = flow ? Object.assign({ flow: flow, start: ScriptAdapter.startStepId(got.steps), scriptId: got.scriptId, version: got.version }, scriptExtras(got)) : BUILTIN;
   useWanted();
   render();
 }
@@ -1296,6 +1305,7 @@ function render() {
   $("back").disabled = !state.history.length && state.objection == null;
   // The objection chips jump to built-in steps, so they are off while a published script is in use.
   $("obj-section").hidden = !!node.end || ACTIVE !== BUILTIN;
+  document.querySelector(".work").classList.toggle("custom", ACTIVE !== BUILTIN);   // layout: the helper column takes their place
   renderLeads();
 }
 
@@ -1343,7 +1353,9 @@ const TOPIC_OF = {};
 Object.keys(TOPIC_STEPS).forEach((t) => TOPIC_STEPS[t].split(" ").forEach((s) => { TOPIC_OF[s] = t; }));
 const answerNamed = (name) => ANSWERS.find((a) => a.chip === name);
 
-/* Search: every word typed must appear in the answer (its name, text or tip), or one of its everyday synonyms. */
+/* Search: every word typed must appear in the answer (its name, text or tip), or one of its everyday synonyms.
+   SYNONYMS is written for the built-in Vector 2.0 course (prices, the batch date); GENERIC_SYNONYMS is used for
+   every other script, so a word never matches on a Vector-only phrase there. */
 const SYNONYMS = {
   offer: ["offer", "discount", "20%", "₹5,000"], discount: ["discount", "offer", "20%"],
   emi: ["emi", "instalment", "two parts"], instalment: ["instalment", "emi", "two parts"], installment: ["instalment", "emi", "two parts"],
@@ -1354,61 +1366,136 @@ const SYNONYMS = {
   python: ["python", "coding", "code"], code: ["code", "coding", "python"], cloud: ["cloud", "aws", "azure"],
   hindi: ["hindi", "english"], refund: ["refund", "money back"], start: ["start", "21 november", "batch"],
 };
+const GENERIC_SYNONYMS = {
+  offer: ["offer", "discount", "concession"], discount: ["discount", "offer", "concession", "waive"],
+  emi: ["emi", "instalment", "installment", "parts"], instalment: ["instalment", "installment", "emi", "parts"], installment: ["instalment", "installment", "emi", "parts"],
+  fee: ["fee", "₹", "price", "cost", "pay", "amount"], fees: ["fee", "₹", "price", "cost", "pay", "amount"], price: ["price", "fee", "₹", "cost"], cost: ["cost", "fee", "₹", "price"],
+  money: ["money", "fee", "₹", "pay", "refund"], pay: ["pay", "fee", "₹", "amount"], late: ["late", "delay", "extension", "fine", "penalty"], due: ["due", "deadline", "last date"],
+  recording: ["record", "miss"], record: ["record", "miss"], video: ["video", "record"],
+  job: ["job", "placement", "hired", "interview"], placement: ["placement", "job", "hired"],
+  time: ["time", "hour", "timing", "schedule"], timing: ["time", "timing", "schedule"],
+  python: ["python", "coding", "code"], code: ["code", "coding", "python"],
+  hindi: ["hindi", "english", "language"], language: ["language", "hindi", "english"], refund: ["refund", "money back"], start: ["start", "begin", "date"],
+  busy: ["busy", "later", "call back", "callback"], later: ["later", "call back", "callback", "busy"],
+};
+
+/* The answers the helper column searches. The built-in script: ANSWERS. Any other script: its own pushback
+   answers ({label, answer}), then each step's tip as a hint. A hint is not an objection, so opening it is not
+   counted. Built once per script. */
+let scriptSet = null, scriptSetFor = null;
+function answerSet() {
+  if (ACTIVE === BUILTIN) return ANSWERS;
+  if (scriptSetFor === ACTIVE) return scriptSet;
+  const out = [], seen = new Set();
+  (ACTIVE.pushbacks || []).forEach((p) => {
+    const label = p && typeof p.label === "string" ? p.label.trim() : "";
+    const answer = p && typeof p.answer === "string" ? p.answer.trim() : "";
+    if (!label || !answer || seen.has(label.toLowerCase())) return;
+    seen.add(label.toLowerCase());
+    out.push({ key: "p:" + label, chip: label, say: answer, push: true });
+  });
+  const tips = new Set();
+  Object.keys(ACTIVE.flow).forEach((id) => {
+    const n = ACTIVE.flow[id];
+    if (!n || n.end || n.none || !n.tip || tips.has(n.tip)) return;
+    tips.add(n.tip);
+    const title = (ACTIVE.titles && ACTIVE.titles[id]) || (n.say[0] || id).replace(/\{name\}|\{me\}/g, "").trim().slice(0, 50);
+    out.push({ key: "t:" + id, chip: "Tip: " + title, say: n.tip, hint: true });
+  });
+  scriptSet = out; scriptSetFor = ACTIVE;
+  return out;
+}
+const keyOf = (a) => a.key || a.chip;
 function searchAnswers(query) {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (!words.length) return [];
-  return ANSWERS.map((a) => {
+  const syn = ACTIVE === BUILTIN ? SYNONYMS : GENERIC_SYNONYMS;
+  return answerSet().map((a) => {
     const name = a.chip.toLowerCase(), text = (a.chip + " " + a.say + " " + (a.tip || "")).toLowerCase();
     let score = 0;
     for (const w of words) {
-      const alts = own(SYNONYMS, w) || [w];
+      const alts = own(syn, w) || [w];
       if (name.includes(w)) score += 4;   // the word itself in the question ranks first
       else if (alts.some((x) => name.includes(x))) score += 3;
-      else if (alts.some((x) => text.includes(x))) score += 1;
+      else if (text.includes(w) || alts.some((x) => text.includes(x))) score += 1;
       else return null;
     }
     return { a, score };
   }).filter(Boolean).sort((x, y) => y.score - x.score).slice(0, 8).map((r) => r.a);
 }
 
-let helpOpen = null;   // the answer shown under its question, by name
+/* "They may ask now" for a script other than the built-in one: its steps have no topic, so its pushback answers
+   are ranked by the words they share with the current step (its say lines, title and tip), a shared word in
+   the label counting double. With no shared words the script's order is kept. At most 5. */
+const ASK_STOP = new Set(("the and you your for are was were this that with have has had not but can will what when how who why our out about from " +
+  "they them their there then than into also just very more some any all its yes okay please would could should may might been being does did " +
+  "sir madam hello thank thanks right now today call").split(" "));
+const askStem = (w) => (w.length > 5 && /(ing|ed)$/.test(w) ? w.replace(/(ing|ed)$/, "") : w.length > 3 && /[^s]s$/.test(w) ? w.slice(0, -1) : w);
+function askWords(text) {
+  return new Set(String(text || "").toLowerCase().replace(/\{name\}|\{me\}/g, " ").split(/[^\p{L}\p{N}₹]+/u)
+    .filter((w) => w.length > 2 && !ASK_STOP.has(w)).map(askStem));
+}
+function scriptAskNow() {
+  const n = FLOW[state.node];
+  const pushes = answerSet().filter((a) => a.push);
+  if (!n || n.none || !pushes.length) return [];
+  const step = askWords([].concat(n.say || [], n.tip || "", (ACTIVE.titles && ACTIVE.titles[state.node]) || "", n.end ? n.end.label : "").join(" "));
+  return pushes.map((a, i) => {
+    const label = askWords(a.chip), text = askWords(a.say);
+    let score = 0;
+    step.forEach((w) => { if (label.has(w)) score += 2; else if (text.has(w)) score += 1; });
+    return { a, score, i };
+  }).sort((x, y) => y.score - x.score || x.i - y.i).slice(0, 5).map((r) => r.a);
+}
+
+let helpOpen = null;   // the answer shown under its question, by key
 let helpNode = null;   // the step the helper column was last drawn for
+let helpScript = null; // and the script
 function helpItems() {
   const q = $("help-search").value.trim();
   if (q) return searchAnswers(q);
+  if (ACTIVE !== BUILTIN) return scriptAskNow();
   return (TOPICS[TOPIC_OF[state.node]] || []).map(answerNamed).filter(Boolean);
+}
+// Opening an answer counts it as raised, like a tapped Pushback button. A step tip is not an objection.
+function openAnswer(a) {
+  helpOpen = keyOf(a);
+  if (!a.hint && !state.objs.includes(a.chip)) state.objs.push(a.chip);
 }
 function renderHelp() {
   const col = $("help-col");
-  col.hidden = ACTIVE !== BUILTIN;   // the answers belong to the built-in script
+  col.hidden = ACTIVE === NO_SCRIPT;   // a campaign without a script has nothing to answer from
   if (col.hidden) return;
-  if (helpNode !== state.node) { helpNode = state.node; if (!$("help-search").value.trim()) helpOpen = null; }
+  if (helpNode !== state.node || helpScript !== ACTIVE) { helpNode = state.node; helpScript = ACTIVE; if (!$("help-search").value.trim()) helpOpen = null; }
   const q = $("help-search").value.trim();
   const items = helpItems();
   $("help-title").textContent = q ? (items.length ? "Answers for “" + q + "”" : "No answer for “" + q + "”") : "They may ask now";
   const list = $("help-list"); list.textContent = "";
-  if (!items.length && !q) list.appendChild(el("p", "hint", "Press / to search every answer."));
+  if (!items.length && !q) {
+    list.appendChild(el("p", "hint", ACTIVE === BUILTIN || answerSet().length ? "Press / to search every answer."
+      : "This script has no pushback answers yet."));
+  }
   items.forEach((a) => {
-    const item = el("div", "help-item");
-    const b = el("button", "help-q", a.chip); b.type = "button";
-    b.setAttribute("aria-expanded", String(helpOpen === a.chip));
+    const key = keyOf(a);
+    const item = el("div", "help-item" + (a.hint ? " hint-item" : ""));
+    const b = el("button", "help-q", a.chip); b.type = "button"; b.dataset.key = key;
+    b.setAttribute("aria-expanded", String(helpOpen === key));
     b.addEventListener("click", () => {
-      helpOpen = helpOpen === a.chip ? null : a.chip;
-      if (helpOpen && !state.objs.includes(a.chip)) state.objs.push(a.chip);   // counted as raised, like a tapped button
+      if (helpOpen === key) helpOpen = null; else openAnswer(a);
       renderHelp();
-      const again = [...$("help-list").querySelectorAll(".help-q")].find((x) => x.textContent === a.chip);
+      const again = [...$("help-list").querySelectorAll(".help-q")].find((x) => x.dataset.key === key);
       if (again) again.focus();
     });
     item.appendChild(b);
-    if (helpOpen === a.chip) {
+    if (helpOpen === key) {
       const ans = el("div", "help-a"); const p = el("p"); fillInto(p, a.say); ans.appendChild(p);
       if (a.tip) ans.appendChild(el("p", "tip", a.tip));
       item.appendChild(ans);
     }
     list.appendChild(item);
   });
-  // While searching, the matching Pushback and Worries buttons light up and the others fade.
-  const hits = q ? new Set(items.map((a) => a.chip)) : null;
+  // While searching, the matching Pushback and Worries buttons light up and the others fade (built-in script).
+  const hits = q && ACTIVE === BUILTIN ? new Set(items.map((a) => a.chip)) : null;
   OBJECTIONS.forEach((o, i) => {
     const c = $("obj-" + i); if (!c) return;
     c.classList.toggle("match", !!hits && hits.has(o.chip));
@@ -1420,7 +1507,7 @@ $("help-search").addEventListener("input", () => { helpOpen = null; renderHelp()
 $("help-search").addEventListener("keydown", (ev) => {
   const items = helpItems();
   if (ev.key === "Escape") { ev.preventDefault(); clearHelpSearch(); ev.target.blur(); }
-  else if (ev.key === "Enter" && items.length) { ev.preventDefault(); helpOpen = items[0].chip; if (!state.objs.includes(helpOpen)) state.objs.push(helpOpen); renderHelp(); }
+  else if (ev.key === "Enter" && items.length) { ev.preventDefault(); openAnswer(items[0]); renderHelp(); }
   else if (ev.key === "ArrowDown") { const f = $("help-list").querySelector(".help-q"); if (f) { ev.preventDefault(); f.focus(); } }
 });
 $("help-list").addEventListener("keydown", (ev) => {
@@ -1786,7 +1873,12 @@ async function loadCampaignScript(mine) {
     const r = await Cloud.campaignScript(c.campaign_id, l ? l.id : null);
     if (!r.error) {
       const row = Array.isArray(r.data) ? r.data[0] : r.data;
-      got = row && Array.isArray(row.steps) ? { scriptId: row.script_id, version: row.version, steps: row.steps, arm: row.arm || null } : null;
+      got = row && Array.isArray(row.steps) ? { scriptId: row.script_id, version: row.version, steps: row.steps, pushbacks: row.pushbacks, arm: row.arm || null } : null;
+      if (got && !Array.isArray(got.pushbacks)) {
+        // A database from before 20261025120000 sends no pushbacks: take the published version's, when it is this one.
+        const pub = await Cloud.scriptById(c.script_id);
+        got.pushbacks = pub && pub.version === got.version ? pub.pushbacks : [];
+      }
       if (got) OfflineStore.set(got.arm && leadKey ? leadKey : key, got);
     } else if (Cloud.missing(r.error)) {
       got = await Cloud.scriptById(c.script_id);
@@ -1801,7 +1893,7 @@ async function loadCampaignScript(mine) {
   const flow = got ? ScriptAdapter.adaptSteps(got.steps) : null;
   if (got && !flow) note(I18n.t("camp.scriptBroken"));
   wanted = flow
-    ? { flow: flow, start: ScriptAdapter.startStepId(got.steps), scriptId: got.scriptId, version: got.version, order: got.steps.map((x) => x.id) }
+    ? Object.assign({ flow: flow, start: ScriptAdapter.startStepId(got.steps), scriptId: got.scriptId, version: got.version, order: got.steps.map((x) => x.id) }, scriptExtras(got))
     : NO_SCRIPT;
   useWanted();
   render();

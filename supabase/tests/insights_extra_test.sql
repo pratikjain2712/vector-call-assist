@@ -72,6 +72,8 @@ insert into script_versions (script_id, institute_id, version, steps, change_not
  (:'sc1', :'inst_i', 2, '[{"id":"open","start":true,"say":["Hi {name}, v2"],"opts":[{"label":"Next","to":"fees"}]},{"id":"fees","title":"Fee step","say":["The fee is due soon."]}]', 'Shorter opening', false),
  (:'sc2', :'inst_i', 1, '[{"id":"open","start":true,"say":["Draft"]}]', '', false),
  (:'sc_j', :'inst_j', 1, '[{"id":"open","start":true,"say":["J"]}]', '', true);
+-- The draft v2 has its own pushback answer (20261025120000: they come with the version's steps).
+update script_versions set pushbacks = '[{"label":"Can I pay late?","answer":"Yes, by the 10th."}]' where script_id = :'sc1' and version = 2;
 select (now() at time zone 'Asia/Kolkata')::date + 10 as endd,
        (now() at time zone 'Asia/Kolkata')::date
          - case extract(isodow from (now() at time zone 'Asia/Kolkata')::date)::int when 1 then 3 when 7 then 2 else 1 end
@@ -209,6 +211,7 @@ select pg_temp.as_user(:'u_a');
 select pg_temp.val_is('no test: the published version', format($q$select version || ':' || (test_id is null) from campaign_script_version(%L, %L)$q$, :'k_fees', :'t1'), '1:true');
 select pg_temp.val_is('no lead: the published version', format($q$select version::text from campaign_script_version(%L)$q$, :'k_fees'), '1');
 select pg_temp.val_is('steps come with it', format($q$select steps->0->'say'->>0 from campaign_script_version(%L)$q$, :'k_fees'), 'Hi {name}, v1');
+select pg_temp.val_is('pushbacks come with it (none on v1)', format($q$select pushbacks::text from campaign_script_version(%L)$q$, :'k_fees'), '[]');
 select pg_temp.val_is('no script on the campaign: no rows', format($q$select count(*)::text from campaign_script_version(%L)$q$, :'k_sales'), '0');
 select pg_temp.fails_with('a caller cannot use a draft campaign', format($q$select * from campaign_script_version(%L)$q$, :'k_draft'), 'campaign not found');
 select pg_temp.fails_with('a caller cannot ask for another caller''s lead', format($q$select * from campaign_script_version(%L, %L)$q$, :'k_fees', :'t7'), 'lead not found');
@@ -232,6 +235,7 @@ select pg_temp.as_user(:'u_a');
 select pg_temp.val_is('first lead hears A', format($q$select arm || ':v' || version from campaign_script_version(%L, %L)$q$, :'k_fees', :'t1'), 'a:v1');
 select pg_temp.val_is('second lead hears B', format($q$select arm || ':v' || version from campaign_script_version(%L, %L)$q$, :'k_fees', :'t2'), 'b:v2');
 select pg_temp.val_is('draft version steps reach the caller', format($q$select steps->0->'say'->>0 from campaign_script_version(%L, %L)$q$, :'k_fees', :'t2'), 'Hi {name}, v2');
+select pg_temp.val_is('and the pushbacks of that version', format($q$select pushbacks->0->>'label' from campaign_script_version(%L, %L)$q$, :'k_fees', :'t2'), 'Can I pay late?');
 select pg_temp.val_is('the same lead keeps its version', format($q$select arm || ':v' || version from campaign_script_version(%L, %L)$q$, :'k_fees', :'t1'), 'a:v1');
 select pg_temp.ok('more leads', format($q$select (select arm from campaign_script_version(%1$L, %2$L)) || (select arm from campaign_script_version(%1$L, %3$L)) || (select arm from campaign_script_version(%1$L, %4$L)) || (select arm from campaign_script_version(%1$L, %5$L))$q$, :'k_fees', :'t3', :'t4', :'t5', :'t6'));
 select pg_temp.val_is('no lead: still the published version', format($q$select version || ':' || (test_id is null) from campaign_script_version(%L)$q$, :'k_fees'), '1:true');

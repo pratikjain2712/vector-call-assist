@@ -237,7 +237,7 @@
       if (!client || !session || !seat) return null;
       const { data, error } = await client
         .from('scripts')
-        .select('id, script_versions!inner(version, steps, published)')
+        .select('id, script_versions!inner(version, steps, pushbacks, published)')
         .eq('institute_id', seat.institute_id)
         .eq('script_versions.published', true)
         .order('created_at', { ascending: false })
@@ -245,7 +245,7 @@
       if (error || !Array.isArray(data) || !data[0]) return null;
       const v = Array.isArray(data[0].script_versions) ? data[0].script_versions[0] : data[0].script_versions;
       if (!v || !Array.isArray(v.steps)) return null;
-      return { scriptId: data[0].id, version: v.version, steps: v.steps };
+      return { scriptId: data[0].id, version: v.version, steps: v.steps, pushbacks: Array.isArray(v.pushbacks) ? v.pushbacks : [] };
     } catch (e) { return null; }
   }
 
@@ -267,14 +267,14 @@
       if (!client || !session || !seat || !scriptId) return null;
       const { data, error } = await client
         .from('scripts')
-        .select('id, script_versions!inner(version, steps, published)')
+        .select('id, script_versions!inner(version, steps, pushbacks, published)')
         .eq('id', scriptId)
         .eq('script_versions.published', true)
         .limit(1);
       if (error || !Array.isArray(data) || !data[0]) return null;
       const v = Array.isArray(data[0].script_versions) ? data[0].script_versions[0] : data[0].script_versions;
       if (!v || !Array.isArray(v.steps)) return null;
-      return { scriptId: data[0].id, version: v.version, steps: v.steps };
+      return { scriptId: data[0].id, version: v.version, steps: v.steps, pushbacks: Array.isArray(v.pushbacks) ? v.pushbacks : [] };
     } catch (e) { return null; }
   }
 

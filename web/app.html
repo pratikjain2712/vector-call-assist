@@ -328,6 +328,26 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
   .work.campaign .workmain { grid-column: 2; grid-row: 1; }
   .work.campaign .myresults { grid-column: 2; grid-row: 2; }
 }
+/* A published or campaign script has no Pushback and Worries buttons (.work.custom): the helper column takes
+   their place beside the call. In campaign mode it sits under the lead card, or in a third column at 1400px+. */
+@media (min-width: 1100px) {
+  .work.custom:not(.campaign) { grid-template-columns: minmax(0, 1fr) minmax(0, .6fr); grid-template-rows: auto auto 1fr; }
+  .work.custom:not(.campaign) .workmain { grid-column: 1; grid-row: 1; }
+  .work.custom:not(.campaign) .sheetbar { grid-column: 1; grid-row: 2; }
+  .work.custom:not(.campaign) .myresults { grid-column: 1; grid-row: 3; }
+  .work.custom:not(.campaign) .helpcol { grid-column: 2; grid-row: 1 / span 3; position: sticky; top: 16px; }
+  .work.campaign { grid-template-rows: auto auto 1fr; }
+  .work.campaign .helpcol { grid-column: 2; grid-row: 2; position: static; }
+  .work.campaign .myresults { grid-column: 2; grid-row: 3; }
+}
+@media (min-width: 1400px) {
+  .work.custom:not(.campaign) { grid-template-columns: minmax(0, .6fr) minmax(0, 1.4fr); }
+  .work.custom:not(.campaign) .helpcol { grid-column: 1; }
+  .work.custom:not(.campaign) .workmain, .work.custom:not(.campaign) .sheetbar, .work.custom:not(.campaign) .myresults { grid-column: 2; }
+  .work.campaign { grid-template-columns: minmax(260px, .42fr) minmax(0, 1fr) minmax(240px, .55fr); grid-template-rows: auto 1fr; }
+  .work.campaign .helpcol { grid-column: 3; grid-row: 1 / span 2; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; }
+  .work.campaign .myresults { grid-column: 2; grid-row: 2; }
+}
 </style>
 
 </head>
