@@ -1,7 +1,9 @@
 -- Demo institute "Sunrise Coaching Academy (Demo)" for sales demos. FAKE DATA ONLY: every name is made up and
--- every phone number is in the +91 9999xxxxxx block, which is used here as an obviously fake range.
+-- every phone number is in the +91 9999xxxxxx block, which is used here as an obviously fake range. The one
+-- exception is "Shronit" (+91 96197 07601) in Course sales: a real person who agreed to take a live call
+-- during demos (Neha's first due call back). Never add other real numbers.
 --
--- Run AFTER all migrations and AFTER create-demo-users.mjs (it finds the 7 demo logins by email):
+-- Run AFTER all migrations and AFTER create-demo-users.mjs (it finds the 8 demo logins by email):
 --   psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/demo/demo_seed.sql
 -- or simply supabase/demo/reset-demo.sh (does both). Steps for the demo: docs/demo.md.
 --
@@ -16,6 +18,13 @@
 -- worse than 10-A), Priya often skips the Questions step, Amit's opening is long, Neha converts best, and in
 -- the sales script test v7 does better than v6. Lead rows end in the state those calls leave them in (the same
 -- mapping as save_call_result). Today's calls use fixed result counts so Home looks like the mockup.
+--
+-- Phase A.2: a fee ledger (Class 8 CBSE, Class 9 ICSE, Class 10 CBSE students with fee items, an opening
+-- balance import, payments of the last 8 weeks by mode, a few reversals) that agrees with the calls: a parent
+-- who said "paid" on a call has a payment within 0–2 days in most cases, a few "says already paid" have none
+-- (for the office to check), and every fees lead carries its student and amount_due = the student's balance.
+-- Every campaign is open to all callers and tagged by class and board; every lead has extra.source and
+-- extra.source_date (docs/template-library.md, placeholders). An Accounts login (Kavita) records payments.
 
 \set ON_ERROR_STOP on
 \if :{?terms_version}
@@ -43,8 +52,8 @@ create temp table demo_people (
   who      text primary key,
   email    text not null,
   label    text not null,
-  role     text not null,          -- admin / rep
-  kind     text,                   -- owner / manager / null
+  role     text not null,          -- admin / rep / accounts
+  kind     text,                   -- owner / manager / accounts / null
   seat     uuid not null,
   user_id  uuid
 ) on commit drop;
@@ -56,7 +65,8 @@ insert into demo_people (who, email, label, role, kind, seat) values
   ('priya',   'priya.sunrise@example.com',   'Priya',        'rep',   null,      '5a1e0000-0000-4000-8000-000000000104'),
   ('neha',    'neha.sunrise@example.com',    'Neha',         'rep',   null,      '5a1e0000-0000-4000-8000-000000000105'),
   ('amit',    'amit.sunrise@example.com',    'Amit',         'rep',   null,      '5a1e0000-0000-4000-8000-000000000106'),
-  ('sana',    'sana.sunrise@example.com',    'Sana',         'rep',   null,      '5a1e0000-0000-4000-8000-000000000107');
+  ('sana',    'sana.sunrise@example.com',    'Sana',         'rep',   null,      '5a1e0000-0000-4000-8000-000000000107'),
+  ('kavita',  'accounts.sunrise@example.com', 'Kavita Joshi', 'accounts', 'accounts', '5a1e0000-0000-4000-8000-000000000108');
 
 update demo_people p set user_id = u.id from auth.users u where lower(u.email) = p.email;
 
@@ -139,8 +149,77 @@ begin
   return pg_temp.ist(d, h * 3600 + floor(random() * 3540)::int);
 end $$;
 
+-- A date as a caller says it ({source_date}, {due_date}): "20 October", with the year when it is not this year.
+create function pg_temp.say_date(d date) returns text language sql stable as $$
+  select case when extract(year from d) = extract(year from now() at time zone 'Asia/Kolkata')
+              then to_char(d, 'FMDD FMMonth') else to_char(d, 'FMDD FMMonth YYYY') end
+$$;
+
+-- Names for the made-up people.
+create temp table demo_names (k text primary key, a text[] not null) on commit drop;
+insert into demo_names values
+  ('pf', array['Rakesh', 'Sunita', 'Manoj', 'Priti', 'Suresh', 'Kavita', 'Ajay', 'Meena', 'Vijay', 'Rekha',
+               'Sanjay', 'Anjali', 'Deepak', 'Pooja', 'Rajesh', 'Neeta', 'Anil', 'Seema', 'Ashok', 'Geeta',
+               'Mahesh', 'Shalini', 'Prakash', 'Usha', 'Ramesh', 'Vandana', 'Dinesh', 'Lata', 'Nitin', 'Swati',
+               'Sachin', 'Rupali', 'Harish', 'Asha', 'Girish', 'Jyoti', 'Mukesh', 'Smita', 'Pankaj', 'Nisha', 'Alok']),
+  ('sn', array['Sharma', 'Patel', 'Mehta', 'Iyer', 'Nair', 'Reddy', 'Gupta', 'Joshi', 'Kulkarni', 'Deshmukh',
+               'Singh', 'Verma', 'Rao', 'Pillai', 'Shah', 'Desai', 'Chauhan', 'Bose', 'Das', 'Menon', 'Pandey',
+               'Mishra', 'Kapoor', 'Malhotra', 'Agarwal', 'Jain', 'Shetty', 'Naik', 'Patil', 'Yadav', 'Khan']),
+  ('kid', array['Aarav', 'Vivaan', 'Aditya', 'Ishaan', 'Arjun', 'Sai', 'Reyansh', 'Krishna', 'Ananya', 'Diya',
+                'Aadhya', 'Saanvi', 'Myra', 'Kiara', 'Riya', 'Anika', 'Kabir', 'Rohan', 'Tanvi', 'Shreya',
+                'Aryan', 'Dhruv', 'Meera', 'Nikhil', 'Pranav', 'Sneha', 'Ira', 'Yash', 'Om', 'Tara', 'Zoya']),
+  ('adult', array['Rahul', 'Karan', 'Sneha', 'Pooja', 'Akash', 'Nidhi', 'Varun', 'Komal', 'Siddharth', 'Payal',
+                  'Abhishek', 'Ritika', 'Gaurav', 'Neha', 'Rohit', 'Shruti', 'Manish', 'Divya', 'Kunal', 'Isha',
+                  'Tushar', 'Megha', 'Harsh', 'Aditi', 'Vikas', 'Sakshi', 'Saurabh', 'Prachi', 'Ankit', 'Juhi', 'Imran']);
+
+-- Payment mode, weighted like a school office: UPI most, then cash, cheque, bank transfer.
+create function pg_temp.pay_mode() returns text language sql as $$
+  select (array['upi', 'cash', 'cheque', 'bank'])[pg_temp.pick(array[58, 20, 12, 10])]
+$$;
+
+-- One ledger payment, with a made-up reference in the usual shape for its mode (UPI: 12-digit UTR; bank:
+-- NEFT UTR; cheque: cheque number; cash: receipt number). Recorded by Kavita (accounts), now and then the owner.
+create temp sequence demo_ref_seq;
+create function pg_temp.add_payment(p_student uuid, p_amount numeric, p_paid_on date, p_mode text,
+                                    p_note text, p_created timestamptz, p_by uuid default null)
+returns uuid language plpgsql as $$
+declare
+  n   bigint := nextval('demo_ref_seq');
+  ref text;
+  pid uuid;
+begin
+  ref := case p_mode
+           when 'upi' then '6' || to_char(p_paid_on, 'YDDD') || lpad(n::text, 7, '0')
+           when 'bank' then 'NEFT SBIN' || to_char(p_paid_on, 'YYMMDD') || lpad(n::text, 6, '0')
+           when 'cheque' then 'Cheque ' || lpad(((n * 7919) % 900000 + 100000)::text, 6, '0')
+           when 'cash' then 'Receipt ' || lpad((1200 + n)::text, 5, '0') end;
+  insert into public.payments (institute_id, student_id, amount, paid_on, mode, reference, note, recorded_by, created_at)
+    values ('5a1e0000-0000-4000-8000-000000000001', p_student, p_amount, p_paid_on, p_mode, ref, p_note,
+            coalesce(p_by, case when random() < 0.12 then '5a1e0000-0000-4000-8000-000000000101'::uuid
+                                else '5a1e0000-0000-4000-8000-000000000108'::uuid end),
+            p_created)
+    returning id into pid;
+  return pid;
+end $$;
+
+-- A reversal of a payment (same amount, date and mode, no reference; the reason is the note), like
+-- accounts_reverse_payment, with its audit row.
+create function pg_temp.reverse_payment(p_payment uuid, p_reason text, p_at timestamptz) returns uuid language plpgsql as $$
+declare rid uuid;
+begin
+  insert into public.payments (institute_id, student_id, amount, paid_on, mode, note, recorded_by, reverses_id, opening, created_at)
+    select p.institute_id, p.student_id, p.amount, p.paid_on, p.mode, p_reason, '5a1e0000-0000-4000-8000-000000000108',
+           p.id, p.opening, p_at
+    from public.payments p where p.id = p_payment
+    returning id into rid;
+  insert into public.audit_log (institute_id, actor_id, action, target, created_at)
+    values ('5a1e0000-0000-4000-8000-000000000001', (select user_id from demo_people where who = 'kavita'),
+            'payment.reversed', rid::text || ':' || p_payment::text, p_at);
+  return rid;
+end $$;
+
 -- ---------- 4. the institute, people, devices, terms ----------
--- seat_limit 7 = the 7 demo seats: the institute is full, so nobody can send invite emails from the demo.
+-- seat_limit 8 = the 8 demo seats: the institute is full, so nobody can send invite emails from the demo.
 
 create temp table demo_ctx (k text primary key, v text) on commit drop;
 
@@ -155,22 +234,24 @@ begin
 
   insert into public.institutes (id, name, status, seat_limit, features, time_zone, hide_money, trial_ends_at,
                                  created_by, created_at)
-    values (inst, 'Sunrise Coaching Academy (Demo)', 'active', 7, array['scripts', 'ai_drafts'], 'Asia/Kolkata',
+    values (inst, 'Sunrise Coaching Academy (Demo)', 'active', 8, array['scripts', 'ai_drafts'], 'Asia/Kolkata',
             false, null, owner, pg_temp.ist(today - 75, 11 * 3600));
 
   for p in select * from demo_people order by seat loop
     insert into public.seats (id, institute_id, user_id, label, role, status, admin_kind, can_see_money, created_at)
       values (p.seat, inst, p.user_id, p.label, p.role, 'active', p.kind, false,
-              pg_temp.ist(today - 75, 11 * 3600) + (p.seat::text > '5a1e0000-0000-4000-8000-000000000102')::int * interval '2 days');
+              case when p.role = 'accounts' then pg_temp.ist(today - 60, 10 * 3600)   -- the fees office joined later
+                   else pg_temp.ist(today - 75, 11 * 3600) + (p.seat::text > '5a1e0000-0000-4000-8000-000000000102')::int * interval '2 days' end);
     insert into public.profiles (id, full_name) values (p.user_id, p.label)
       on conflict (id) do update set full_name = excluded.full_name;
     -- Terms already accepted, so nobody is stopped by the terms panel.
     insert into public.accepted_terms (institute_id, seat_id, user_id, terms_version, text_hash, accepted_at)
       values (inst, p.seat, p.user_id, current_setting('demo.terms_version'), current_setting('demo.terms_hash'),
-              pg_temp.ist(today - 72, 10 * 3600 + floor(random() * 20000)::int));
+              pg_temp.ist(case when p.role = 'accounts' then today - 60 else today - 72 end, 10 * 3600 + floor(random() * 20000)::int));
     -- A laptop for everyone, and a paired phone for each caller (Callers tab: Phone connected).
     insert into public.devices (seat_id, kind, fingerprint, paired_at)
-      values (p.seat, 'laptop', 'demo-laptop-' || replace(p.seat::text, '-', ''), pg_temp.ist(today - 72, 12 * 3600));
+      values (p.seat, 'laptop', 'demo-laptop-' || replace(p.seat::text, '-', ''),
+              pg_temp.ist(case when p.role = 'accounts' then today - 60 else today - 72 end, 12 * 3600));
     if p.role = 'rep' then
       insert into public.devices (seat_id, kind, fingerprint, paired_at)
         values (p.seat, 'phone', 'demo-phone-' || replace(p.seat::text, '-', ''), pg_temp.ist(today - 72, 12 * 3600 + 600));
@@ -206,7 +287,11 @@ insert into demo_scripts values
   ('fees',      '5a1e0000-0000-4000-8000-000000000301'),
   ('sales',     '5a1e0000-0000-4000-8000-000000000302'),
   ('admission', '5a1e0000-0000-4000-8000-000000000303'),
-  ('late_fee',  '5a1e0000-0000-4000-8000-000000000304');
+  ('late_fee',  '5a1e0000-0000-4000-8000-000000000304'),
+  -- Phase A.2: made from the central template library (supabase/templates/library.json), check marks filled in.
+  ('overdue10', '5a1e0000-0000-4000-8000-000000000305'),
+  ('polite8',   '5a1e0000-0000-4000-8000-000000000306'),
+  ('adm9',      '5a1e0000-0000-4000-8000-000000000307');
 
 do $$
 declare
@@ -221,6 +306,9 @@ declare
   sales_v6 jsonb; sales_v7 jsonb; sales_pb jsonb;
   adm_v1 jsonb; adm_v2 jsonb; adm_pb jsonb;
   late_v1 jsonb; late_pb jsonb;
+  od_v1 jsonb; od_pb1 jsonb; od_v2 jsonb; od_pb2 jsonb;
+  po_v1 jsonb; po_pb1 jsonb; po_v2 jsonb; po_pb2 jsonb;
+  a9_v1 jsonb; a9_pb1 jsonb; a9_v2 jsonb; a9_pb2 jsonb;
   i int;
 begin
   fees_v3 := $j$[
@@ -368,11 +456,139 @@ begin
   ]$j$::jsonb;
   late_pb := '[{"label": "Can you waive the late fee?", "answer": "I will ask the office and call you back today."}]'::jsonb;
 
+  -- Library templates: the same steps and pushbacks as library.json. v2 fills the "Check this" marks with the
+  -- demo's facts (ways to pay, part payment, waivers, visiting hours, timings, bus, documents) and has no marks.
+  -- Overdue fee reminder (fees_overdue): v1 as copied from the library, v2 with the check marks filled in.
+  od_v1 := $j$[
+    {"id": "open", "title": "Opening", "start": true, "stage": 0, "say": ["Hello, am I speaking with {name}?"], "tip": "Smile before you speak. Speak slowly.", "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]},
+    {"id": "intro", "title": "Introduction", "stage": 0, "say": ["This is {me} from {institute}.", "I am calling about {student}'s fee.", "Is this a good time to talk for two minutes?"], "opts": [{"label": "Yes", "to": "due"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]},
+    {"id": "due", "title": "Fee pending", "stage": 4, "say": ["Our records show that the fee of {amount_due} was due on {due_date}.", "We have not received it yet. Sometimes this gets missed.", "When would you be able to pay?"], "tip": "Speak calmly. Many parents simply forgot.", "opts": [{"label": "Gives a date", "to": "promise"}, {"label": "Already paid", "to": "already"}, {"label": "Has a problem", "to": "problem"}]},
+    {"id": "problem", "title": "Has a problem", "stage": 4, "say": ["I understand. Thank you for telling me.", "Would paying a part now, and the rest later, help you?"], "tip": "Listen first. Do not argue. Never talk about the child in a bad way.", "check": ["Write your rule for paying in parts (how many parts, by when, who approves), or remove the second line."], "opts": [{"label": "Gives a date", "to": "promise"}, {"label": "Cannot pay", "to": "refused"}, {"label": "Stop calling", "to": "stop"}]},
+    {"id": "promise", "title": "Will pay on date", "stage": 5, "result": "will_pay_on", "say": ["Thank you. Please tell me the date and the amount, and I will note it.", "You can pay at the office or online."], "tip": "Repeat the date and the amount back to them.", "check": ["Write every way to pay that your institute accepts (office counter, UPI, bank transfer, cheque) and the office hours."]},
+    {"id": "already", "title": "Says already paid", "stage": 5, "result": "already_paid", "say": ["Thank you! I am sorry for the trouble. I will check this with the accounts office.", "If you have the receipt number or the date you paid, please tell me."], "tip": "Write the receipt number or date in the note."},
+    {"id": "refused", "title": "Cannot pay now", "stage": 5, "result": "refused", "say": ["I understand. I will tell the office, and they will talk with you.", "Thank you for your time, {name}."], "tip": "Note the reason in their words. Be kind."},
+    {"id": "wrong", "title": "Wrong person", "stage": 5, "result": "wrong_number", "say": ["Sorry to trouble you. Have a good day."]},
+    {"id": "later", "title": "Call back later", "stage": 5, "result": "call_back_later", "say": ["No problem. When is a good time to call you back?"], "tip": "Note the day and time they give."},
+    {"id": "stop", "title": "Do not call again", "stage": 5, "result": "do_not_call", "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."], "tip": "Do not argue or ask why."}
+  ]$j$::jsonb;
+  od_pb1 := $j$[
+    {"label": "Sorry, I forgot", "answer": "No problem at all, it happens. Which date suits you to pay?"},
+    {"label": "Money is tight this month", "answer": "I understand. Tell me a date that works for you, and I will note it down."},
+    {"check": ["Write your rule for paying in parts (how many parts, by when, who approves), or remove this answer."], "label": "Can I pay in parts?", "answer": "Let me check the rule for this with the office, and I will tell you."},
+    {"check": ["Write who decides on late fee waivers and how the parent hears back, or remove this answer if there is no late fee."], "label": "Can you waive the late fee?", "answer": "I cannot decide that myself. I will pass your request to the office, and they will reply to you."},
+    {"label": "Why are you calling again?", "answer": "Sorry for calling again. Our records still show the fee as pending. If you have paid, please tell me the date so we can match it."},
+    {"label": "I will pay when I come to school", "answer": "That is fine. Which day will you come? I will note it."}
+  ]$j$::jsonb;
+  od_v2 := $j$[
+    {"id": "open", "title": "Opening", "start": true, "stage": 0, "say": ["Hello, am I speaking with {name}?"], "tip": "Smile before you speak. Speak slowly.", "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]},
+    {"id": "intro", "title": "Introduction", "stage": 0, "say": ["This is {me} from {institute}.", "I am calling about {student}'s fee.", "Is this a good time to talk for two minutes?"], "opts": [{"label": "Yes", "to": "due"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]},
+    {"id": "due", "title": "Fee pending", "stage": 4, "say": ["Our records show that the fee of {amount_due} was due on {due_date}.", "We have not received it yet. Sometimes this gets missed.", "When would you be able to pay?"], "tip": "Speak calmly. Many parents simply forgot.", "opts": [{"label": "Gives a date", "to": "promise"}, {"label": "Already paid", "to": "already"}, {"label": "Has a problem", "to": "problem"}]},
+    {"id": "problem", "title": "Has a problem", "stage": 4, "say": ["I understand. Thank you for telling me.", "You can pay half now and the rest by 15 November, with the principal's OK."], "tip": "Listen first. Do not argue. Never talk about the child in a bad way.", "opts": [{"label": "Gives a date", "to": "promise"}, {"label": "Cannot pay", "to": "refused"}, {"label": "Stop calling", "to": "stop"}]},
+    {"id": "promise", "title": "Will pay on date", "stage": 5, "result": "will_pay_on", "say": ["Thank you. Please tell me the date and the amount, and I will note it.", "You can pay by UPI, by cheque, or at the office from 9 am to 5 pm, Monday to Saturday."], "tip": "Repeat the date and the amount back to them."},
+    {"id": "already", "title": "Says already paid", "stage": 5, "result": "already_paid", "say": ["Thank you! I am sorry for the trouble. I will check this with the accounts office.", "If you have the receipt number or the date you paid, please tell me."], "tip": "Write the receipt number or date in the note."},
+    {"id": "refused", "title": "Cannot pay now", "stage": 5, "result": "refused", "say": ["I understand. I will tell the office, and they will talk with you.", "Thank you for your time, {name}."], "tip": "Note the reason in their words. Be kind."},
+    {"id": "wrong", "title": "Wrong person", "stage": 5, "result": "wrong_number", "say": ["Sorry to trouble you. Have a good day."]},
+    {"id": "later", "title": "Call back later", "stage": 5, "result": "call_back_later", "say": ["No problem. When is a good time to call you back?"], "tip": "Note the day and time they give."},
+    {"id": "stop", "title": "Do not call again", "stage": 5, "result": "do_not_call", "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."], "tip": "Do not argue or ask why."}
+  ]$j$::jsonb;
+  od_pb2 := $j$[
+    {"label": "Sorry, I forgot", "answer": "No problem at all, it happens. Which date suits you to pay?"},
+    {"label": "Money is tight this month", "answer": "I understand. Tell me a date that works for you, and I will note it down."},
+    {"label": "Can I pay in parts?", "answer": "Yes. You can pay half now and the rest by 15 November, with the principal's OK. I will note it."},
+    {"label": "Can you waive the late fee?", "answer": "I cannot decide that myself. The principal decides on waivers, and the office will call you back within two days."},
+    {"label": "Why are you calling again?", "answer": "Sorry for calling again. Our records still show the fee as pending. If you have paid, please tell me the date so we can match it."},
+    {"label": "I will pay when I come to school", "answer": "That is fine. Which day will you come? I will note it."}
+  ]$j$::jsonb;
+  -- Fee reminder before the due date (fees_reminder_polite): v1 as copied from the library, v2 with the check marks filled in.
+  po_v1 := $j$[
+    {"id": "open", "title": "Opening", "start": true, "stage": 0, "say": ["Hello, am I speaking with {name}?"], "tip": "Smile before you speak. Speak slowly.", "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]},
+    {"id": "intro", "title": "Introduction", "stage": 0, "say": ["This is {me} from {institute}.", "I am calling about {student}'s fee.", "Is this a good time to talk for two minutes?"], "opts": [{"label": "Yes", "to": "reminder"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]},
+    {"id": "reminder", "title": "Reminder", "stage": 4, "say": ["This is a friendly reminder.", "The fee of {amount_due} is due on {due_date}.", "Will you be able to pay by then?"], "tip": "Say the amount and the date slowly. Do not rush.", "opts": [{"label": "Will pay", "to": "promise"}, {"label": "Already paid", "to": "already"}, {"label": "Needs time", "to": "time"}]},
+    {"id": "time", "title": "Needs more time", "stage": 4, "say": ["No problem. Thank you for telling me.", "Which date would be possible for you?"], "tip": "Listen first. Do not argue. Any honest date is fine.", "opts": [{"label": "Gives a date", "to": "promise"}, {"label": "Cannot pay", "to": "refused"}, {"label": "Stop calling", "to": "stop"}]},
+    {"id": "promise", "title": "Will pay on date", "stage": 5, "result": "will_pay_on", "say": ["Thank you. Please tell me the date, and I will note it.", "You can pay at the office or online."], "tip": "Repeat the date and the amount back to them.", "check": ["Write every way to pay that your institute accepts (office counter, UPI, bank transfer, cheque) and the office hours."]},
+    {"id": "already", "title": "Says already paid", "stage": 5, "result": "already_paid", "say": ["Thank you! I will check this with the accounts office.", "If you have the receipt number or the date you paid, please tell me."], "tip": "Write the receipt number or date in the note."},
+    {"id": "refused", "title": "Cannot pay now", "stage": 5, "result": "refused", "say": ["I understand. I will tell the office.", "Thank you for your time, {name}."], "tip": "Note the reason in their words. Be kind."},
+    {"id": "wrong", "title": "Wrong person", "stage": 5, "result": "wrong_number", "say": ["Sorry to trouble you. Have a good day."]},
+    {"id": "later", "title": "Call back later", "stage": 5, "result": "call_back_later", "say": ["No problem. When is a good time to call you back?"], "tip": "Note the day and time they give."},
+    {"id": "stop", "title": "Do not call again", "stage": 5, "result": "do_not_call", "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."], "tip": "Do not argue or ask why."}
+  ]$j$::jsonb;
+  po_pb1 := $j$[
+    {"check": ["Write your rule for paying in parts (how many parts, by when, who approves), or remove this answer."], "label": "Can I pay in parts?", "answer": "Let me check the rule for this with the office, and I will tell you."},
+    {"label": "Please tell me the amount again", "answer": "Sure. The amount due is {amount_due}, and the due date is {due_date}."},
+    {"check": ["Write every way to pay that your institute accepts (office counter, UPI, bank transfer, cheque) and the office hours."], "label": "Can I pay online?", "answer": "Yes. You can pay online or at the office. I can send the details on WhatsApp."},
+    {"check": ["Confirm the office can share a break-up of the fee."], "label": "Why is the fee so high?", "answer": "I understand. I can send you the fee details on WhatsApp, and the accounts office can explain any part of it."},
+    {"check": ["Write your late fee rule (amount and the date it starts), or write that there is no late fee."], "label": "Is there a late fee?", "answer": "Let me tell you the rule exactly, so there is no confusion."},
+    {"check": ["Say how the receipt is given: printed, on WhatsApp or in the app."], "label": "Will I get a receipt?", "answer": "Yes. The office gives a receipt for every payment."}
+  ]$j$::jsonb;
+  po_v2 := $j$[
+    {"id": "open", "title": "Opening", "start": true, "stage": 0, "say": ["Hello, am I speaking with {name}?"], "tip": "Smile before you speak. Speak slowly.", "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]},
+    {"id": "intro", "title": "Introduction", "stage": 0, "say": ["This is {me} from {institute}.", "I am calling about {student}'s fee.", "Is this a good time to talk for two minutes?"], "opts": [{"label": "Yes", "to": "reminder"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]},
+    {"id": "reminder", "title": "Reminder", "stage": 4, "say": ["This is a friendly reminder.", "The fee of {amount_due} is due on {due_date}.", "Will you be able to pay by then?"], "tip": "Say the amount and the date slowly. Do not rush.", "opts": [{"label": "Will pay", "to": "promise"}, {"label": "Already paid", "to": "already"}, {"label": "Needs time", "to": "time"}]},
+    {"id": "time", "title": "Needs more time", "stage": 4, "say": ["No problem. Thank you for telling me.", "Which date would be possible for you?"], "tip": "Listen first. Do not argue. Any honest date is fine.", "opts": [{"label": "Gives a date", "to": "promise"}, {"label": "Cannot pay", "to": "refused"}, {"label": "Stop calling", "to": "stop"}]},
+    {"id": "promise", "title": "Will pay on date", "stage": 5, "result": "will_pay_on", "say": ["Thank you. Please tell me the date, and I will note it.", "You can pay by UPI, by cheque, or at the office from 9 am to 5 pm, Monday to Saturday."], "tip": "Repeat the date and the amount back to them."},
+    {"id": "already", "title": "Says already paid", "stage": 5, "result": "already_paid", "say": ["Thank you! I will check this with the accounts office.", "If you have the receipt number or the date you paid, please tell me."], "tip": "Write the receipt number or date in the note."},
+    {"id": "refused", "title": "Cannot pay now", "stage": 5, "result": "refused", "say": ["I understand. I will tell the office.", "Thank you for your time, {name}."], "tip": "Note the reason in their words. Be kind."},
+    {"id": "wrong", "title": "Wrong person", "stage": 5, "result": "wrong_number", "say": ["Sorry to trouble you. Have a good day."]},
+    {"id": "later", "title": "Call back later", "stage": 5, "result": "call_back_later", "say": ["No problem. When is a good time to call you back?"], "tip": "Note the day and time they give."},
+    {"id": "stop", "title": "Do not call again", "stage": 5, "result": "do_not_call", "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."], "tip": "Do not argue or ask why."}
+  ]$j$::jsonb;
+  po_pb2 := $j$[
+    {"label": "Can I pay in parts?", "answer": "Yes. You can pay half by the due date and the rest by 30 November. I will note it for the office."},
+    {"label": "Please tell me the amount again", "answer": "Sure. The amount due is {amount_due}, and the due date is {due_date}."},
+    {"label": "Can I pay online?", "answer": "Yes. You can pay by UPI or bank transfer, or by cheque at the office. I can send the details on WhatsApp."},
+    {"label": "Why is the fee so high?", "answer": "I understand. I can send you the fee details on WhatsApp, and the accounts office can explain any part of it."},
+    {"label": "Is there a late fee?", "answer": "There is no late fee until 15 November. After that, ₹200 is added."},
+    {"label": "Will I get a receipt?", "answer": "Yes. The office sends the receipt on WhatsApp within a day of the payment."}
+  ]$j$::jsonb;
+  -- School admission enquiry follow-up (admission_enquiry_school): v1 as copied from the library, v2 with the check marks filled in.
+  a9_v1 := $j$[
+    {"id": "open", "title": "Opening", "start": true, "stage": 0, "say": ["Hello, am I speaking with {name}?"], "tip": "Smile before you speak. Speak slowly.", "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]},
+    {"id": "intro", "title": "Introduction", "stage": 0, "say": ["This is {me} from {institute}.", "Thank you for your enquiry about admission in {class} class.", "Is this a good time to talk for two minutes?"], "opts": [{"label": "Yes", "to": "needs"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]},
+    {"id": "needs", "title": "What they need", "stage": 1, "say": ["Are you still looking for a school for your child?", "What matters most to you in a new school?"], "tip": "Listen. Note what matters to them: distance, teachers, fees, board, activities.", "opts": [{"label": "Still looking", "to": "visit"}, {"label": "Not looking now", "to": "not_now"}]},
+    {"id": "visit", "title": "Visit or form", "stage": 3, "say": ["The best way to decide is to see the school and meet our teachers.", "Would you like to visit? I can also send the admission form on WhatsApp."], "check": ["Add your visiting days, hours and address, the way callers should say them."], "opts": [{"label": "Book a visit", "to": "booked"}, {"label": "Send the form", "to": "form"}, {"label": "Will think", "to": "later"}]},
+    {"id": "booked", "title": "Visit booked", "stage": 5, "result": "visit_booked", "say": ["Great! Which day and time suits you?", "I will send the address and location on WhatsApp. See you soon, {name}."], "tip": "Note the date. Repeat it back."},
+    {"id": "form", "title": "Form sent", "stage": 5, "result": "form_sent", "say": ["Sure. I am sending the admission form on WhatsApp now.", "Please call us if you have any question."]},
+    {"id": "not_now", "title": "Not looking now", "stage": 5, "result": "not_this_year", "say": ["No problem. Thank you for your time, {name}.", "All the best to your child."], "tip": "If they joined another school, choose Joined elsewhere instead."},
+    {"id": "wrong", "title": "Wrong person", "stage": 5, "result": "wrong_number", "say": ["Sorry to trouble you. Have a good day."]},
+    {"id": "later", "title": "Call back later", "stage": 5, "result": "call_back_later", "say": ["No problem. When is a good time to call you back?"], "tip": "Note the day and time they give."},
+    {"id": "stop", "title": "Do not call again", "stage": 5, "result": "do_not_call", "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."], "tip": "Do not argue or ask why."}
+  ]$j$::jsonb;
+  a9_pb1 := $j$[
+    {"check": ["Confirm the campaign's board tag is your school's board, or write the board here."], "label": "Which board is the school?", "answer": "We follow the {board} board."},
+    {"check": ["Add your school timings by class."], "label": "What are the school timings?", "answer": "Let me tell you the timings for {class} class."},
+    {"check": ["Write whether you have a bus and which areas it covers."], "label": "Is there a school bus?", "answer": "Let me tell you about the bus routes. I can also send them on WhatsApp."},
+    {"check": ["Write if seats are open. Never say seats are almost full unless it is true."], "label": "Are seats available?", "answer": "Let me check the seats for {class} class with the office and tell you correctly."},
+    {"check": ["Write the list of documents, or confirm it is sent with the form."], "label": "What documents are needed?", "answer": "I will send the list of documents with the form on WhatsApp."},
+    {"check": ["Write your age rule for each class (mainly Nursery to class 1), or remove this answer."], "label": "What is the age rule?", "answer": "Let me tell you the age rule for {class} class."}
+  ]$j$::jsonb;
+  a9_v2 := $j$[
+    {"id": "open", "title": "Opening", "start": true, "stage": 0, "say": ["Hello, am I speaking with {name}?"], "tip": "Smile before you speak. Speak slowly.", "opts": [{"label": "Yes", "to": "intro"}, {"label": "Wrong person", "to": "wrong"}, {"label": "Busy now", "to": "later"}]},
+    {"id": "intro", "title": "Introduction", "stage": 0, "say": ["This is {me} from {institute}.", "Thank you for your enquiry about admission in {class} class.", "Is this a good time to talk for two minutes?"], "opts": [{"label": "Yes", "to": "needs"}, {"label": "Not now", "to": "later"}, {"label": "Stop calling", "to": "stop"}]},
+    {"id": "needs", "title": "What they need", "stage": 1, "say": ["Are you still looking for a school for your child?", "What matters most to you in a new school?"], "tip": "Listen. Note what matters to them: distance, teachers, fees, board, activities.", "opts": [{"label": "Still looking", "to": "visit"}, {"label": "Not looking now", "to": "not_now"}]},
+    {"id": "visit", "title": "Visit or form", "stage": 3, "say": ["The best way to decide is to see the school and meet our teachers.", "Visits are Monday to Saturday, 10 am to 1 pm, at Station Road.", "Would you like to visit? I can also send the admission form on WhatsApp."], "opts": [{"label": "Book a visit", "to": "booked"}, {"label": "Send the form", "to": "form"}, {"label": "Will think", "to": "later"}]},
+    {"id": "booked", "title": "Visit booked", "stage": 5, "result": "visit_booked", "say": ["Great! Which day and time suits you?", "I will send the address and location on WhatsApp. See you soon, {name}."], "tip": "Note the date. Repeat it back."},
+    {"id": "form", "title": "Form sent", "stage": 5, "result": "form_sent", "say": ["Sure. I am sending the admission form on WhatsApp now.", "Please call us if you have any question."]},
+    {"id": "not_now", "title": "Not looking now", "stage": 5, "result": "not_this_year", "say": ["No problem. Thank you for your time, {name}.", "All the best to your child."], "tip": "If they joined another school, choose Joined elsewhere instead."},
+    {"id": "wrong", "title": "Wrong person", "stage": 5, "result": "wrong_number", "say": ["Sorry to trouble you. Have a good day."]},
+    {"id": "later", "title": "Call back later", "stage": 5, "result": "call_back_later", "say": ["No problem. When is a good time to call you back?"], "tip": "Note the day and time they give."},
+    {"id": "stop", "title": "Do not call again", "stage": 5, "result": "do_not_call", "say": ["Sorry for the trouble. We will not call you again.", "Have a good day."], "tip": "Do not argue or ask why."}
+  ]$j$::jsonb;
+  a9_pb2 := $j$[
+    {"label": "Which board is the school?", "answer": "We follow the {board} board."},
+    {"label": "What are the school timings?", "answer": "For {class} class it is 7:30 am to 1:30 pm, Monday to Friday, and 7:30 to 11:30 am on Saturday."},
+    {"label": "Is there a school bus?", "answer": "Yes. Our buses cover Kothrud, Karve Nagar, Warje and Bavdhan. I can send the routes on WhatsApp."},
+    {"label": "Are seats available?", "answer": "Yes, there are seats open in {class} class this year. The office confirms a seat when the form is in."},
+    {"label": "What documents are needed?", "answer": "The birth certificate, the last report card, the transfer certificate and 2 photos. I will send the list on WhatsApp."}
+  ]$j$::jsonb;
+
   insert into public.scripts (id, institute_id, name, created_by, created_at, call_type_id) values
     ((select id from demo_scripts where k = 'fees'),      inst, 'Fees reminder',    owner, pg_temp.ist(today - 62, 40000), t_fees),
     ((select id from demo_scripts where k = 'sales'),     inst, 'Course sales',     owner, pg_temp.ist(today - 45, 40000), t_sale),
     ((select id from demo_scripts where k = 'admission'), inst, 'Admission check',  mgr,   pg_temp.ist(today - 21, 40000), t_adm),
-    ((select id from demo_scripts where k = 'late_fee'),  inst, 'Late fee warning', owner, pg_temp.ist(today, 0) + (now() - pg_temp.ist(today, 0)) / 3, t_fees);
+    ((select id from demo_scripts where k = 'late_fee'),  inst, 'Late fee warning', owner, pg_temp.ist(today, 0) + (now() - pg_temp.ist(today, 0)) / 3, t_fees),
+    ((select id from demo_scripts where k = 'overdue10'), inst, 'Overdue fees – Class 10', owner, pg_temp.ist(today - 26, 40000), t_fees),
+    ((select id from demo_scripts where k = 'polite8'),   inst, 'Term 2 reminder – Class 8', owner, pg_temp.ist(today - 2, 40000), t_fees),
+    ((select id from demo_scripts where k = 'adm9'),      inst, 'Class 9 admission enquiry', mgr, pg_temp.ist(today - 5, 38000), t_adm);
 
   -- Only the newest version of each script is published (one per script).
   insert into public.script_versions (script_id, institute_id, version, steps, pushbacks, change_note, published, created_at, created_by) values
@@ -381,7 +597,13 @@ begin
     ((select id from demo_scripts where k = 'fees'), inst, 3, fees_v3, fees_pb, 'Part payment line, "Paying now" choice, ask for a date within 7 days', true, pg_temp.ist(today - 25, 42000), owner),
     ((select id from demo_scripts where k = 'admission'), inst, 1, adm_v1, adm_pb, 'First version', false, pg_temp.ist(today - 21, 40000), mgr),
     ((select id from demo_scripts where k = 'admission'), inst, 2, adm_v2, adm_pb, 'Visiting hours and address', true, pg_temp.ist(today - 15, 40000), mgr),
-    ((select id from demo_scripts where k = 'late_fee'), inst, 1, late_v1, late_pb, 'Draft', false, pg_temp.ist(today, 0) + (now() - pg_temp.ist(today, 0)) / 3, owner);
+    ((select id from demo_scripts where k = 'late_fee'), inst, 1, late_v1, late_pb, 'Draft', false, pg_temp.ist(today, 0) + (now() - pg_temp.ist(today, 0)) / 3, owner),
+    ((select id from demo_scripts where k = 'overdue10'), inst, 1, od_v1, od_pb1, 'From the library: Overdue fee reminder', false, pg_temp.ist(today - 26, 40000), owner),
+    ((select id from demo_scripts where k = 'overdue10'), inst, 2, od_v2, od_pb2, 'Filled in: ways to pay, half now and the rest by 15 November, waivers', true, pg_temp.ist(today - 25, 41000), owner),
+    ((select id from demo_scripts where k = 'polite8'), inst, 1, po_v1, po_pb1, 'From the library: Fee reminder before the due date', false, pg_temp.ist(today - 2, 40000), owner),
+    ((select id from demo_scripts where k = 'polite8'), inst, 2, po_v2, po_pb2, 'Filled in: ways to pay, parts, late fee, receipts', true, pg_temp.ist(today - 1, 39000), owner),
+    ((select id from demo_scripts where k = 'adm9'), inst, 1, a9_v1, a9_pb1, 'From the library: School admission enquiry follow-up', false, pg_temp.ist(today - 5, 38000), mgr),
+    ((select id from demo_scripts where k = 'adm9'), inst, 2, a9_v2, a9_pb2, 'Filled in: visiting hours, timings, bus, seats, documents; no age rule for Class 9', true, pg_temp.ist(today - 5, 41000), mgr);
   for i in 1 .. 5 loop
     insert into public.script_versions (script_id, institute_id, version, steps, pushbacks, change_note, published, created_at, created_by)
       values ((select id from demo_scripts where k = 'sales'), inst, i, sales_v6, sales_pb,
@@ -393,11 +615,131 @@ begin
     ((select id from demo_scripts where k = 'sales'), inst, 7, sales_v7, sales_pb, 'Shorter pitch and the ₹6,000 start line', true, pg_temp.ist(today - 9, 36000), owner);
 end $$;
 
+-- ---------- 6b. the fee ledger: students, fee items, the opening balance import ----------
+-- Class 10 (CBSE, 240: the Oct fees parents), Class 9 (ICSE, 150: the Sept fees parents) and Class 8 (CBSE,
+-- 180), academic year 2026-27. Kavita imported them 58 days ago with Term 1 as "paid so far" (an opening
+-- balance; a few still owe part of Term 1). Term 2 is due 40 days ago (Class 9), 15 days ago (Class 10) and in
+-- 6 days (Class 8). Some students take the school bus (a bus fee per term). Payments after the import come
+-- from the calls (section 9b) and, for Class 8, from parents paying early. Everything here is a formula of the
+-- student's number, so the ledger is the same on every load (dates shifted to today).
+
+create temp table demo_st (
+  cls       int not null,
+  i         int not null,
+  id        uuid not null default gen_random_uuid(),
+  adm_date  date not null,   -- when the parent filled the admission form ({source_date} of fees leads)
+  t2_due    date not null,
+  primary key (cls, i)
+) on commit drop;
+
+do $$
+declare
+  inst    uuid := '5a1e0000-0000-4000-8000-000000000001';
+  today   date := (select v::date from demo_ctx where k = 'today');
+  kavita  uuid := '5a1e0000-0000-4000-8000-000000000108';
+  imp_t   timestamptz := pg_temp.ist((select v::date from demo_ctx where k = 'today') - 58, 11 * 3600 + 1500);
+  pf  text[] := (select a from demo_names where k = 'pf');
+  sn  text[] := (select a from demo_names where k = 'sn');
+  kid text[] := (select a from demo_names where k = 'kid');
+  seq int := 0;
+  c   int;
+  i   int;
+  f   int;
+  n   int;
+  t1  numeric; t2 numeric; bus numeric; arr numeric;
+  has_bus boolean;
+  t1_due date := today - 130;
+  t2_due date;
+  yr  int;
+  st  demo_st;
+  nm  text; par text; ph text; sec text;
+  pd  date;
+  md  text;
+begin
+  perform setseed(current_setting('demo.seed')::float8 / 2);
+  for c in select unnest(array[10, 9, 8]) loop
+    n := case c when 10 then 240 when 9 then 150 else 180 end;
+    t1 := case c when 10 then 18000 when 9 then 15000 else 14000 end;
+    t2 := t1;
+    bus := case c when 10 then 6000 else 5500 end;
+    t2_due := case c when 10 then today - 15 when 9 then today - 40 else today + 6 end;
+    for i in 1 .. n loop
+      seq := seq + 1;
+      -- Class 8 twins share the parent and the phone (one lead for both in a fees campaign from the ledger).
+      f := case when c = 8 and i in (23, 67, 143) then i - 1 else i end;
+      if c = 10 then
+        nm := kid[1 + (i * 5) % 31] || ' ' || sn[1 + (i * 11) % 31];
+        par := pf[1 + (i * 7) % 41] || ' ' || sn[1 + (i * 11) % 31];
+        ph := '+91' || (9999010000 + i)::text;
+        sec := case when i % 2 = 0 then 'A' else 'B' end;
+        yr := 2018 + (i * 7) % 5;
+        has_bus := i % 5 = 2;
+        arr := case when i % 13 = 7 then 6000 else 0 end;
+      elsif c = 9 then
+        nm := kid[1 + (i * 3) % 31] || ' ' || sn[1 + (i * 5) % 31];
+        par := pf[1 + (i * 13) % 41] || ' ' || sn[1 + (i * 5) % 31];
+        ph := '+91' || (9999020000 + i)::text;
+        sec := case when i % 2 = 0 then 'A' else 'B' end;
+        yr := 2019 + (i * 3) % 5;
+        has_bus := i % 6 = 1;
+        arr := case when i % 17 = 3 then 5000 else 0 end;
+      else
+        nm := kid[1 + (i * 7) % 31] || ' ' || sn[1 + (f * 17) % 31];
+        par := pf[1 + (f * 11) % 41] || ' ' || sn[1 + (f * 17) % 31];
+        ph := case when i in (98, 150) then null else '+91' || (9999060000 + f)::text end;   -- two with no phone
+        sec := (array['A', 'B', 'C'])[1 + i % 3];
+        yr := 2020 + (f * 11) % 5;
+        has_bus := i % 4 = 3;
+        arr := case when i % 15 = 4 then 4000 else 0 end;
+      end if;
+      insert into demo_st (cls, i, adm_date, t2_due)
+        values (c, i, make_date(yr, 4, 1) + (i * 13) % 70, t2_due)
+        returning * into st;
+      insert into public.students (id, institute_id, admission_no, name, class_label, section, board, academic_year,
+                                   parent_name, phone, status, source, created_by, created_at, updated_at)
+        values (st.id, inst, 'SCA/' || yr || '/' || lpad((300 + seq)::text, 4, '0'), nm, c || 'th', sec,
+                case when c = 9 then 'ICSE' else 'CBSE' end, '2026-27', par, ph,
+                case when c = 8 and i in (45, 160) then 'left' else 'active' end, 'import', kavita, imp_t, imp_t);
+      insert into public.fee_items (institute_id, student_id, head, amount, due_date, academic_year, created_by, created_at)
+        select inst, st.id, x.head, x.amt, x.due, '2026-27', kavita, imp_t
+        from (values ('Term 1 tuition', t1, t1_due, true), ('Term 2 tuition', t2, t2_due, true),
+                     ('Bus fee – Term 1', bus, t1_due, has_bus), ('Bus fee – Term 2', bus, t2_due, has_bus)) x(head, amt, due, keep)
+        where x.keep;
+      -- The opening balance: Term 1 (and its bus fee) paid before the import, less what some still owe.
+      insert into public.payments (institute_id, student_id, amount, paid_on, mode, note, recorded_by, created_at, opening)
+        values (inst, st.id, t1 + case when has_bus then bus else 0 end - arr, today - 58, 'other',
+                'Opening balance import', kavita, imp_t, true);
+
+      -- Paid early, after the import (before any call): half of Term 2 for every 4th Class 10 parent (dated
+      -- the week before the Oct fees calls began) and every 5th Class 9 parent; Class 8 parents pay Term 2 in
+      -- full in the last three weeks (every 4th), or ₹7,000 of it (every 9th of the others).
+      pd := null;
+      if c = 10 and i % 4 = 0 then
+        pd := today - 25 - i % 12;
+        perform pg_temp.add_payment(st.id, 9000, pd, pg_temp.pay_mode(), null, pg_temp.ist(pd, 10 * 3600 + (i * 977) % 27000));
+      elsif c = 9 and i % 5 = 0 then
+        pd := today - 57 + i % 4;
+        perform pg_temp.add_payment(st.id, 7500, pd, pg_temp.pay_mode(), null, pg_temp.ist(pd, 10 * 3600 + (i * 977) % 27000));
+      elsif c = 8 and i % 4 = 1 then
+        pd := today - 2 - (i * 7) % 19;
+        md := case when i = 33 then 'cheque' else pg_temp.pay_mode() end;   -- this cheque bounces (9b)
+        perform pg_temp.add_payment(st.id, t2 + case when has_bus then bus else 0 end, pd, md,
+                                    case when md = 'cheque' then 'Given at the office by the father' end,
+                                    pg_temp.ist(pd, 10 * 3600 + (i * 977) % 27000));
+      elsif c = 8 and i % 9 = 0 then
+        pd := today - 1 - (i * 5) % 14;
+        perform pg_temp.add_payment(st.id, 7000, pd, pg_temp.pay_mode(), 'Rest by 30 November',
+                                    pg_temp.ist(pd, 10 * 3600 + (i * 977) % 27000));
+      end if;
+    end loop;
+  end loop;
+end $$;
+
 -- ---------- 7. campaigns and leads ----------
 
 create temp table demo_camps (
   id          uuid primary key,
-  k           text not null unique,     -- oct / sales / adm / sept / ptm
+  k           text not null unique,     -- oct / sales / adm / sept / ptm / adm9 / c8
   kind        text not null,            -- fees / sales / admission / event
   script_k    text,
   version     int,                      -- the script version calls use (sales: see the test)
@@ -411,11 +753,12 @@ create temp table demo_camps (
 ) on commit drop;
 
 insert into demo_camps (id, k, kind, script_k, version, first_day, last_day, forget_quota) values
-  ('5a1e0000-0000-4000-8000-000000000201', 'oct',   'fees',      'fees',      3, 23, 0, 14),
+  ('5a1e0000-0000-4000-8000-000000000201', 'oct',   'fees',      'overdue10', 2, 23, 0, 14),
   ('5a1e0000-0000-4000-8000-000000000202', 'sales', 'sales',     'sales',     6, 13, 0, 0),
   ('5a1e0000-0000-4000-8000-000000000203', 'adm',   'admission', 'admission', 2, 14, 0, 0),
   ('5a1e0000-0000-4000-8000-000000000204', 'sept',  'fees',      'fees',      2, 53, 24, 0),
-  ('5a1e0000-0000-4000-8000-000000000205', 'ptm',   'event',     null,        null, null, null, 0);
+  ('5a1e0000-0000-4000-8000-000000000205', 'ptm',   'event',     null,        null, null, null, 0),
+  ('5a1e0000-0000-4000-8000-000000000207', 'adm9',  'admission', 'adm9',      2, null, null, 0);
 
 -- Sim state per lead (not stored in the app).
 create temp table demo_lx (
@@ -447,36 +790,37 @@ declare
   c_adm  uuid := '5a1e0000-0000-4000-8000-000000000203';
   c_sept uuid := '5a1e0000-0000-4000-8000-000000000204';
   c_ptm  uuid := '5a1e0000-0000-4000-8000-000000000205';
-  pf text[] := array['Rakesh', 'Sunita', 'Manoj', 'Priti', 'Suresh', 'Kavita', 'Ajay', 'Meena', 'Vijay', 'Rekha',
-                     'Sanjay', 'Anjali', 'Deepak', 'Pooja', 'Rajesh', 'Neeta', 'Anil', 'Seema', 'Ashok', 'Geeta',
-                     'Mahesh', 'Shalini', 'Prakash', 'Usha', 'Ramesh', 'Vandana', 'Dinesh', 'Lata', 'Nitin', 'Swati',
-                     'Sachin', 'Rupali', 'Harish', 'Asha', 'Girish', 'Jyoti', 'Mukesh', 'Smita', 'Pankaj', 'Nisha', 'Alok'];
-  sn text[] := array['Sharma', 'Patel', 'Mehta', 'Iyer', 'Nair', 'Reddy', 'Gupta', 'Joshi', 'Kulkarni', 'Deshmukh',
-                     'Singh', 'Verma', 'Rao', 'Pillai', 'Shah', 'Desai', 'Chauhan', 'Bose', 'Das', 'Menon', 'Pandey',
-                     'Mishra', 'Kapoor', 'Malhotra', 'Agarwal', 'Jain', 'Shetty', 'Naik', 'Patil', 'Yadav', 'Khan'];
-  kid text[] := array['Aarav', 'Vivaan', 'Aditya', 'Ishaan', 'Arjun', 'Sai', 'Reyansh', 'Krishna', 'Ananya', 'Diya',
-                      'Aadhya', 'Saanvi', 'Myra', 'Kiara', 'Riya', 'Anika', 'Kabir', 'Rohan', 'Tanvi', 'Shreya',
-                      'Aryan', 'Dhruv', 'Meera', 'Nikhil', 'Pranav', 'Sneha', 'Ira', 'Yash', 'Om', 'Tara', 'Zoya'];
-  adult text[] := array['Rahul', 'Karan', 'Sneha', 'Pooja', 'Akash', 'Nidhi', 'Varun', 'Komal', 'Siddharth', 'Payal',
-                        'Abhishek', 'Ritika', 'Gaurav', 'Neha', 'Rohit', 'Shruti', 'Manish', 'Divya', 'Kunal', 'Isha',
-                        'Tushar', 'Megha', 'Harsh', 'Aditi', 'Vikas', 'Sakshi', 'Saurabh', 'Prachi', 'Ankit', 'Juhi', 'Imran'];
+  c_adm9 uuid := '5a1e0000-0000-4000-8000-000000000207';
+  pf    text[] := (select a from demo_names where k = 'pf');
+  sn    text[] := (select a from demo_names where k = 'sn');
+  kid   text[] := (select a from demo_names where k = 'kid');
+  adult text[] := (select a from demo_names where k = 'adult');
+  t_fees uuid := (select id from public.call_types where key = 'fees' and institute_id is null);
+  t_adm  uuid := (select id from public.call_types where key = 'admission' and institute_id is null);
 begin
+  -- Every campaign is open to all callers (Phase A.2) and tagged by class and board where it has one. The old
+  -- member rows stay: they only say who the campaign was first shared with.
   insert into public.campaigns (id, institute_id, name, call_type_id, script_id, start_date, end_date, status,
-                                daily_target, share_mode, call_hours, created_by, created_at, goal) values
-    (c_oct, inst, 'Oct fees – Class 10', (select id from public.call_types where key = 'fees' and institute_id is null),
-     (select id from demo_scripts where k = 'fees'), today - 23, today + 7, 'running', 60, 'equal', null, owner,
-     pg_temp.ist(today - 24, 39000), null),
+                                daily_target, share_mode, call_hours, created_by, created_at, goal,
+                                open_to_all, class_label, board) values
+    (c_oct, inst, 'Oct fees – Class 10', t_fees,
+     (select id from demo_scripts where k = 'overdue10'), today - 23, today + 7, 'running', 60, 'equal', null, owner,
+     pg_temp.ist(today - 24, 39000), null, true, '10th', 'CBSE'),
     (c_sale, inst, 'Course sales – Data Analytics', (select id from public.call_types where key = 'sales' and institute_id is null),
      (select id from demo_scripts where k = 'sales'), today - 13, today + 18, 'running', 80, 'equal', null, owner,
-     pg_temp.ist(today - 14, 39000), 100),
-    (c_adm, inst, 'Admission follow-up', (select id from public.call_types where key = 'admission' and institute_id is null),
+     pg_temp.ist(today - 14, 39000), 100, true, null, null),
+    (c_adm, inst, 'Admission follow-up', t_adm,
      (select id from demo_scripts where k = 'admission'), today - 14, null, 'running', 35, 'equal', null, mgr,
-     pg_temp.ist(today - 15, 39000), 70),
-    (c_sept, inst, 'Sept fees – Class 9', (select id from public.call_types where key = 'fees' and institute_id is null),
+     pg_temp.ist(today - 15, 39000), 70, true, null, null),
+    (c_sept, inst, 'Sept fees – Class 9', t_fees,
      (select id from demo_scripts where k = 'fees'), today - 53, today - 24, 'running', 40, 'equal', null, owner,
-     pg_temp.ist(today - 54, 39000), null),
+     pg_temp.ist(today - 54, 39000), null, true, '9th', 'ICSE'),
     (c_ptm, inst, 'PTM reminder – Nov', (select id from public.call_types where key = 'event' and institute_id is null),
-     null, today + 8, today + 12, 'draft', null, 'equal', null, mgr, now() - interval '3 hours', null);
+     null, today + 8, today + 12, 'draft', null, 'equal', null, mgr, now() - interval '3 hours', null, true, '10th', 'CBSE'),
+    -- New this week: enquiries for Class 9 (ICSE) admission, nobody attached: callers take them from the pool.
+    (c_adm9, inst, 'Class 9 admission enquiries', t_adm,
+     (select id from demo_scripts where k = 'adm9'), today - 3, today + 25, 'running', 25, 'next_free', null, mgr,
+     pg_temp.ist(today - 4, 41500), 20, true, '9th', 'ICSE');
 
   insert into public.campaign_members (campaign_id, seat_id, institute_id, added_at) values
     (c_oct, ravi, inst, pg_temp.ist(today - 24, 40000)), (c_oct, amit, inst, pg_temp.ist(today - 24, 40000)),
@@ -484,23 +828,30 @@ begin
     (c_adm, sana, inst, pg_temp.ist(today - 15, 40000)),
     (c_sept, ravi, inst, pg_temp.ist(today - 54, 40000));
 
-  -- Oct fees: 240 parents of Class 10 (half 10-A, half 10-B), shared equally between Ravi and Amit.
-  insert into public.leads (institute_id, campaign_id, name, phone, extra, amount_due, assigned_seat_id, created_at)
-  select inst, c_oct, pf[1 + (i * 7) % 41] || ' ' || sn[1 + (i * 11) % 31],
-         '+91' || (9999010000 + i)::text,
-         jsonb_build_object('student', kid[1 + (i * 5) % 31] || ' ' || sn[1 + (i * 11) % 31],
-                            'class', case when i % 2 = 0 then '10-A' else '10-B' end),
-         case when i % 4 = 0 then 9000 else 18000 end,
-         case when i % 2 = 1 then ravi else amit end,
-         pg_temp.ist(today - 24, 40000) + i * interval '1 microsecond'
-  from generate_series(1, 240) i;
+  -- Oct fees: 240 parents of Class 10 (half 10-A, half 10-B), shared equally between Ravi and Amit. Each lead is
+  -- the student's parent; amount_due starts as the balance due for Term 2 (section 9b sets today's balance).
+  insert into public.leads (institute_id, campaign_id, name, phone, extra, amount_due, assigned_seat_id, created_at, student_id)
+  select inst, c_oct, s.parent_name, s.phone,
+         jsonb_build_object('student', s.name, 'class', '10-' || s.section, 'section', s.section, 'board', s.board,
+                            'admission_no', s.admission_no, 'source', 'your child''s admission form',
+                            'source_date', pg_temp.say_date(st.adm_date), 'due_date', pg_temp.say_date(st.t2_due)),
+         b.balance_due_now,
+         case when st.i % 2 = 1 then ravi else amit end,
+         pg_temp.ist(today - 24, 40000) + st.i * interval '1 microsecond', s.id
+  from demo_st st
+  join public.students s on s.id = st.id
+  cross join lateral public.student_balance_rows(inst, s.id, st.t2_due) b
+  where st.cls = 10;
 
   -- Course sales: 420 people who asked about the Data Analytics course, Priya and Neha.
   insert into public.leads (institute_id, campaign_id, name, phone, extra, assigned_seat_id, created_at)
   select inst, c_sale, adult[1 + (i * 7) % 31] || ' ' || sn[1 + (i * 13) % 31],
          '+91' || (9999030000 + i)::text,
          jsonb_build_object('city', (array['Pune', 'Mumbai', 'Nagpur', 'Nashik', 'Thane', 'Aurangabad'])[1 + i % 6],
-                            'source', (array['Instagram ad', 'Website form', 'Friend', 'Free webinar', 'Google ad'])[1 + (i * 3) % 5],
+                            'course', 'Data Analytics',
+                            'source', (array['our Instagram ad', 'the enquiry form on our website', 'a friend who studies with us',
+                                             'our free career webinar', 'our Google ad'])[1 + (i * 3) % 5],
+                            'source_date', pg_temp.say_date(today - 15 - (i * 7) % 30),
                             'background', (array['B.Com final year', 'Works in sales', 'BCA graduate', 'Bank clerk',
                                                  'MBA student', 'Teacher', 'Works in accounts'])[1 + (i * 5) % 7]),
          case when i % 2 = 1 then priya else neha end,
@@ -513,25 +864,45 @@ begin
          '+91' || (9999040000 + i)::text,
          jsonb_build_object('student', kid[1 + (i * 7) % 31],
                             'course', (array['Class 11 Science', 'Class 11 Commerce', 'JEE Foundation', 'NEET 2-year'])[1 + i % 4],
-                            'enquiry', (array['Walk-in', 'Website', 'Phone call', 'Seminar'])[1 + (i * 3) % 4]),
+                            'source', (array['your visit to our office', 'the enquiry form on our website', 'a call to our office',
+                                             'our career seminar at the city library'])[1 + (i * 3) % 4],
+                            'source_date', pg_temp.say_date(today - 16 - (i * 5) % 25)),
          sana, pg_temp.ist(today - 15, 40000) + i * interval '1 microsecond'
   from generate_series(1, 150) i;
 
-  -- Sept fees: 212 parents of Class 9, Ravi (closed at the end).
-  insert into public.leads (institute_id, campaign_id, name, phone, extra, amount_due, assigned_seat_id, created_at)
-  select inst, c_sept, pf[1 + (i * 13) % 41] || ' ' || sn[1 + (i * 5) % 31],
-         '+91' || (9999020000 + i)::text,
-         jsonb_build_object('student', kid[1 + (i * 3) % 31] || ' ' || sn[1 + (i * 5) % 31],
-                            'class', case when i % 2 = 0 then '9-A' else '9-B' end),
-         case when i % 5 = 0 then 7500 else 15000 end, ravi,
-         pg_temp.ist(today - 54, 40000) + i * interval '1 microsecond'
-  from generate_series(1, 212) i;
+  -- Sept fees: 150 parents of Class 9, Ravi (closed at the end). amount_due starts as the Term 2 balance.
+  insert into public.leads (institute_id, campaign_id, name, phone, extra, amount_due, assigned_seat_id, created_at, student_id)
+  select inst, c_sept, s.parent_name, s.phone,
+         jsonb_build_object('student', s.name, 'class', '9-' || s.section, 'section', s.section, 'board', s.board,
+                            'admission_no', s.admission_no, 'source', 'your child''s admission form',
+                            'source_date', pg_temp.say_date(st.adm_date), 'due_date', pg_temp.say_date(st.t2_due)),
+         b.balance_due_now, ravi,
+         pg_temp.ist(today - 54, 40000) + st.i * interval '1 microsecond', s.id
+  from demo_st st
+  join public.students s on s.id = st.id
+  cross join lateral public.student_balance_rows(inst, s.id, st.t2_due) b
+  where st.cls = 9;
 
   -- PTM reminder (draft): the first 120 Class 10 parents again, not shared yet.
-  insert into public.leads (institute_id, campaign_id, name, phone, extra, created_at)
-  select inst, c_ptm, l.name, l.phone, l.extra, now() - interval '3 hours' + row_number() over (order by l.created_at) * interval '1 microsecond'
+  insert into public.leads (institute_id, campaign_id, name, phone, extra, created_at, student_id)
+  select inst, c_ptm, l.name, l.phone, l.extra - 'due_date',
+         now() - interval '3 hours' + row_number() over (order by l.created_at) * interval '1 microsecond', l.student_id
   from public.leads l where l.campaign_id = c_oct
   order by l.created_at limit 120;
+
+  -- Class 9 admission enquiries: 64 parents, in the pool (nobody called yet).
+  insert into public.leads (institute_id, campaign_id, name, phone, extra, created_at)
+  select inst, c_adm9, pf[1 + (i * 17) % 41] || ' ' || sn[1 + (i * 19) % 31],
+         '+91' || (9999050000 + i)::text,
+         jsonb_build_object('student', kid[1 + (i * 11) % 31], 'class', '9th', 'board', 'ICSE',
+                            'current school', (array['St. Mary''s High School', 'City Public School', 'New English School',
+                                                     'Green Valley School'])[1 + (i * 3) % 4],
+                            'source', (array['the enquiry form on our website', 'our admission fair at Phoenix Mall',
+                                             'a call to our office', 'our admission fair at Phoenix Mall',
+                                             'your reply to our newspaper ad'])[1 + i % 5],
+                            'source_date', pg_temp.say_date(today - 3 - (i * 7) % 10)),
+         pg_temp.ist(today - 4, 41800) + i * interval '1 microsecond'
+  from generate_series(1, 64) i;
 
   insert into demo_lx (lead_id, camp, cls, dead)
   select l.id, k.k, l.extra ->> 'class', (row_number() over (partition by l.campaign_id order by l.created_at)) % 19 = 0
@@ -877,7 +1248,7 @@ begin
   v_stage := (array['Opening', 'Discovery', 'Pitch', 'Timings', 'Fee', 'Close'])[1 + case reached
                when 'open' then 0 when 'reminder' then 1 when 'questions' then 1 when 'intro' then 1
                when 'pitch' then 2 when 'when' then 3 when 'timings' then 3 when 'visit' then 3
-               when 'problem' then 4 when 'fees' then 4 else 5 end];
+               when 'problem' then 4 when 'fees' then 4 when 'due' then 4 else 5 end];
 
   perform pg_temp.add_call(s, l.id, p_t, res, v_secs, sid, v_ver, reached, v_steps, v_date, v_amt, v_rsn, v_note,
                            v_loss, case when res in ('not_interested', 'refused', 'do_not_call') then v_stage end, v_obj);
@@ -1046,6 +1417,263 @@ begin
   end loop;
 end $$;
 
+-- ---------- 9b. the ledger after the calls, the fees campaign from the ledger, follow-ups back in the pool ----------
+
+-- "Says already paid" calls of the last 10 days that the office cannot find in the ledger yet (every other one,
+-- 5 at most): the accounts office checks these (student page → calls).
+create temp table demo_noledger (outcome_id uuid primary key) on commit drop;
+
+do $$
+declare
+  inst    uuid := '5a1e0000-0000-4000-8000-000000000001';
+  today   date := (select v::date from demo_ctx where k = 'today');
+  owner_u uuid := (select user_id from demo_people where who = 'owner');
+  mgr_u   uuid := (select user_id from demo_people where who = 'manager');
+  kav_u   uuid := (select user_id from demo_people where who = 'kavita');
+  sana_u  uuid := (select user_id from demo_people where who = 'sana');
+  kavita  uuid := '5a1e0000-0000-4000-8000-000000000108';
+  priya   uuid := '5a1e0000-0000-4000-8000-000000000104';
+  neha    uuid := '5a1e0000-0000-4000-8000-000000000105';
+  sana    uuid := '5a1e0000-0000-4000-8000-000000000107';
+  c_oct   uuid := '5a1e0000-0000-4000-8000-000000000201';
+  c_sale  uuid := '5a1e0000-0000-4000-8000-000000000202';
+  c_adm   uuid := '5a1e0000-0000-4000-8000-000000000203';
+  c_c8    uuid;
+  r       record;
+  rem     numeric;
+  amt     numeric;
+  d       date;
+  pd      date;
+  t       timestamptz;
+  pid     uuid;
+  wid     uuid;
+  lid     uuid;
+  rel_t   timestamptz;
+  i       int;
+begin
+  perform setseed(current_setting('demo.seed')::float8 / 3);
+
+  insert into demo_noledger
+  select x.id from (
+    select o.id, row_number() over (order by o.dialled_at desc) as rn
+    from public.call_outcomes o join public.leads l on l.id = o.lead_id
+    where l.campaign_id = c_oct and o.result_key = 'already_paid' and o.corrects_id is null
+      and o.dialled_at >= pg_temp.ist(today - 10, 0)) x
+  where x.rn % 2 = 1 and x.rn <= 9;
+
+  -- 1. Payments for the fees calls: "Paid" and "Paid part" are recorded 0–2 days after the call (a few later);
+  --    "Says already paid" was paid 0–2 days before the call. Never more than the Term 2 balance left.
+  for r in
+    select o.id, o.result_key, o.amount, o.dialled_at, l.student_id, st.t2_due
+    from public.call_outcomes o
+    join public.leads l on l.id = o.lead_id
+    join demo_st st on st.id = l.student_id
+    where l.campaign_id in (c_oct, '5a1e0000-0000-4000-8000-000000000204')
+      and o.result_key in ('paid', 'paid_part', 'already_paid') and o.corrects_id is null
+      and not exists (select 1 from demo_noledger n where n.outcome_id = o.id)
+    order by o.dialled_at, o.id
+  loop
+    select b.balance_due_now into rem from public.student_balance_rows(inst, r.student_id, r.t2_due) b;
+    continue when rem <= 0;
+    d := (r.dialled_at at time zone 'Asia/Kolkata')::date;
+    if r.result_key = 'already_paid' then
+      amt := rem;
+      pd := d - (pg_temp.pick(array[30, 40, 30]) - 1);
+      t := pg_temp.ist(pd, 10 * 3600 + floor(random() * 27000)::int);
+    else
+      amt := least(coalesce(r.amount, rem), rem);
+      pd := least(today, d + case when random() < 0.08 then 3 + floor(random() * 3)::int
+                                  else pg_temp.pick(array[60, 28, 12]) - 1 end);
+      t := greatest(r.dialled_at + interval '20 minutes', pg_temp.ist(pd, 10 * 3600 + floor(random() * 27000)::int));
+    end if;
+    perform pg_temp.add_payment(r.student_id, amt, pd, pg_temp.pay_mode(), null,
+                                least(now() - interval '2 minutes', t));
+  end loop;
+
+  -- 2. Oct promises whose date has passed and that the callers did not forget: the parent paid without a call
+  --    (on or just before the date). Their leads close below, like accounts_record_payment closes them. The 14
+  --    forgotten promises stay broken: promised, date passed, nothing in the ledger.
+  for r in
+    select l.id, l.student_id, l.promised_date, st.t2_due
+    from public.leads l join demo_lx x on x.lead_id = l.id join demo_st st on st.id = l.student_id
+    where l.campaign_id = c_oct and l.status = 'promised' and l.promised_date < today and not x.forgotten
+    order by l.promised_date, l.created_at
+  loop
+    select b.balance_due_now into rem from public.student_balance_rows(inst, r.student_id, r.t2_due) b;
+    continue when rem <= 0;
+    pd := r.promised_date - (pg_temp.pick(array[60, 40]) - 1);
+    perform pg_temp.add_payment(r.student_id, rem, pd, pg_temp.pay_mode(), null,
+                                least(now() - interval '2 minutes', pg_temp.ist(pd + 1, 10 * 3600 + floor(random() * 25000)::int)));
+  end loop;
+
+  -- 2b. Class 9 parents who did not pay during Sept fees (refused, asked for a concession, wrong number …):
+  --     most paid at the office in the weeks after it closed; about a third still owe.
+  for r in
+    select st.id as student_id, st.t2_due from demo_st st where st.cls = 9 order by st.i
+  loop
+    select b.balance_due_now into rem from public.student_balance_rows(inst, r.student_id, r.t2_due) b;
+    continue when rem <= 0 or random() < 0.35;
+    pd := today - 23 + floor(random() * 20)::int;
+    perform pg_temp.add_payment(r.student_id, rem, pd, pg_temp.pay_mode(), null,
+                                pg_temp.ist(pd, 10 * 3600 + floor(random() * 27000)::int));
+  end loop;
+
+  -- 3. Three reversals. (a) A Class 8 cheque came back unpaid: that student owes Term 2 again.
+  select p.id, p.created_at into pid, t from public.payments p join demo_st st on st.id = p.student_id
+   where st.cls = 8 and st.i = 33 and p.mode = 'cheque' and not p.opening;
+  perform pg_temp.reverse_payment(pid, 'Cheque returned unpaid by the bank. Parent told; will pay by UPI.', t + interval '4 days');
+
+  -- (b) A UPI payment first recorded on the wrong student (the next one in the list), reversed, then recorded
+  --     on the right student with the same UTR (allowed once the first one is reversed).
+  select p.id, p.student_id, p.amount, p.paid_on, p.reference, p.created_at into r
+    from public.payments p join demo_st st on st.id = p.student_id
+   where st.cls = 10 and p.mode = 'upi' and not p.opening and p.paid_on <= today - 3
+   order by p.paid_on desc, p.created_at desc limit 1;
+  insert into public.payments (institute_id, student_id, amount, paid_on, mode, reference, recorded_by, created_at)
+    select inst, s2.id, r.amount, r.paid_on, 'upi', r.reference, kavita, r.created_at - interval '50 minutes'
+    from demo_st st join demo_st s2 on s2.cls = 10 and s2.i = case when st.i < 240 then st.i + 2 else st.i - 2 end
+    where st.id = r.student_id
+    returning id into wid;
+  perform pg_temp.reverse_payment(wid, 'Recorded on the wrong student by mistake; recorded again on '
+                                       || (select admission_no from public.students where id = r.student_id) || '.',
+                                  r.created_at - interval '5 minutes');
+
+  -- (c) A cash payment typed in twice.
+  select p.id, p.student_id, p.amount, p.paid_on, p.created_at into r
+    from public.payments p join demo_st st on st.id = p.student_id
+   where st.cls = 10 and p.mode = 'cash' and not p.opening and p.paid_on <= today - 2
+   order by p.paid_on desc, p.created_at desc limit 1;
+  insert into public.payments (institute_id, student_id, amount, paid_on, mode, reference, recorded_by, created_at)
+    values (inst, r.student_id, r.amount, r.paid_on, 'cash', null, kavita, r.created_at + interval '3 minutes')
+    returning id into wid;
+  perform pg_temp.reverse_payment(wid, 'Recorded twice by mistake.', r.created_at + interval '1 day 2 hours');
+
+  -- 4. "Admission confirmed" makes a student (creates_student), as save_call_result does: no fee plan yet,
+  --    the office adds it.
+  perform set_config('request.jwt.claims', jsonb_build_object('sub', sana_u, 'role', 'authenticated')::text, true);
+  for r in
+    select distinct on (o.lead_id) o.lead_id, o.dialled_at, l.extra
+    from public.call_outcomes o join public.leads l on l.id = o.lead_id
+    where l.campaign_id = c_adm and o.result_key = 'admission_done' and o.corrects_id is null
+    order by o.lead_id, o.dialled_at
+  loop
+    pid := public.ledger_student_from_lead(r.lead_id, sana);
+    update public.students
+       set created_at = r.dialled_at + interval '3 minutes', updated_at = r.dialled_at + interval '3 minutes',
+           academic_year = '2026-27',
+           class_label = case when r.extra ->> 'course' like 'Class 11%' or r.extra ->> 'course' like 'NEET%' then '11th' end,
+           board = case when r.extra ->> 'course' like 'Class 11%' or r.extra ->> 'course' like 'NEET%' then 'CBSE' end
+     where id = pid;
+    update public.audit_log set created_at = r.dialled_at + interval '3 minutes'
+     where institute_id = inst and action = 'student.added_from_admission' and target like pid::text || ':%';
+  end loop;
+
+  -- 5. "Term 2 fees – Class 8": made from the ledger by Kavita this morning with accounts_create_fees_campaign
+  --    (Class 8, CBSE, balance due by the Term 2 due date, open to all, started). One lead per phone (the twins
+  --    get one), students with no phone left out; the leads wait in the pool.
+  perform set_config('request.jwt.claims', jsonb_build_object('sub', kav_u, 'role', 'authenticated')::text, true);
+  c_c8 := public.accounts_create_fees_campaign('Term 2 fees – Class 8', '8th', 'CBSE', today + 6, 0,
+                                               (select id from demo_scripts where k = 'polite8'), true, true);
+  perform set_config('request.jwt.claims', '', true);
+  t := least(now() - interval '20 minutes', greatest(pg_temp.ist(today, 9 * 3600 + 1200), now() - interval '2 hours'));
+  update public.campaigns set created_at = t, start_date = today, end_date = today + 20, daily_target = 50 where id = c_c8;
+  update public.leads l
+     set created_at = t + (l.created_at - (select min(l2.created_at) from public.leads l2 where l2.campaign_id = c_c8)),
+         extra = l.extra || jsonb_build_object('source', 'your child''s admission form',
+                                               'source_date', pg_temp.say_date(st.adm_date), 'due_date', pg_temp.say_date(st.t2_due))
+    from demo_st st
+   where l.campaign_id = c_c8 and st.id = l.student_id;
+  update public.audit_log a set created_at = t + interval '10 seconds'
+   where a.institute_id = inst and a.target like c_c8::text || '%';
+  insert into demo_camps (id, k, kind, script_k, version) values (c_c8, 'c8', 'fees', 'polite8', 2);
+
+  -- 6. Every fees lead with a student: amount_due = the student's balance due by max(today, fees_due_by), as
+  --    ledger_sync_student keeps it. An open lead with nothing left to pay is closed (lead.closed_paid).
+  for r in
+    select l.id, l.status, l.do_not_call, c.status as cst, l.student_id,
+           greatest(b.balance_due_now, 0) as due
+    from public.leads l
+    join public.campaigns c on c.id = l.campaign_id
+    join public.call_types ct on ct.id = c.call_type_id and ct.key = 'fees'
+    cross join lateral public.student_balance_rows(inst, l.student_id, greatest(today, coalesce(c.fees_due_by, today))) b
+    where l.institute_id = inst and l.student_id is not null
+  loop
+    if r.due <= 0 and r.cst <> 'closed' and public.lead_is_open(r.status, r.do_not_call) then
+      update public.leads set amount_due = 0, status = 'done', next_call_at = null where id = r.id;
+      insert into public.audit_log (institute_id, actor_id, action, target, created_at)
+        values (inst, kav_u, 'lead.closed_paid', r.id::text,
+                (select max(p.created_at) from public.payments p where p.student_id = r.student_id));
+    else
+      update public.leads set amount_due = r.due where id = r.id and amount_due is distinct from r.due;
+    end if;
+  end loop;
+
+  -- 7. Back to the pool today: 4 walk-in enquiries added to Admission follow-up 4 days ago. Priya took them from
+  --    the pool 3 days ago (the campaign is open to all) and they asked for a call back this morning; she has
+  --    not worked that campaign since (24 working hours), so they went back to the pool when Sana asked for her
+  --    next lead (release_stale_leads; audit lead.released <lead>:<seat>:idle). Home shows the alert.
+  rel_t := least(now() - interval '15 minutes', greatest(pg_temp.ist(today, 10 * 3600 + 1500), now() - interval '5 hours'));
+  for i in 1 .. 4 loop
+    insert into public.leads (institute_id, campaign_id, name, phone, extra, status, next_call_at, consent_whatsapp, created_at)
+      values (inst, c_adm,
+              (array['Farhan Qureshi', 'Leela Bhat', 'Gopal Rane', 'Mansi Thakur'])[i], '+91' || (9999040150 + i)::text,
+              jsonb_build_object('student', (array['Ayaan', 'Kavya', 'Parth', 'Siya'])[i],
+                                 'course', (array['JEE Foundation', 'Class 11 Science', 'NEET 2-year', 'Class 11 Commerce'])[i],
+                                 'source', 'your visit to our office', 'source_date', pg_temp.say_date(today - 5)),
+              'callback', rel_t - interval '50 minutes' + i * interval '4 minutes', i % 2 = 0,
+              pg_temp.ist(today - 4, 16 * 3600 + i * 60))
+      returning id into lid;
+    t := pg_temp.ist(today - 3, 17 * 3600 + i * 420);
+    perform pg_temp.add_call(priya, lid, t, 'call_back_later', 40 + i * 9,
+                             (select id from demo_scripts where k = 'admission'), 2, 'open',
+                             jsonb_build_object('open', 18 + i), today, null, null,
+                             'Asked for a call back in the morning', null, null, null);
+    insert into public.audit_log (institute_id, actor_id, action, target, created_at)
+      values (inst, sana_u, 'lead.released', lid::text || ':' || priya::text || ':idle', rel_t + i * interval '1 second');
+  end loop;
+  insert into public.audit_log (institute_id, actor_id, action, target, created_at)
+    values (inst, mgr_u, 'leads.added', c_adm::text || ':4', pg_temp.ist(today - 4, 16 * 3600));
+
+  -- 8. Shronit: a real person for a live call in the demo (the owner's guest). He called the office about the
+  --    Data Analytics course and asked for a call back: Neha's first due call back. No WhatsApp consent.
+  insert into public.leads (institute_id, campaign_id, name, phone, extra, status, next_call_at, assigned_seat_id,
+                            consent_whatsapp, created_at)
+    values (inst, c_sale, 'Shronit', '+919619707601',
+            jsonb_build_object('course', 'Data Analytics', 'source', 'a call to our office',
+                               'source_date', pg_temp.say_date(today - 1)),
+            'callback',
+            least(now() - interval '10 minutes',
+                  coalesce((select min(l.next_call_at) from public.leads l
+                            where l.campaign_id = c_sale and l.assigned_seat_id = neha and l.next_call_at <= now()
+                              and l.status in ('new', 'callback', 'promised') and not l.do_not_call), now()) - interval '1 minute'),
+            neha, false, pg_temp.ist(today - 1, 17 * 3600 + 1500));
+  insert into public.audit_log (institute_id, actor_id, action, target, created_at)
+    values (inst, owner_u, 'leads.added', c_sale::text || ':1', pg_temp.ist(today - 1, 17 * 3600 + 1500));
+
+  -- 9. The walkthrough's parent: one of Ravi's promises due today becomes "Sunita Bhosale" (student Riya
+  --    Bhosale, 10-A), promising exactly her balance. Kavita records her UPI payment in the demo and the lead
+  --    leaves Ravi's list. Prefer a student whose balance is just Term 2 (₹18,000).
+  select l.id, l.student_id into r
+    from public.leads l
+    cross join lateral public.student_balance_rows(inst, l.student_id, today) b
+   where l.campaign_id = c_oct and l.status = 'promised' and l.promised_date = today
+     and l.assigned_seat_id = '5a1e0000-0000-4000-8000-000000000103'
+   order by (b.balance_due_now = 18000) desc, l.created_at
+   limit 1;
+  if r.id is not null then
+    update public.students set name = 'Riya Bhosale', parent_name = 'Sunita Bhosale', section = 'A' where id = r.student_id;
+    select greatest(b.balance_due_now, 0) into amt from public.student_balance_rows(inst, r.student_id, today) b;
+    update public.leads set name = 'Sunita Bhosale', promised_amount = amt, amount_due = amt,
+                            extra = extra || jsonb_build_object('student', 'Riya Bhosale', 'class', '10-A', 'section', 'A')
+     where id = r.id;
+    update public.leads set name = 'Sunita Bhosale', extra = extra || jsonb_build_object('student', 'Riya Bhosale', 'class', '10-A', 'section', 'A')
+     where student_id = r.student_id and campaign_id <> c_oct;
+    update public.call_outcomes set amount = amt
+     where id = (select o.id from public.call_outcomes o where o.lead_id = r.id and o.result_key = 'will_pay_on'
+                 order by o.dialled_at desc limit 1);
+  end if;
+end $$;
+
 -- ---------- 10. what the other screens read ----------
 
 do $$
@@ -1071,6 +1699,9 @@ declare
   s_fees  uuid := (select id from demo_scripts where k = 'fees');
   s_sale  uuid := (select id from demo_scripts where k = 'sales');
   s_late  uuid := (select id from demo_scripts where k = 'late_fee');
+  s_od    uuid := (select id from demo_scripts where k = 'overdue10');
+  kav_u   uuid := (select user_id from demo_people where who = 'kavita');
+  c_adm9  uuid := '5a1e0000-0000-4000-8000-000000000207';
   month0  timestamptz := (date_trunc('month', now() at time zone 'Asia/Kolkata'))::timestamp at time zone 'Asia/Kolkata';
   r_conc  uuid := (select id from public.call_type_results where institute_id = inst and key = 'fee_concession');
   r_adm   uuid := (select id from public.call_type_results where institute_id = inst and key = 'admission_done');
@@ -1097,9 +1728,9 @@ begin
     (inst, neha, 'The ₹6,000 start line in v7 works. People stay on the call after the fee.', pg_temp.ist(today - 5, 19 * 3600 + 1200)),
     (inst, ravi, 'Parents ask for the receipt on WhatsApp. Can we send it from the app?', pg_temp.ist(today - 8, 13 * 3600));
 
-  -- Practice mode: Amit is asked to practise the fees script (not done yet).
+  -- Practice mode: Amit is asked to practise the Oct fees script (not done yet).
   insert into public.practice_assignments (institute_id, seat_id, script_id, note, assigned_by, assigned_at) values
-    (inst, amit, s_fees, 'Practise a short opening: name, school, fee and date in under 25 seconds.', mgr, pg_temp.ist(today - 2, 16 * 3600 + 1300));
+    (inst, amit, s_od, 'Practise a short opening: name, school, fee and date in under 25 seconds.', mgr, pg_temp.ist(today - 2, 16 * 3600 + 1300));
 
   -- AI script maker: 3 drafts (and 2 "Make simpler") this month. Placed inside this month, before now.
   insert into public.ai_requests (institute_id, seat_id, kind, model, attempts, input_tokens, output_tokens,
@@ -1123,7 +1754,7 @@ begin
     (inst, owner_u, 'seat.invited', sana::text, pg_temp.ist(today - 75, 11 * 3600 + 1100)),
     (inst, owner_u, 'script.published', (select id::text from public.script_versions where script_id = s_fees and version = 2), pg_temp.ist(today - 56, 41000)),
     (inst, owner_u, 'campaign.created', c_sept::text, pg_temp.ist(today - 54, 39000)),
-    (inst, owner_u, 'leads.added', c_sept::text || ':212', pg_temp.ist(today - 54, 39300)),
+    (inst, owner_u, 'leads.added', c_sept::text || ':150', pg_temp.ist(today - 54, 39300)),
     (inst, owner_u, 'campaign.running', c_sept::text, pg_temp.ist(today - 54, 39600)),
     (inst, owner_u, 'script.published', (select id::text from public.script_versions where script_id = s_sale and version = 5), pg_temp.ist(today - 21, 40000)),
     (inst, owner_u, 'money.access_removed', mgr::text, pg_temp.ist(today - 40, 15 * 3600)),
@@ -1150,12 +1781,21 @@ begin
     (inst, mgr_u, 'supervisor_note.added', ravi::text, pg_temp.ist(today - 4, 12 * 3600)),
     (inst, owner_u, 'supervisor_note.added', neha::text, pg_temp.ist(today - 3, 19 * 3600)),
     (inst, mgr_u, 'supervisor_note.added', amit::text, pg_temp.ist(today - 2, 16 * 3600 + 1200)),
-    (inst, mgr_u, 'practice.assigned', amit::text || ':' || s_fees::text, pg_temp.ist(today - 2, 16 * 3600 + 1300)),
+    (inst, mgr_u, 'practice.assigned', amit::text || ':' || s_od::text, pg_temp.ist(today - 2, 16 * 3600 + 1300)),
     (inst, mgr_u, 'supervisor_note.added', priya::text, pg_temp.ist(today - 1, 18 * 3600 + 600)),
     (inst, mgr_u, 'campaign.created', c_ptm::text, now() - interval '3 hours'),
     (inst, mgr_u, 'leads.added', c_ptm::text || ':120', now() - interval '3 hours' + interval '2 minutes'),
     (inst, owner_u, 'script.draft_saved', (select id::text from public.script_versions where script_id = s_late and version = 1),
-       pg_temp.ist(today, 0) + (now() - pg_temp.ist(today, 0)) / 3);
+       pg_temp.ist(today, 0) + (now() - pg_temp.ist(today, 0)) / 3),
+    -- Phase A.2: the fees office, the ledger import, scripts from the library, the Class 9 enquiries.
+    (inst, owner_u, 'seat.invited', '5a1e0000-0000-4000-8000-000000000108', pg_temp.ist(today - 60, 9 * 3600 + 1800)),
+    (inst, kav_u, 'students.imported', (select count(*) from demo_st)::text || ':0:0', pg_temp.ist(today - 58, 11 * 3600 + 1500)),
+    (inst, owner_u, 'script.published', (select id::text from public.script_versions where script_id = s_od and version = 2), pg_temp.ist(today - 25, 41000)),
+    (inst, mgr_u, 'script.published', (select id::text from public.script_versions where script_id = (select id from demo_scripts where k = 'adm9') and version = 2), pg_temp.ist(today - 5, 41000)),
+    (inst, mgr_u, 'campaign.created', c_adm9::text, pg_temp.ist(today - 4, 41500)),
+    (inst, mgr_u, 'leads.added', c_adm9::text || ':64', pg_temp.ist(today - 4, 41900)),
+    (inst, mgr_u, 'campaign.running', c_adm9::text, pg_temp.ist(today - 3, 33000)),
+    (inst, owner_u, 'script.published', (select id::text from public.script_versions where script_id = (select id from demo_scripts where k = 'polite8') and version = 2), pg_temp.ist(today - 1, 39000));
 end $$;
 
 -- ---------- 11. a short summary ----------
@@ -1169,6 +1809,21 @@ select k.k as campaign, c.status, count(distinct l.id) as leads,
           and l.promised_date < (select v::date from demo_ctx where k = 'today')) as broken_promises
 from demo_camps k join public.campaigns c on c.id = k.id left join public.leads l on l.campaign_id = c.id
 group by k.k, c.status, c.id order by k.k;
+
+-- The ledger: students and what they owe now, and the payments of the last 8 weeks by mode.
+select s.class_label as class, s.board, count(*) as students,
+       count(*) filter (where b.balance_due_now > 0) as owing_now, sum(greatest(b.balance_due_now, 0)) as due_now,
+       sum(b.balance_total) as due_this_year
+from public.students s
+cross join lateral public.student_balance_rows(s.institute_id, s.id) b
+where s.institute_id = '5a1e0000-0000-4000-8000-000000000001'
+group by s.class_label, s.board order by s.class_label nulls last;
+
+select p.mode, count(*) filter (where p.reverses_id is null) as payments, count(*) filter (where p.reverses_id is not null) as reversals,
+       sum(case when p.reverses_id is null then p.amount else -p.amount end) as net_amount
+from public.payments p
+where p.institute_id = '5a1e0000-0000-4000-8000-000000000001' and not p.opening
+group by p.mode order by count(*) desc;
 
 commit;
 

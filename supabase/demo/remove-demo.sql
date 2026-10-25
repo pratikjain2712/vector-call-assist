@@ -1,6 +1,6 @@
 -- Removes the demo institute "Sunrise Coaching Academy (Demo)" and everything in it: seats, campaigns, leads,
--- calls, scripts, notes, presence, AI and audit rows. No other institute is touched.
--- The 7 demo logins (*.sunrise@example.com) are left in Authentication > Users: docs/demo.md says how to
+-- calls, scripts, notes, presence, AI and audit rows, students, fee items and payments. No other institute is touched.
+-- The 8 demo logins (*.sunrise@example.com) are left in Authentication > Users: docs/demo.md says how to
 -- delete them.
 --   psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/demo/remove-demo.sql
 
