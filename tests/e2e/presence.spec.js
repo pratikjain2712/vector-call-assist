@@ -1,4 +1,4 @@
-// "Callers right now" on the admin Home tab follows the caller's real call (js/presence.js, report_presence with
+// "Callers right now" on the admin Today tab (and the Team tab) follows the caller's real call (js/presence.js, report_presence with
 // the call state, 20261025190000_presence_call_state.sql): "On a call · m:ss" while the paired phone dials or
 // the line is in use, "Wrap-up" after it hangs up until the result is saved, then "Ready"; "On a call
 // (unconfirmed)" when no phone is paired and only the page says a call is going on.
@@ -66,6 +66,12 @@ async function adminHome(browser, backend) {
   return { admin, ctx };
 }
 
+// Today refreshes itself every minute (there is no refresh button): load the page again to see the change now.
+async function refresh(admin) {
+  await admin.reload();
+  await expect(admin.locator('#home-callers-body')).toContainText('Rep 2');
+}
+
 const lastState = (backend) => {
   const seat = env().seats.rep2;
   const mine = backend.db.presenceReports.filter((r) => r.seat_id === seat);
@@ -90,7 +96,7 @@ test('Home follows the phone: on a call with its time, wrap-up after hanging up,
   // The lead picks up (the line went into use 65 seconds ago): "On a call · 1:05", and Home ticks it on.
   await setPhone(page, { phase: 'OFFHOOK', offhookWallMs: Date.now() - 65000 });
   await expect.poll(() => lastState(backend)).toBe('connected');
-  await admin.locator('#home-refresh').click();
+  await refresh(admin);
   await expect(status).toHaveText(/^On a call · 1:0\d$/);
   const first = await status.textContent();
   await expect(status).not.toHaveText(first, { timeout: 4000 });   // the timer runs between refreshes
@@ -99,14 +105,14 @@ test('Home follows the phone: on a call with its time, wrap-up after hanging up,
   // Hang up: wrap-up while the result is being saved.
   await setPhone(page, { phase: 'ENDED', endWallMs: Date.now() });
   await expect.poll(() => lastState(backend)).toBe('wrapup');
-  await admin.locator('#home-refresh').click();
+  await refresh(admin);
   await expect(status).toHaveText(/^Wrap-up · 0:0\d$/);
 
   // Save the result: ready.
   await page.locator('#res-no_answer').click();
   await page.locator('#res-save').click();
   await expect.poll(() => lastState(backend)).toBe('none');
-  await admin.locator('#home-refresh').click();
+  await refresh(admin);
   await expect(status).toHaveText('Ready');
 
   // Every change was reported, in order, and at most one report per 2 seconds (from the dial on: the reload
@@ -133,8 +139,8 @@ test('no phone paired: a call the page starts shows as unconfirmed', async ({ pa
   expect(report.phone_ok).toBe(true);
   const { admin, ctx } = await adminHome(browser, backend);
   await expect(admin.locator('#home-callers-body tr', { hasText: 'Rep 2' }).locator('.home-status')).toHaveText(/^On a call \(unconfirmed\) · 0:\d\d$/);
-  // The Callers tab says the same in words.
+  // The Team tab says the same, with the same timer (an old #callers link opens it).
   await admin.goto('/admin.html#callers');
-  await expect(admin.locator('#tab-callers')).toContainText('On a call (unconfirmed)');
+  await expect(admin.locator('#seat-body tr', { hasText: 'Rep 2' }).locator('.home-status')).toHaveText(/^On a call \(unconfirmed\) · 0:\d\d$/);
   await ctx.close();
 });

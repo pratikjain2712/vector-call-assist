@@ -11,7 +11,11 @@ This is what every Phase A feature builds on (campaigns, lead upload, caller scr
 3. **A caller sees money for one lead at a time**, through `lead_money(lead_id)`, and only for a lead assigned to their active seat. Never return amounts of other leads, totals or averages to a caller.
 4. **`hide_money` hides money for everyone**, owners and callers included (exceptions: the caller of the lead on the call, see "Caller screen", and Accounts seats, see "Phase A.2"). `can_see_money()` and `lead_money()` already apply it; do not re-implement the check.
 5. **Every export that contains money calls `log_money_export(institute, what, rows)` first** and stops if it raises. Exports for people who cannot see money have no ₹ columns.
-6. **Paid amounts are labelled "reported by caller"** in the UI (decision 3).
+6. **Paid amounts from calls are labelled "Parent said (not paid yet)"** in the UI (decision 3; was "reported by
+   caller" until the admin simplification), and money the fees office recorded in the fee ledger is "Paid
+   (office)". The admin app shows due now, collected, promised and "Promised date missed" from one function,
+   `admin_fees_ledger` (`VectorAdminShared.loadFeeNumbers` / `feeCards`), with the period next to the number
+   ("this month", "today", "in these dates").
 7. **Store amounts and dates only.** No bank, card or UPI details anywhere, including `leads.extra` and notes.
 8. **Money never goes in `leads.extra`.** A check refuses extra keys that look like money (see `extra_has_money_key`). Map the sheet's fee or amount column to `amount_due` in the lead upload.
 9. **Select columns by name.** Because of column grants, `select('*')` on `leads` or `call_outcomes` fails for the browser. List the columns you need (see the grant lists below).

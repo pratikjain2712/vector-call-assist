@@ -301,6 +301,7 @@
   // A fact, a field or a chip group shown only with "Show advanced options" on (simple mode hides it).
   const advFact = (label, value) => { const f = fact(label, value); f.classList.add('adv'); return f; };
   const advanced = (node) => { node.classList.add('adv'); return node; };
+  let wizardSeq = 0;
   function stat(label, value, cls) {
     return el('div', { className: 'stat ' + (cls || '') }, [el('span', { className: 'stat-n', text: S.count(value || 0) }), el('span', { className: 'stat-l', text: label })]);
   }
@@ -728,12 +729,14 @@
   }
 
   async function openWizard() {
+    const my = ++wizardSeq;   // the form is built once, by the last call (the view can be shown twice while loading)
     const steps = $('camp-w-steps');
     steps.textContent = '';
     pickers = {};
     say('camp-w-msg', 'Loading…');
     await Promise.all([loadTypes(), loadScripts(), ensureSeats(), loadFeatures()]);
-    if (!ctx) return;
+    if (!ctx || my !== wizardSeq) return;
+    steps.textContent = '';
     say('camp-w-msg', '');
 
     const typeSel = el('select', { id: 'camp-w-type', required: true }, types.map((t) => el('option', { value: t.id, text: t.label })));

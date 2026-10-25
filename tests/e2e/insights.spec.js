@@ -1,4 +1,4 @@
-// The Insights tab (js/admin/insights.js): forecast with "What closes the gap", What-if and Apply plan, best
+// Insights (js/admin/insights.js), now inside Today with the rest under "More analysis": forecast with "What closes the gap", What-if and Apply plan, best
 // time to call with Set call hours, where calls end, promises, coaching notes, money hidden, the Scripts add-on,
 // charts as tables, phone width and dark mode. Runs on the fake backend only (tests/e2e/fake-insights.js has
 // the campaign data); the SQL itself is tested in supabase/tests/insights_test.sql.
@@ -9,7 +9,10 @@ async function openInsights(page) {
   await page.locator('#gate-email').fill(env().users.admin.email);
   await page.locator('#gate-password').fill(env().password);
   await page.locator('#gate-submit').click();
-  await expect(page.locator('#tab-link-insights')).toHaveAttribute('aria-current', 'page');
+  // The old #insights link opens Today with "More analysis" open.
+  await expect(page.locator('#tab-link-today')).toHaveAttribute('aria-current', 'page');
+  await expect(page).toHaveURL(/#today\?more=1$/);
+  await expect(page.locator('#ins-more')).toHaveAttribute('open', '');
   await expect(page.locator('#ins-forecast .ins-big')).toBeVisible();
 }
 
@@ -20,9 +23,9 @@ test('forecast, what-if, apply plan, call hours and a coaching note', async ({ p
   page.on('pageerror', (e) => errors.push(e.message));
   await openInsights(page);
 
-  // Forecast in ₹ with the reported-by-caller label, a chart and the gap list.
+  // Forecast in ₹ with the label for what parents said on calls, a chart and the gap list.
   await expect(page.locator('#ins-forecast-title')).toContainText('Forecast: fees collected by');
-  await expect(page.locator('#ins-forecast')).toContainText('reported by caller');
+  await expect(page.locator('#ins-forecast')).toContainText('as parents said on calls');
   await expect(page.locator('#ins-forecast .ins-big')).toContainText('₹');
   await expect(page.locator('#ins-forecast svg.chart-svg')).toBeVisible();
   await expect(page.locator('#ins-forecast .ins-gap')).toContainText('Short by');
@@ -132,4 +135,27 @@ test('the tab shows the weekly brief and the script test of the picked campaign'
   await expect(page.locator('#insights-abtest #ix-test-title')).toHaveText('Script test');
   await expect(page.locator('#insights-abtest #ix-test-campaign')).toHaveCount(0);
   expect(errors).toEqual([]);
+});
+
+test('on Today, the brief and the forecast with Apply plan are open; the rest waits under "More analysis"', async ({ page, backend }) => {
+  await page.goto('/admin.html');
+  await page.locator('#gate-email').fill(env().users.admin.email);
+  await page.locator('#gate-password').fill(env().password);
+  await page.locator('#gate-submit').click();
+  await expect(page.locator('#tab-link-today')).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('#insights-brief #ix-brief-title')).toHaveText('This week in 4 lines');
+  await expect(page.locator('#ins-forecast .ins-gap')).toContainText('What closes the gap');
+  await expect(page.locator('#ins-apply-gap')).toBeVisible();
+  await expect(page.locator('#ins-more')).not.toHaveAttribute('open', '');
+  for (const id of ['#ins-whatif', '#ins-compare-panel', '#ins-besttime', '#ins-ends', '#ins-promises', '#ins-coaching', '#insights-abtest']) {
+    await expect(page.locator(id)).toBeHidden();
+  }
+  // Try opens More analysis on the What-if it changed; Apply plan from the forecast saves that plan.
+  await page.locator('#ins-forecast .ins-try').first().click();
+  await expect(page.locator('#ins-more')).toHaveAttribute('open', '');
+  await expect(page.locator('#ins-whatif')).toBeVisible();
+  await page.locator('#ins-apply-gap').click();
+  await page.locator('#confirm-go').click();
+  await expect(page.locator('#status')).toContainText('Plan applied');
+  expect(backend.insights.writes.some((w) => w.what === 'plan')).toBe(true);
 });

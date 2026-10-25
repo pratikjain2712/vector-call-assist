@@ -1,7 +1,8 @@
 # Sales demo: "Sunrise Coaching Academy (Demo)"
 
 A ready-made, busy institute for sales demos. Prospects sign in with an email and a password and see every
-screen full: today's calls, campaigns, insights, reports, scripts, the fees ledger and the caller screen.
+screen full: Today (calls, forecast, reports), Fees, Calling (calling lists and call scripts), Team, Settings
+and the caller screen.
 
 **Everything in it is fake.** The people are made up and every phone number is in the +91 9999xxxxxx block,
 used here only as an obviously fake range. Never call these numbers and never put real data in this institute.
@@ -16,18 +17,18 @@ All eight use the one password you choose (`DEMO_PASSWORD`, at least 10 characte
 
 | Login | Who | What they see |
 |---|---|---|
-| `owner.sunrise@example.com` | Anita Sharma, Owner | Everything, with ₹ amounts |
-| `manager.sunrise@example.com` | Rahul Verma, Manager | Everything an admin sees, but no ₹: counts only |
+| `owner.sunrise@example.com` | Anita Sharma, Owner | All five tabs, with ₹ amounts |
+| `manager.sunrise@example.com` | Rahul Verma, Manager | Today, Calling and Team, no ₹: counts only |
 | `ravi.sunrise@example.com` | Ravi, caller | Oct fees – Class 10 (fees reminders) |
 | `priya.sunrise@example.com` | Priya, caller | Course sales – Data Analytics |
 | `neha.sunrise@example.com` | Neha, caller | Course sales – Data Analytics (the best caller) |
 | `amit.sunrise@example.com` | Amit, caller | Oct fees – Class 10 (no calls today, long openings) |
 | `sana.sunrise@example.com` | Sana, caller | Admission follow-up (phone offline today) |
-| `accounts.sunrise@example.com` | Kavita Joshi, Accounts | The Fees tab only: students, balances, payments, fees campaigns from the ledger (always with ₹) |
+| `accounts.sunrise@example.com` | Kavita Joshi, Accounts | The Fees tab only: students, balances, payments, the collection report, fees calling lists (always with ₹) |
 
-Owner, manager and accounts sign in at `admin.html`; callers at `app.html`. Every campaign is open to all
-callers, so any caller can pick any running campaign (the names in the table are where each one usually works).
-The institute has 8 seats and all 8 are used, so nobody can send invite emails from the demo.
+Owner, manager and accounts sign in at `admin.html`; callers at `app.html`. Every calling list is open to all
+callers, so any caller can pick any running list (the names in the table are where each one usually works).
+The institute has 8 team places and all 8 are used, so nobody can send invite emails from the demo.
 
 ## Before the first time (10 minutes, once)
 
@@ -49,7 +50,7 @@ The database must already have every migration in `supabase/migrations/` (`supab
 
 ## The morning of the demo
 
-Load it fresh so "Today" on Home is today. Best 15–30 minutes before the demo, after 10 am India time
+Load it fresh so the Today tab is today. Best 15–30 minutes before the demo, after 10 am India time
 (today's calls are spread over the working hours so far; loaded at 8 am they all fall in the last hour or two).
 
 ```bash
@@ -80,120 +81,140 @@ Good to know:
 
 ## What each login shows
 
-**Owner (Anita)**
-- Home: about 140 calls today ("x% more than yesterday"), ~60% picked up, talk time, 9 joined and 13
-  interested on sales, fees paid and promised in ₹. Callers right now: Neha and Ravi on a call, Priya ready,
-  Amit no calls for 45 min, Sana's phone offline. Needs your attention: 6 fee promises due today, Sana's phone,
-  "Course sales: ~40% of picked-up calls end at the Fees step", Amit idle.
-- Needs your attention also shows **4 follow-ups back in the pool today**: walk-in enquiries in Admission
-  follow-up that Priya took 3 days ago and has not worked since; their call back came due this morning, so
-  they went back to the pool for the next free caller.
-- Campaigns, all open to all callers and tagged by class and board:
+The admin page (`admin.html`) has at most five tabs: **Today, Fees, Calling, Team, Settings**. It opens in
+simple mode; **Your account → Show advanced options** (or the switch at the top of Settings) shows the rarely
+used fields and panels too. Old bookmarks (#home, #campaigns, #reports …) still work: they open the new place.
+On a phone the tabs are a bar at the bottom of the screen.
+
+**Owner (Anita)**: all five tabs.
+- **Today**: about 140 calls today ("x% more than yesterday"), ~60% picked up, talk time, 9 joined and 13
+  interested on sales, and *Collected today* (Paid (office): what the fees office recorded today). Callers right
+  now: Neha and Ravi on a call, Priya ready, Amit no calls for 45 min, Sana's phone offline. Needs your
+  attention: fee promises due today not paid yet, Sana's phone, "Course sales: ~40% of picked-up calls end at
+  the Fees step", Amit idle, and **4 follow-ups went to other callers today** (walk-in enquiries in Admission
+  follow-up that Priya took 3 days ago and has not worked since; their call back came due this morning, so the
+  next free caller gets them).
+- Below that: **This week in 4 lines**, and the **forecast** for a calling list with *What closes the gap* and
+  *Apply plan*. Everything else from the old Insights tab (what-if sliders, compare, best time to call, where
+  calls end, promises kept, caller coaching, the v6 vs v7 script test) is under **More analysis**, closed until
+  you open it.
+- The **Reports** button (top right of Today, and in Calling): Call results, Weekly summary, Enquiry to
+  admission (the old sales funnel), Why calls are lost (pick Course sales, v7). Each has **Download Excel**.
+- The first time, a **Getting started** card lists what is left to set up (import students and fees, fill
+  common answers n of 5, add a caller, start a calling list from a template, connect WhatsApp). In the demo
+  only "Fill common answers" and "Connect WhatsApp" are open; **Hide** closes the card for good on that browser.
+- **Calling → Calling lists** (the old Campaigns), all open to all callers and tagged by class and board:
   - *Oct fees – Class 10* (10th · CBSE, fees): 240 parents, Ravi and Amit, Term 2 overdue since 15 days ago.
-    Script "Overdue fees – Class 10".
-  - *Term 2 fees – Class 8* (8th · CBSE, fees): made from the ledger by Kavita this morning; ~133 parents with
-    Term 2 due in 6 days (one lead for twins who share a phone, two students with no phone left out), all in the
-    pool. Script "Term 2 reminder – Class 8".
+    Call script "Overdue fees – Class 10".
+  - *Term 2 fees – Class 8* (8th · CBSE, fees): made from Fees by Kavita this morning; ~133 parents with Term 2
+    due in 6 days (one entry for twins who share a phone, two students with no phone left out), waiting for the
+    next free caller. Call script "Term 2 reminder – Class 8".
   - *Class 9 admission enquiries* (9th · ICSE, admission): 64 new enquiries from the website, the admission fair
-    at Phoenix Mall and calls to the office, in the pool. Script "Class 9 admission enquiry".
-  - *Course sales – Data Analytics* (sales): 421 leads, Priya and Neha, the v6 vs v7 script test.
+    at Phoenix Mall and calls to the office. Call script "Class 9 admission enquiry".
+  - *Course sales – Data Analytics* (sales): 421 people, Priya and Neha, the v6 vs v7 script test.
   - *Admission follow-up* (admission): 154 enquiries, Sana.
-  - *PTM reminder – Nov* (draft) and *Sept fees – Class 9* (closed, all 150 Class 9 parents called).
-- Every lead says where it came from (`extra.source` and `extra.source_date`, e.g. "the enquiry form on our
-  website", "our admission fair at Phoenix Mall", "a call to our office"; fees leads: "your child's admission
-  form"), so "Where did you get my number?" has an answer.
-- Insights: the weekly brief in 4 lines, forecast and what-if, best time to call (7–9 pm wins), where calls
-  end, promises kept by how far away the date was, caller coaching, the v6 vs v7 script test.
-- Reports: Fees collection (14 broken promises, mostly Class 10-B), promises against the ledger (kept, part
-  paid, broken), collected by mode, Sales funnel, Results, Why calls are lost (pick Course sales, v7), Weekly
-  summary.
-- Scripts: three made from the template library, each with v1 as copied (with its "Check this" marks) and v2
-  published with the institute's facts filled in: Overdue fees – Class 10 (*Overdue fee reminder*), Term 2
-  reminder – Class 8 (*Fee reminder before the due date*), Class 9 admission enquiry (*School admission enquiry
-  follow-up*). Also Fees reminder v3 (used by the closed Sept campaign), Course sales v7, Admission check v2 and
-  Late fee warning (a draft with a "Check this" mark). **Start from a template** opens the ready script
-  library: 26 scripts for fees, admissions, sales and cold calling, in English and Hinglish, filtered by
-  purpose, class, board and language. (The AI script maker is the Vector team's own tool; institutes do not
-  see it or an AI drafts count.)
-- Fees (the ledger, also what Kavita sees): 570 students (Class 8 CBSE 180 in sections A–C, Class 9 ICSE 150,
-  Class 10 CBSE 240, plus about 10 new students from "Admission confirmed" calls with no fee plan yet), each
-  with an admission number, parent and phone. Fee items for 2026-27: Term 1 and Term 2 tuition, and a bus fee
-  per term for bus users. An opening balance import 58 days ago (Term 1 "paid so far"; a few still owe part of
-  it). About 400 payments in the last 8 weeks, mostly UPI, then cash, cheque and bank transfer, with
-  references, and 3 reversals (a bounced cheque, a UPI payment first put on the wrong student, a cash payment
-  typed twice).
-- Callers: team activity, daily targets, supervisor notes (one about Priya skipping the questions), seats,
-  phones paired. Settings: call types (with two added results: "Asked for concession", "Admission
-  confirmed"), **common answers** (5 answers that need the institute's facts, e.g. "Where is the institute?",
-  "How much is the fee?": callers see them only once the owner fills them in), money switch, plan, WhatsApp
-  **not connected** (so you can show how to connect), activity log. Callers: Kavita (Accounts) is in the seats
-  list with the role Accounts, but never as a caller (not on Home, not in campaign or move lists).
+  - *PTM reminder – Nov* (not started) and *Sept fees – Class 9* (closed, all 150 Class 9 parents called).
+- Every person on a list says where their number came from ("the enquiry form on our website", "our admission
+  fair at Phoenix Mall", "a call to our office"; fees: "your child's admission form"), so "Where did you get my
+  number?" has an answer.
+- **Calling → Call scripts**: the institute's own scripts first. Three were made from the template library, each
+  with version 1 as copied (with its "Check this" marks) and version 2 *ready for callers* with the institute's
+  facts filled in: Overdue fees – Class 10, Term 2 reminder – Class 8, Class 9 admission enquiry. Also Fees
+  reminder (used by the closed Sept list), Course sales, Admission check and Late fee warning (not ready, with
+  a "Check this" mark). **+ New script** opens 6 ready scripts for the kinds of calls the institute makes, and
+  **See all 26** opens the whole library with filters (purpose, class, board, language). The AI script maker
+  is the Vector team's own tool; institutes do not see it.
+- **Fees** (also what Kavita sees). *This month*: Due now, Collected this month, Promised, not paid yet, and
+  Promised date missed, then 570 students (Class 8 CBSE 180 in sections A–C, Class 9 ICSE 150, Class 10 CBSE
+  240, plus about 10 new students from "Admission confirmed" calls with no fee plan yet). Fee items for 2026-27:
+  Term 1 and Term 2 tuition, and a bus fee per term for bus users. An opening balance import 58 days ago (Term 1
+  "paid so far"; a few still owe part of it). About 400 payments in the last 8 weeks, mostly UPI, then cash,
+  cheque and bank transfer, with references, and 3 reversals (a bounced cheque, a UPI payment first put on the
+  wrong student, a cash payment typed twice). **Collection report** (next to Students): the fees collection
+  report for any dates (this month by default) with collected by mode and by day, the promises due this week
+  against what the office recorded, "Send these back to callers", and Download Excel. Its four cards are the
+  same numbers as the Fees cards for the same dates.
+- **Team**: one row per person: Anita, Rahul, the five callers and Kavita (Accounts, "No phone needed"), with
+  today's calls against the target, what they are doing now, and a hint under the name ("Not calling today",
+  few calls picked up, short calls). **Edit** on a row: role, money access (managers), daily target, notes for
+  today (one about Priya skipping the questions), **Give their calls to others**, **Sign out their phone**,
+  Remove. Advanced options add targets and notes columns, calling lists for chosen callers only and "give their
+  calls to one person".
+- **Settings**: institute name and time zone, **Common answers** (5 answers that need the institute's facts,
+  e.g. "Where is the institute?", "How much is the fee?": callers see them only once they are filled in),
+  WhatsApp **not connected** (so you can show how to connect). Advanced options add call result options (with
+  two added results: "Asked for concession", "Admission confirmed"), money, plan, terms and the activity log.
+- **Your account** (next to Sign out): change your password, email yourself a reset link, show advanced options.
 
-**Manager (Rahul)**: the same screens with no ₹ anywhere: the fees forecast counts payments, Home shows
-"Fees: paid N calls", reports show counts, Excel has no ₹ columns. In Fees he sees who owes, not how much, and
-cannot record payments.
+**Manager (Rahul)**: Today, Calling and Team (no Fees and no Settings: he cannot see money). No ₹ anywhere: the
+fees forecast counts payments, Today shows "Fees: paid N calls", reports show counts, Excel has no ₹ columns.
+An owner who gives him money access (Team → Edit → Can see money) gives him the Fees tab too: who owes and how
+much, but he cannot record payments.
 
-**Accounts (Kavita)**: only the Fees tab, always with ₹ (the fees office needs amounts). The students list by
-class, section and board with the balance due now, the total for the year and the last payment; "only due"
-shows ~160 Class 10 parents with Term 2 overdue, ~19 Class 9 and a few Class 8. A student page: fee items,
-payments with mode and reference (UPI UTRs, cheque numbers, receipts), reversals with their reason, and the
-calls made to the parent. Things to look for:
-- **Says already paid, not in the ledger**: a few Oct fees calls ended "Says already paid" in the last 10 days
-  with no matching payment. Open the student, see the call, and check with the parent or the bank.
+**Accounts (Kavita)**: only Fees, always with ₹ (the fees office needs amounts), with its Collection report.
+The students list by class, section and board with the balance due now, the total for the year and the last
+payment; "Only with dues" shows ~160 Class 10 parents with Term 2 overdue, ~19 Class 9 and a few Class 8. On a
+phone each student is a small card with **Record payment**. A student page: fee items, payments with mode and
+reference (UPI UTRs, cheque numbers, receipts), reversals with their reason, and the calls made to the parent.
+Things to look for:
+- **Parent said they paid, not in Paid (office)**: a few Oct fees calls ended "Says already paid" in the last
+  10 days with no matching payment. Open the student, see the call, and check with the parent or the bank.
 - The bounced cheque (Class 8): reversed, so the student owes Term 2 again and is in *Term 2 fees – Class 8*.
-- *Term 2 fees – Class 8* was made here ("Fees campaign from the ledger": class 8th, CBSE, due by Term 2's due
-  date).
-- She cannot see Home, Callers, campaigns, scripts or settings.
+- *Term 2 fees – Class 8* was made here (**Call parents with dues**: class 8th, CBSE, due by Term 2's due date).
+- She cannot see Today, Calling, Team or Settings.
 
 **Live call (Shronit)**: Shronit is in *Course sales – Data Analytics*, Neha's first due call back (source "a
 call to our office", no WhatsApp consent). Sign in as Neha on the paired laptop and he is at the top of her list;
 the owner calls him live. Reset the demo afterwards to put him back.
 
-**Caller (Ravi)**: his Oct fees list with broken promises first, the lead card (parent, student, class, amount
-due, last call), the script step by step, pushback answers, result buttons with date and ₹ fields.
+**Caller (Ravi)**: his Oct fees list with missed promised dates first, the lead card (parent, student, class,
+amount due, last call), the call script step by step, answers to objections, and the result options with date
+and ₹ fields.
 
 ## A 15-minute walkthrough
 
-Eight logins: owner, manager, five callers and Accounts. Every running campaign is open to every caller and
-tagged by class and board; callers pick the campaign, the script follows it.
+Eight logins: owner, manager, five callers and Accounts. Every running calling list is open to every caller and
+tagged by class and board; callers pick the list, the call script follows it.
 
-1. **Owner → Home** (2 min). "This is today, live." The five tiles (collected today comes from the fee ledger),
-   callers right now (point at Sana's phone and Amit idle; Kavita is not listed, she is Accounts), then
-   *Needs your attention*: **See list** on the promises due today, and the 4 follow-ups back in the pool
-   ("nobody waits on a caller who stopped").
-2. **Campaigns** (1 min). Every campaign says *All callers* and carries its tags (8th · CBSE, 9th · ICSE,
-   10th · CBSE). *Term 2 fees – Class 8* was made from the ledger by Kavita this morning. Show **+ New
-   campaign** without saving: open to all callers by default, class and board, or restricted to chosen callers.
-3. **Fees** (1.5 min). 570 students with balances. Search "Bhosale": Riya Bhosale (10-A, CBSE), parent Sunita,
-   ₹18,000 due now (Term 2), Term 1 paid in the opening import; fee items, payments with **Receipt**, and the
-   calls to the parent (Ravi, "Will pay on date" today).
-4. **Insights** (2.5 min). Read the 4-line brief. Pick **Oct fees – Class 10**: the forecast in ₹, "What closes
-   the gap", the What-if sliders, best time to call, promises kept (measured against the fee ledger),
-   coaching (Amit's long opening). Switch to **Course sales**: the script test, v7 winning.
-5. **Reports** (1 min). Campaign **Oct fees – Class 10**, *Fees collection*: total due now and collected from the
-   ledger (by mode: UPI, cash, cheque, bank), promised not yet paid, the 14 broken promises, "Send these back
-   to callers". Then *Sales funnel*.
-6. **Scripts and Settings** (1.5 min). **Start from a template**: the ready script library (filter Fees +
-   Hinglish, Preview one, "Use this template"). Placeholders such as {name}, {student}, {amount_due} and
-   {due_date} are filled from each lead on the call. Settings → **Common answers**: fill in "Where is the
-   institute?"; callers get it at once. New scripts on request: our team adds them to the library.
-7. **Manager** (30 s). Sign out, sign in as Rahul: same Home and Reports, no ₹.
-8. **Caller Neha** (2 min). On the paired laptop as Neha (`app.html`): the **campaign picker** lists every open
-   campaign by purpose with "N waiting"; tap class **8th**: *Term 2 fees – Class 8* stays, and the untagged
-   campaigns stay too, marked "All classes". Pick **Course sales – Data Analytics**: **Shronit** is at the top
+1. **Owner → Today** (3 min). "This is today, live." The tiles (*Collected today* is what the fees office
+   recorded), callers right now (point at Sana's phone and Amit idle; Kavita is not listed, she is Accounts),
+   then *Needs your attention*: **See list** on the promises due today, and the 4 follow-ups that went to other
+   callers ("nobody waits on a caller who stopped"). Scroll: **This week in 4 lines**, then the forecast for
+   **Oct fees – Class 10** in ₹ and *What closes the gap*. Open **More analysis** only if asked: best time to
+   call (7–9 pm wins), promises kept, coaching (Amit's long opening), the v6 vs v7 test on Course sales.
+2. **Calling** (1.5 min). *Calling lists*: every list says *All callers* and carries its tags (8th · CBSE,
+   9th · ICSE, 10th · CBSE). *Term 2 fees – Class 8* was made from Fees by Kavita this morning. Show **+ New
+   calling list** without saving. *Call scripts*: the institute's own scripts; **+ New script** shows six ready
+   ones for fees and admissions (Preview one, "Use this template"); **See all 26** for the whole library.
+   Placeholders such as {name}, {student}, {amount_due} and {due_date} are filled from each person on the call.
+3. **Fees** (1.5 min). The four cards for this month, then 570 students with balances. Search "Bhosale": Riya
+   Bhosale (10-A, CBSE), parent Sunita, ₹18,000 due now (Term 2), Term 1 paid in the opening import; fee items,
+   payments with **Receipt**, and the calls to the parent (Ravi, "Will pay on date" today). Open **Collection
+   report**: the same four numbers, by mode (UPI, cash, cheque, bank), promises due this week, "Send these back
+   to callers", Download Excel.
+4. **Reports** (1 min). From Today: **Reports** → *Call results*, then *Enquiry to admission* and *Why calls are
+   lost* (Course sales, v7). Download Excel on any of them.
+5. **Team and Settings** (1.5 min). Team: one table, today's calls per person, "Not calling today" under Amit;
+   **Edit** on Sana: give her calls to others, sign out her phone. Settings → **Common answers**: fill in "Where
+   is the institute?"; callers get it at once (and the Getting started card on Today counts it). Turn on
+   **Show advanced options** to show what was hidden (call result options, money, plan, activity log).
+6. **Manager** (30 s). Sign out, sign in as Rahul: Today, Calling and Team only, no ₹.
+7. **Caller Neha** (2 min). On the paired laptop as Neha (`app.html`): the **campaign picker** lists every open
+   calling list by purpose with "N waiting"; tap class **8th**: *Term 2 fees – Class 8* stays, and the untagged
+   lists stay too, marked "All classes". Pick **Course sales – Data Analytics**: **Shronit** is at the top
    (call back now), the card says *Source: a call to our office*. Type "number" in the answer search (or press
    `/`): **Where did you get my number?** answers "We got your number from a call to our office, on …".
    For the live call, the owner calls Shronit now (see "Live call").
-9. **Caller Ravi and Accounts** (2 min). As Ravi: *Oct fees – Class 10*, broken promises first; the lead card
-   shows the balance and last payment from the ledger and the due date; **Sunita Bhosale** promised ₹18,000
-   for today. Then, in another browser, sign in as **Kavita** at `admin.html`: only Fees and Reports. Search
-   "Bhosale", **Record a payment**: ₹18,000, mode UPI, reference `512345678901` (any 12 digits not used yet),
+8. **Caller Ravi and Accounts** (2 min). As Ravi: *Oct fees – Class 10*, missed promised dates first; the lead
+   card shows the balance and last payment and the due date; **Sunita Bhosale** promised ₹18,000 for today.
+   Then, in another browser (a phone is best), sign in as **Kavita** at `admin.html`: only Fees. Search
+   "Bhosale", **Record payment**: ₹18,000, mode UPI, reference `512345678901` (any 12 digits not used yet),
    today. The balance is 0, a receipt number shows, and the lead closes (paid). Back on Ravi's screen,
-   refresh: Sunita Bhosale has left his list. In Reports Kavita sees Fees collection only (no campaign or
-   caller filters).
+   refresh: Sunita Bhosale has left his list. Kavita's **Collection report** now counts the payment in
+   *Collected*, and so do the owner's Fees cards and *Collected today* on Today.
 
-Tip: in Reports pick the *Oct fees* campaign. Every fees lead's amount due is its student's balance, so
-"Total due" is what is still owed (the closed Sept campaign adds only what Class 9 parents still owe).
+Tip: in the Collection report, turn on advanced options to pick one calling list (*Oct fees*). Every fees
+person's amount due is their student's balance, so "Due now" is what is still owed.
 
 ## After the demo
 

@@ -647,11 +647,12 @@
     renderSummary();
   }
 
-  function card(c) {
-    return el('div', { className: 'fees-card' + (c.level ? ' ' + c.level : ''), id: 'fees-card-' + c.key }, [
-      el('div', { className: 'fees-card-label', text: c.label }),
-      el('div', { className: 'fees-card-value', text: c.value }),
-      el('div', { className: 'fees-card-sub', text: c.sub }),
+  // One card: the summary's (from S.feeCards, id fees-card-<key>) and the student page's (id given).
+  function card(label, value, sub, level, id) {
+    return el('div', { className: 'fees-card' + (level ? ' ' + level : ''), id: id || null }, [
+      el('div', { className: 'fees-card-label', text: label }),
+      el('div', { className: 'fees-card-value', text: value }),
+      el('div', { className: 'fees-card-sub', text: sub }),
     ]);
   }
 
@@ -660,7 +661,7 @@
     if (!box2) return;
     box2.textContent = '';
     if (!summary) return;
-    S.feeCards(summary, 'this month').forEach((c) => box2.appendChild(card(c)));
+    S.feeCards(summary, 'this month').forEach((c) => box2.appendChild(card(c.label, c.value, c.sub, c.level, 'fees-card-' + c.key)));
     const modes = collectedByMode({ by_mode: summary.collected.byMode });
     $('fees-modes').textContent = modes.length
       ? 'This month by mode: ' + modes.map((m) => m.label + ' ' + (m.amount === null || !summary.money ? plural(m.payments, 'payment', 'payments') : rupees2(m.amount))).join(' · ')

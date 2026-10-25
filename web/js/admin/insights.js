@@ -274,7 +274,7 @@
     const f = M.forecast(base, M.defaultPlan(base));
     out.appendChild(el('p', { className: 'muted small', text: 'Based on pace, pickup rate and promises kept. The range shows likely low to high.' }));
     const soFar = base.kind === 'amount'
-      ? 'Paid so far: ' + S.rupees(base.current) + ' (' + S.REPORTED_BY_CALLER + ')'
+      ? 'Paid so far, as parents said on calls: ' + S.rupees(base.current)
       : 'So far: ' + fmt(base.current);
     if (fc.money_hidden) out.appendChild(el('p', { className: 'money-note', text: 'Money is hidden for you, so this counts payments instead of amounts.' }));
 
@@ -339,7 +339,7 @@
   }
 
   function suggestionText(s) {
-    if (s.id === 'broken') return 'Call the ' + S.count(s.count) + ' broken promise' + (s.count === 1 ? '' : 's') + ' first';
+    if (s.id === 'broken') return 'Call again the ' + S.count(s.count) + (s.count === 1 ? ' parent' : ' parents') + ' who missed their promised date';
     if (s.id === 'evening') return 'Make ' + pct(s.share) + ' of calls at 7–9 pm (pickup ' + pct(s.pickupEvening) + ', other hours ' + pct(s.pickupDay) + ')';
     if (s.id === 'calls') return 'Add ' + S.count(s.extraCalls) + ' calls a day' + (s.reaches ? ' (reaches the target)' : '');
     return 'Add a caller (' + s.callers + ' in all)';
@@ -362,9 +362,17 @@
     wrap.appendChild(el('ul', { className: 'ins-gap-list' }, list.map((s) => el('li', null, [
       el('span', { text: suggestionText(s) }),
       el('span', { className: 'ins-gain', text: '+' + fmt(s.gain) }),
-      s.plan ? button('Try', () => { plan = Object.assign({}, s.plan); renderWhatIf(); $('ins-whatif').scrollIntoView({ block: 'nearest' }); }, 'ins-try') : null,
+      s.plan ? button('Try', () => {
+        plan = Object.assign({}, s.plan);
+        renderWhatIf();
+        $('ins-more').open = true;   // What-if is under More analysis
+        $('ins-whatif').scrollIntoView({ block: 'nearest' });
+      }, 'ins-try') : null,
     ]))));
-    wrap.appendChild(el('p', { className: 'muted small', text: 'Try moves the What-if sliders. Apply plan saves them on the calling list.' }));
+    wrap.appendChild(el('div', { className: 'row between ins-gap-foot' }, [
+      el('p', { className: 'muted small', text: 'Try shows the change in What-if (More analysis). Apply plan saves it on the calling list.' }),
+      button('Apply plan', applyPlan, 'primary', 'ins-apply-gap'),
+    ]));
     return wrap;
   }
 

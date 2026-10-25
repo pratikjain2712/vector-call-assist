@@ -396,6 +396,16 @@ function createFakeBackend(world) {
   });
   // End of Phase A.2: reports.
   const ADMIN_EMPTY = ['admin_weekly_summary', 'admin_rep_progress', 'list_supervisor_notes'];
+  // Simplify: a daily target from the Team tab's Edit panel (set_rep_target, 0004_admin_views.sql), kept in db.targets.
+  db.targets = [];
+  RPC.set_rep_target = (u, a) => {
+    const s = u && seatOf(u.id);
+    const x = db.seats.find((y) => y.id === a.p_seat);
+    if (!s || s.role !== 'admin' || !x || x.institute_id !== s.institute_id) return pgErr(403, '42501', 'admin access needed');
+    if (!['calls', 'connected_calls', 'talk_minutes'].includes(a.p_metric)) return pgErr(400, '22023', 'unknown metric');
+    db.targets.push({ seat_id: a.p_seat, metric: a.p_metric, daily_target: a.p_daily_target });
+    return json(200, null);
+  };
   // Phase A: insights (canned answers in fake-insights.js)
   const insights = createFakeInsights(world, { requireAdmin, json, pgErr });
   Object.assign(RPC, insights.RPC);
