@@ -880,6 +880,328 @@ function createFakeBackend(world) {
   }
   // end Phase A: whatsapp
 
+  // Phase A.2: fees. A stand-in for the ledger functions of 20261025130000_ledger_open_campaigns.sql (the SQL
+  // itself is tested in supabase/tests/ledger_test.sql): students, fee items, payments and reversals, balances,
+  // the import, fees campaigns from the ledger, ledger_collected and promises_vs_payments, with the same
+  // answer shapes and the role rules (readers: admins and Accounts; writers: owners and Accounts). Accounts
+  // always see money; admins follow db.reports.money. An Accounts login is added only by fees.addAccounts().
+  const fees = (() => {
+    const F = { students: [], items: [], payments: [], calls: [], scripts: [] };
+    db.fees = F;
+    const FEES_TYPE = CALL_TYPES.find((t) => t.key === 'fees');
+    const dayOf = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    const today = () => dayOf(new Date());
+    const shift = (days) => { const d = new Date(); d.setDate(d.getDate() + days); return dayOf(d); };
+    const isAcc = (s) => !!s && s.role === 'accounts';
+    const reader = (u) => { const s = u && seatOf(u.id); return s && (s.role === 'admin' || isAcc(s)) ? s : null; };
+    const manager = (u) => { const s = reader(u); return s && (isAcc(s) || (s.access_role || 'owner') === 'owner') ? s : null; };
+    const moneyFor = (s) => isAcc(s) || !!db.reports.money;
+    const denied = () => pgErr(403, '42501', 'only accounts and owners can change the ledger');
+    const notReader = () => pgErr(403, '42501', 'only accounts, owners and managers can see the ledger');
+    const bad = (m) => pgErr(400, '22023', m);
+    const amountOf = (v) => { const n = Number(String(v === null || v === undefined ? '' : v).replace(/[₹,\s]/g, '')); return Number.isFinite(n) ? n : NaN; };
+    const studentOf = (s, id) => F.students.find((x) => x.id === id && x.institute_id === s.institute_id) || null;
+    const live = (p) => !p.reverses_id && !F.payments.some((r) => r.reverses_id === p.id);
+    function balance(st, asOf) {
+      const at = asOf || today();
+      const items = F.items.filter((f) => f.student_id === st.id && !f.is_void);
+      const pays = F.payments.filter((p) => p.student_id === st.id);
+      const paid = pays.filter((p) => !p.reverses_id).reduce((t, p) => t + p.amount, 0) - pays.filter((p) => p.reverses_id).reduce((t, p) => t + p.amount, 0);
+      const total = items.reduce((t, f) => t + f.amount, 0);
+      const due = items.filter((f) => f.due_date <= at).reduce((t, f) => t + f.amount, 0);
+      const last = pays.filter(live).sort((a, b) => (b.paid_on + b.created_at).localeCompare(a.paid_on + a.created_at))[0] || null;
+      return { total_fees: total, total_due_to_date: due, paid, balance_due_now: due - paid, balance_total: total - paid,
+        last_payment_amount: last ? last.amount : null, last_payment_on: last ? last.paid_on : null, last_payment_mode: last ? last.mode : null };
+    }
+    const hide = (b, money) => (money ? b : { ...b, total_fees: null, total_due_to_date: null, paid: null, balance_due_now: null, balance_total: null, last_payment_amount: null });
+    // Open fees leads of the student follow the balance; nothing due closes them.
+    function syncLeads(st) {
+      (db.leads || []).filter((l) => l.student_id === st.id && ['new', 'callback', 'promised'].includes(l.status)).forEach((l) => {
+        const c = db.campaigns.find((x) => x.id === l.campaign_id);
+        const due = balance(st, c && c.fees_due_by && c.fees_due_by > today() ? c.fees_due_by : today()).balance_due_now;
+        l.amount_due = Math.max(0, due);
+        if (due <= 0) { l.status = 'done'; l.next_call_at = null; }
+      });
+    }
+    const newStudent = (inst, x) => {
+      const st = { id: crypto.randomUUID(), institute_id: inst, admission_no: null, name: '', class_label: null, section: null, board: null,
+        academic_year: null, parent_name: null, phone: null, alt_phone: null, status: 'active', source: 'import', admission_lead_id: null,
+        created_at: new Date().toISOString(), ...x };
+      F.students.push(st);
+      return st;
+    };
+    const addItem = (st, head, amount, due, year) => {
+      const f = { id: crypto.randomUUID(), institute_id: st.institute_id, student_id: st.id, head, amount, due_date: due, academic_year: year || st.academic_year,
+        is_void: false, void_reason: null, voided_at: null, created_at: new Date().toISOString() };
+      F.items.push(f);
+      return f;
+    };
+    const addPayment = (st, x) => {
+      const p = { id: crypto.randomUUID(), institute_id: st.institute_id, student_id: st.id, reference: null, note: null, reverses_id: null, opening: false,
+        recorded_by: null, created_at: new Date().toISOString(), ...x };
+      F.payments.push(p);
+      return p;
+    };
+    // Two students of institute A: Aarav owes 7,000 now (12,000 due, 5,000 paid in cash); Diya has paid everything.
+    const instA = world.institutes.a;
+    const aarav = newStudent(instA, { admission_no: 'A101', name: 'Aarav Shah', class_label: '8', section: 'A', board: 'CBSE', academic_year: '2026-27',
+      parent_name: 'Meena Shah', phone: '+919876500001' });
+    addItem(aarav, 'Term 1 tuition', 12000, shift(-30));
+    addItem(aarav, 'Term 2 tuition', 10000, shift(40));
+    addPayment(aarav, { amount: 5000, paid_on: shift(-20), mode: 'cash', recorded_by: world.seats.admin });
+    const diya = newStudent(instA, { admission_no: 'A102', name: 'Diya Rao', class_label: '9', section: 'B', board: 'ICSE', academic_year: '2026-27',
+      parent_name: 'Ravi Rao', phone: '+919876500002' });
+    addItem(diya, 'Term 1 tuition', 15000, shift(-30));
+    addPayment(diya, { amount: 15000, paid_on: shift(-25), mode: 'upi', reference: 'UTR000111', recorded_by: world.seats.admin });
+    F.calls.push({ outcome_id: crypto.randomUUID(), student_id: aarav.id, at: new Date(Date.now() - 2 * 864e5).toISOString(), campaign_id: null,
+      campaign_name: 'Fees October', lead_id: null, result_key: 'will_pay', result_label: 'Will pay on date', promised_date: shift(3),
+      promised_amount: 7000, caller: 'Rep 1', corrects_id: null, note: 'Will pay after salary' });
+    F.scripts.push({ id: crypto.randomUUID(), institute_id: instA, name: 'Fees reminder', call_type_id: FEES_TYPE.id, script_versions: [{ published: true }] });
+
+    const studentRow = (st, money) => ({ student_id: st.id, admission_no: st.admission_no, name: st.name, class_label: st.class_label, section: st.section,
+      board: st.board, academic_year: st.academic_year, parent_name: st.parent_name, phone: st.phone, alt_phone: st.alt_phone, status: st.status,
+      source: st.source, ...hide(balance(st), money), money_hidden: !money });
+    const label = (seatId) => (db.seats.find((x) => x.id === seatId) || {}).label || null;
+
+    Object.assign(RPC, {
+      accounts_students: (u, a) => {
+        const s = reader(u);
+        if (!s) return notReader();
+        const f = a.p_filters || {};
+        const q = String(f.search || '').trim().toLowerCase();
+        const qd = q.replace(/\D/g, '');
+        const sts = f.status || 'active';
+        const list = F.students.filter((st) => st.institute_id === s.institute_id
+          && (sts === 'all' || st.status === sts)
+          && (!f.class_label || String(st.class_label || '').toLowerCase() === String(f.class_label).toLowerCase())
+          && (!f.board || st.board === f.board)
+          && (!f.academic_year || st.academic_year === f.academic_year)
+          && (!f.only_due || balance(st).balance_due_now > 0)
+          && (!q || st.name.toLowerCase().includes(q) || String(st.admission_no || '').toLowerCase().startsWith(q)
+            || String(st.parent_name || '').toLowerCase().includes(q) || (qd.length >= 4 && (String(st.phone || '').includes(qd) || String(st.alt_phone || '').includes(qd)))))
+          .sort((x, y) => String(x.class_label).localeCompare(String(y.class_label), 'en', { numeric: true }) || String(x.section).localeCompare(String(y.section)) || x.name.localeCompare(y.name));
+        const money = moneyFor(s);
+        const off = Number(f.offset) || 0;
+        return json(200, list.slice(off, off + (Number(f.limit) || 500)).map((st) => ({ ...studentRow(st, money), total_rows: list.length })));
+      },
+      accounts_student_detail: (u, a) => {
+        const s = reader(u);
+        const st = s && studentOf(s, a.p_student);
+        if (!st) return pgErr(403, '42501', 'student not found');
+        const money = moneyFor(s);
+        const b = hide(balance(st), money);
+        return json(200, {
+          student: st, money_hidden: !money, balance: b,
+          fee_items: F.items.filter((f) => f.student_id === st.id).sort((x, y) => x.due_date.localeCompare(y.due_date))
+            .map((f) => ({ id: f.id, head: f.head, amount: money ? f.amount : null, due_date: f.due_date, academic_year: f.academic_year,
+              is_void: f.is_void, void_reason: f.void_reason, voided_at: f.voided_at, created_at: f.created_at })),
+          payments: F.payments.filter((p) => p.student_id === st.id).sort((x, y) => (y.paid_on + y.created_at).localeCompare(x.paid_on + x.created_at))
+            .map((p) => ({ id: p.id, amount: money ? p.amount : null, paid_on: p.paid_on, mode: p.mode, reference: p.reference, note: p.note,
+              recorded_by: p.recorded_by, recorded_by_label: label(p.recorded_by), created_at: p.created_at, reverses_id: p.reverses_id,
+              reversed_by: (F.payments.find((r) => r.reverses_id === p.id) || {}).id || null })),
+          calls: F.calls.filter((c) => c.student_id === st.id).map((c) => ({ ...c, promised_amount: money ? c.promised_amount : null })),
+        });
+      },
+      accounts_record_payment: (u, a) => {
+        const s = manager(u);
+        if (!s) return denied();
+        const st = studentOf(s, a.p_student);
+        if (!st) return pgErr(403, '42501', 'student not found');
+        const amount = Number(a.p_amount);
+        if (!(amount > 0)) return bad('the amount must be more than 0');
+        const mode = String(a.p_mode || '');
+        if (!['upi', 'cash', 'cheque', 'card', 'bank', 'other'].includes(mode)) return bad('mode must be upi, cash, cheque, card, bank or other');
+        const paidOn = a.p_paid_on || today();
+        if (paidOn > today()) return bad('the payment date cannot be in the future');
+        const ref = String(a.p_reference || '').trim() || null;
+        if (['upi', 'bank', 'card'].includes(mode) && !ref) return bad('a ' + mode + ' payment needs a reference (UTR or transaction number)');
+        if (ref && F.payments.some((p) => p.institute_id === s.institute_id && p.mode === mode && String(p.reference || '').toLowerCase() === ref.toLowerCase() && live(p))) {
+          return pgErr(409, '23505', 'this reference is already recorded for another payment');
+        }
+        const p = addPayment(st, { amount, paid_on: paidOn, mode, reference: ref, note: a.p_note || null, recorded_by: s.id });
+        syncLeads(st);
+        return json(200, p.id);
+      },
+      accounts_reverse_payment: (u, a) => {
+        const s = manager(u);
+        if (!s) return denied();
+        const p = F.payments.find((x) => x.id === a.p_payment && x.institute_id === s.institute_id);
+        if (!p) return pgErr(403, '42501', 'payment not found');
+        if (p.reverses_id) return bad('a reversal cannot be reversed');
+        if (F.payments.some((r) => r.reverses_id === p.id)) return bad('this payment is already reversed');
+        const reason = String(a.p_reason || '').trim();
+        if (!reason || reason.length > 300) return bad('write the reason (1 to 300 characters)');
+        const st = studentOf(s, p.student_id);
+        const r = addPayment(st, { amount: p.amount, paid_on: p.paid_on, mode: p.mode, reference: p.reference, note: reason, reverses_id: p.id, recorded_by: s.id });
+        syncLeads(st);
+        return json(200, r.id);
+      },
+      accounts_add_fee_item: (u, a) => {
+        const s = manager(u);
+        if (!s) return denied();
+        const st = studentOf(s, a.p_student);
+        if (!st) return pgErr(403, '42501', 'student not found');
+        if (!String(a.p_head || '').trim()) return bad('the fee needs a name');
+        if (!(Number(a.p_amount) > 0)) return bad('the amount must be more than 0');
+        if (!a.p_due_date) return bad('the fee needs a due date');
+        const f = addItem(st, String(a.p_head).trim(), Number(a.p_amount), a.p_due_date, a.p_academic_year);
+        syncLeads(st);
+        return json(200, f.id);
+      },
+      accounts_void_fee_item: (u, a) => {
+        const s = manager(u);
+        if (!s) return denied();
+        const f = F.items.find((x) => x.id === a.p_fee_item && x.institute_id === s.institute_id);
+        if (!f) return pgErr(403, '42501', 'fee item not found');
+        if (f.is_void) return bad('this fee item is already void');
+        const reason = String(a.p_reason || '').trim();
+        if (!reason) return bad('write the reason (1 to 300 characters)');
+        Object.assign(f, { is_void: true, void_reason: reason, voided_at: new Date().toISOString(), voided_by: s.id });
+        syncLeads(studentOf(s, f.student_id));
+        return json(200, null);
+      },
+      accounts_import_students: (u, a) => {
+        const s = manager(u);
+        if (!s) return denied();
+        const list = a.p_rows;
+        if (!Array.isArray(list)) return bad('students must be a list');
+        const out = { added: 0, updated: 0, skipped: 0, fee_items_added: 0, payments_added: 0, skipped_rows: [] };
+        const seen = new Set();
+        const BOARDS = { cbse: 'CBSE', icse: 'ICSE', state: 'State', 'state board': 'State', ib: 'IB', igcse: 'IGCSE', other: 'Other' };
+        list.forEach((r, i) => {
+          const skip = (reason) => { out.skipped_rows.push({ row: i + 1, reason }); };
+          const name = String(r.name || '').trim();
+          if (!name) return skip('no name');
+          const adm = String(r.admission_no || '').trim() || null;
+          if (adm && seen.has(adm.toLowerCase())) return skip('admission number twice in the file');
+          const board = r.board ? BOARDS[String(r.board).trim().toLowerCase()] : null;
+          if (r.board && !board) return skip('unknown board');
+          if (r.phone && !/^\+91\d{10}$/.test(r.phone)) return skip('bad phone number');
+          if (adm) seen.add(adm.toLowerCase());
+          let st = adm ? F.students.find((x) => x.institute_id === s.institute_id && String(x.admission_no || '').toLowerCase() === adm.toLowerCase()) : null;
+          const given = {};
+          ['class_label', 'section', 'academic_year', 'parent_name', 'phone', 'alt_phone'].forEach((k) => { if (r[k]) given[k] = r[k]; });
+          if (board) given.board = board;
+          if (st) { Object.assign(st, { name }, given); out.updated++; } else { st = newStudent(s.institute_id, { admission_no: adm, name, ...given }); out.added++; }
+          (r.fees || []).forEach((f) => {
+            const amount = amountOf(f.amount);
+            if (!F.items.some((x) => x.student_id === st.id && !x.is_void && x.head.toLowerCase() === String(f.head).toLowerCase() && x.amount === amount && x.due_date === f.due_date)) {
+              addItem(st, f.head, amount, f.due_date, f.academic_year);
+              out.fee_items_added++;
+            }
+          });
+          const paid = amountOf(r.paid_so_far || 0);
+          if (paid > 0 && !F.payments.some((p) => p.student_id === st.id && p.opening && live(p))) {
+            addPayment(st, { amount: paid, paid_on: r.paid_on || today(), mode: 'other', note: 'Opening balance import', opening: true, recorded_by: s.id });
+            out.payments_added++;
+          }
+          syncLeads(st);
+        });
+        out.skipped = out.skipped_rows.length;
+        F.lastImport = list;
+        return json(200, out);
+      },
+      accounts_create_fees_campaign: (u, a) => {
+        const s = reader(u);
+        if (!s || !(isAcc(s) || (s.access_role || 'owner') === 'owner' || (s.access_role === 'manager' && db.reports.money))) {
+          return pgErr(403, '42501', 'only accounts, an owner or a manager who can see money can make a fees campaign from the ledger');
+        }
+        const name = String(a.p_name || '').trim();
+        if (!name || name.length > 120) return bad('campaign name must be 1 to 120 characters');
+        if (a.p_min_due === null || Number(a.p_min_due) < 0) return bad('minimum due must be 0 or more');
+        const asOf = a.p_due_by && a.p_due_by > today() ? a.p_due_by : today();
+        const open = a.p_open_to_all !== false;
+        const c = { id: crypto.randomUUID(), institute_id: s.institute_id, name, call_type_id: FEES_TYPE.id, script_id: a.p_script || null,
+          start_date: null, end_date: null, daily_target: null, share_mode: open ? 'next_free' : 'equal', status: 'draft', open_to_all: open,
+          class_label: a.p_class_label || null, board: a.p_board || null, fees_due_by: a.p_due_by || null, created_at: new Date().toISOString() };
+        db.campaigns.push(c);
+        const due = F.students.filter((st) => st.institute_id === s.institute_id && st.status === 'active'
+          && (!c.class_label || String(st.class_label).toLowerCase() === c.class_label.toLowerCase()) && (!c.board || st.board === c.board)
+          && balance(st, asOf).balance_due_now > Number(a.p_min_due || 0) && st.phone);
+        due.forEach((st) => db.leads.push({ id: crypto.randomUUID(), institute_id: s.institute_id, campaign_id: c.id, name: st.parent_name || st.name,
+          phone: st.phone, status: 'new', assigned_seat_id: null, amount_due: balance(st, asOf).balance_due_now, student_id: st.id,
+          extra: { student: st.name, class: st.class_label }, created_at: new Date().toISOString() }));
+        if (a.p_start !== false && open && due.length) c.status = 'running';
+        F.lastCampaign = { id: c.id, leads: due.length, args: a };
+        return json(200, c.id);
+      },
+      ledger_collected: (u, a) => {
+        const s = reader(u);
+        if (!s || s.institute_id !== a.p_institute) return pgErr(403, '42501', 'only accounts, owners and managers can see collections');
+        if (!a.p_from || !a.p_to || a.p_from > a.p_to) return bad('the from date must be on or before the to date');
+        const money = moneyFor(s);
+        const all = F.payments.filter((p) => p.institute_id === s.institute_id && !p.reverses_id && !p.opening && p.paid_on >= a.p_from && p.paid_on <= a.p_to);
+        const ok = all.filter(live);
+        const modes = {};
+        ok.forEach((p) => { const m = modes[p.mode] || (modes[p.mode] = { mode: p.mode, payments: 0, amount: 0 }); m.payments++; m.amount += p.amount; });
+        return json(200, { from: a.p_from, to: a.p_to, campaign_id: a.p_campaign || null, money_hidden: !money, payments: ok.length,
+          reversed: all.length - ok.length, total: money ? ok.reduce((t, p) => t + p.amount, 0) : null,
+          by_mode: Object.values(modes).sort((x, y) => x.mode.localeCompare(y.mode)).map((m) => ({ ...m, amount: money ? m.amount : null })), by_day: [] });
+      },
+      promises_vs_payments: (u, a) => {
+        const s = reader(u);
+        const c = s && db.campaigns.find((x) => x.id === a.p_campaign && x.institute_id === s.institute_id);
+        if (!c) return pgErr(403, '42501', 'campaign not found');
+        const money = moneyFor(s);
+        const rows = F.calls.filter((x) => x.campaign_id === c.id && x.promised_date && x.promised_amount > 0).map((x) => {
+          const from = x.at.slice(0, 10);
+          const until = (() => { const d = new Date(x.promised_date + 'T00:00:00'); d.setDate(d.getDate() + 2); return dayOf(d); })();
+          const paid = F.payments.filter((p) => p.student_id === x.student_id && live(p) && p.paid_on >= from && p.paid_on <= until).reduce((t, p) => t + p.amount, 0);
+          const state = !x.student_id ? 'no_student' : paid >= x.promised_amount ? 'kept' : paid > 0 ? 'part_paid' : today() > until ? 'broken' : 'waiting';
+          return { outcome_id: x.outcome_id, lead_id: x.lead_id, lead_name: x.lead_name || '', student_id: x.student_id, caller: x.caller, promised_on: from,
+            promised_date: x.promised_date, promised_amount: money ? x.promised_amount : null, paid_amount: money ? paid : null, state };
+        });
+        const n = (st) => rows.filter((r) => r.state === st).length;
+        return json(200, { campaign_id: c.id, grace_days: 2, money_hidden: !money, promises: rows.length, kept: n('kept'), part_paid: n('part_paid'),
+          broken: n('broken'), waiting: n('waiting'), no_student: n('no_student'),
+          promised_amount: money ? rows.filter((r) => r.state !== 'no_student').reduce((t, r) => t + r.promised_amount, 0) : null,
+          paid_amount: money ? rows.reduce((t, r) => t + Math.min(r.paid_amount, r.promised_amount), 0) : null, rows });
+      },
+    });
+    // can_see_money: Accounts always; everyone else as before.
+    const moneyBefore = RPC.can_see_money;
+    RPC.can_see_money = (u, a) => {
+      const s = u && seatOf(u.id);
+      if (isAcc(s) && s.institute_id === a.inst) return json(200, true);
+      return moneyBefore(u, a);
+    };
+    // REST reads of the Fees tab: the fees call type, the fees campaigns it can read and the live scripts.
+    function route(p, method, url, u) {
+      if (method !== 'GET') return null;
+      const s = reader(u);
+      const eq = (k) => (url.searchParams.get(k) || '').replace(/^eq\./, '');
+      if (p === '/rest/v1/call_types' && eq('key') === 'fees') return json(200, u ? [{ id: FEES_TYPE.id, key: 'fees' }] : []);
+      if (p === '/rest/v1/campaigns' && url.searchParams.get('call_type_id')) {
+        const states = (url.searchParams.get('status') || '').replace(/^in\.\(|\)$/g, '').split(',').filter(Boolean);
+        return json(200, s ? db.campaigns.filter((c) => c.institute_id === s.institute_id && c.call_type_id === eq('call_type_id')
+          && (!states.length || states.includes(c.status)) && (s.role === 'admin' || c.open_to_all))
+          .map((c) => ({ id: c.id, name: c.name, status: c.status, call_type_id: c.call_type_id })) : []);
+      }
+      if (p === '/rest/v1/scripts' && (url.searchParams.get('select') || '') === 'id,name,call_type_id,script_versions(published)') {
+        return json(200, s ? F.scripts.filter((x) => x.institute_id === eq('institute_id') && x.institute_id === s.institute_id)
+          .map(({ id, name, call_type_id, script_versions }) => ({ id, name, call_type_id, script_versions })) : []);
+      }
+      return null;
+    }
+    return {
+      route,
+      aarav, diya,
+      // An Accounts login for institute A: { email }. Its password is the world's.
+      addAccounts() {
+        const email = 'e2e-accounts' + world.users.admin.email.slice(world.users.admin.email.indexOf('@'));
+        if (!db.users.some((x) => x.email === email)) {
+          const id = crypto.randomUUID();
+          db.users.push({ id, email, password: world.password });
+          db.seats.push({ id: crypto.randomUUID(), institute_id: instA, label: 'Fees office', role: 'accounts', access_role: 'accounts',
+            admin_kind: 'accounts', can_see_money: false, user_id: id, status: 'active' });
+        }
+        return { email };
+      },
+      balance,
+    };
+  })();
+  // end Phase A.2: fees
+
   async function handle(route) {
     const req = route.request();
     const url = new URL(req.url());
@@ -926,6 +1248,7 @@ function createFakeBackend(world) {
       if (ADMIN_EMPTY.includes(name)) return send(json(200, []));
       return send(pgErr(404, 'PGRST202', 'fake backend has no function ' + name));
     }
+    { const r = fees.route(p, method, url, u); if (r) return send(r); }   // Phase A.2: fees
     // Phase A: caller: one script by id (a campaign's script).
     if (p === '/rest/v1/scripts' && method === 'GET' && url.searchParams.get('id')) {
       const sc = db.callerScripts[(url.searchParams.get('id') || '').replace(/^eq\./, '')];
@@ -977,6 +1300,7 @@ function createFakeBackend(world) {
     whatsapp: wa,
     WA_LEADS,
     // end Phase A: whatsapp
+    fees,   // Phase A.2: fees (addAccounts, aarav, diya, balance; data in db.fees)
   };
 }
 

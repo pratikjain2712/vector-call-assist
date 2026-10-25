@@ -8,8 +8,8 @@
    The pure helpers below are also loaded by tests/web/admin-shell.test.js (Node, no DOM). */
 (function () {
   // ---------- tabs and routes ----------
-  // The seven tabs in the order they appear. A module with another id goes after these.
-  const TAB_ORDER = ['home', 'insights', 'campaigns', 'scripts', 'callers', 'reports', 'settings'];
+  // The tabs in the order they appear. A module with another id goes after these. (Phase A.2: fees added.)
+  const TAB_ORDER = ['home', 'insights', 'campaigns', 'scripts', 'callers', 'fees', 'reports', 'settings'];
   const DEFAULT_TAB = 'home';
   const TAB_ID = /^[a-z][a-z0-9-]{0,30}$/;
 

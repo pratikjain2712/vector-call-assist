@@ -29,6 +29,18 @@
   const mounted = new Map(); // tab id -> its container, once mounted
 
   const show = (section) => SECTIONS.forEach((s) => { $(s).hidden = s !== section; });
+
+  // Phase A.2: fees. An Accounts seat (role 'accounts') may use this page too, with the Fees and Reports tabs
+  // only (it changes its password from the Fees tab). A tab can also hide itself with visible(ctx), such as
+  // Fees for a manager who cannot see money.
+  const ACCOUNTS_TABS = ['fees', 'reports'];
+  const isAccountsSeat = (seat) => !!seat && (seat.role === 'accounts' || seat.access_role === 'accounts');
+  const mayUseAdmin = (seat) => S.isAdminRole(seat.role) || isAccountsSeat(seat);
+  function shownTabs() {
+    return S.tabs().filter((t) => !ctx || ((!isAccountsSeat(ctx.seat) || ACCOUNTS_TABS.includes(t.id))
+      && (typeof t.visible !== 'function' || t.visible(ctx))));
+  }
+  // end Phase A.2: fees
   const say = S.say;
 
   async function rpc(name, args) {
@@ -150,7 +162,7 @@
       return;
     }
     const row = Array.isArray(data) ? data[0] : data;
-    if (!row || !row.id || !S.isAdminRole(row.role)) { show('notadmin'); return; }
+    if (!row || !row.id || !mayUseAdmin(row)) { show('notadmin'); return; }   // Phase A.2: fees (Accounts)
     mySeat = row;
     const [institute, canSeeMoney] = await Promise.all([loadInstitute(row), loadMoneyAccess(row)]);
     ctx = makeContext(session.user.email || null, institute, canSeeMoney);
@@ -228,7 +240,7 @@
   function drawTabs() {
     const nav = $('tabs');
     nav.textContent = '';
-    S.tabs().forEach((t) => {
+    shownTabs().forEach((t) => {   // Phase A.2: fees
       nav.appendChild(S.el('a', { href: S.buildHash(t.id), 'data-tab': t.id, id: 'tab-link-' + t.id, text: t.label }));
     });
     nav.hidden = false;
@@ -245,7 +257,7 @@
   function route() {
     if (!ctx) return;
     const r = S.parseHash(location.hash);
-    const ids = S.tabs().map((t) => t.id);
+    const ids = shownTabs().map((t) => t.id);   // Phase A.2: fees
     const id = S.resolveTab(r, ids);
     if (!id) return;
     if (r.tab !== id) {

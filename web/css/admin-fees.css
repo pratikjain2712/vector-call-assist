@@ -1,0 +1,99 @@
+/* Fees tab (js/admin/fees.js), Phase A.2: summary cards, the students list with its totals row and pager,
+   one student (balance, payment form, payments, fee items, calls), the import and fees-campaign panels, and the
+   printable receipt. Colours come from the tokens in admin.css, so dark mode follows them. */
+.tab-fees .tab-head .small { margin: 2px 0 0; }
+.tab-fees .msg:empty { display: none; }
+
+/* summary and balance cards */
+.tab-fees .fees-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-top: 4px; }
+.tab-fees .fees-card { border: 1px solid var(--line); border-radius: var(--radius-card); padding: 14px 16px; background: var(--panel); min-width: 0; }
+.tab-fees .fees-card-label { font-size: 13px; color: var(--muted); }
+.tab-fees .fees-card-value { font-family: var(--font-display); font-weight: 800; font-size: 26px; color: var(--heading);
+  overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.tab-fees .fees-card.good .fees-card-value { color: var(--ok); }
+.tab-fees .fees-card.bad .fees-card-value { color: var(--danger); }
+.tab-fees .fees-card-sub { font-size: 12px; color: var(--muted); }
+.tab-fees #fees-modes { margin: 10px 0 0; }
+.tab-fees #fees-modes:empty { display: none; }
+
+.tab-fees .fees-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.tab-fees .fees-actions:empty { display: none; }
+
+/* students list */
+.tab-fees .fees-filters { align-items: flex-end; }
+.tab-fees .fees-filters .grow, .tab-fees .row .grow { flex: 1 1 220px; }
+.tab-fees label.check { flex-direction: row; align-items: center; gap: 8px; font-weight: 500; padding-bottom: 10px; }
+.tab-fees .fees-name { font-weight: 600; }
+.tab-fees td.due { color: var(--danger); font-weight: 600; }
+.tab-fees tfoot td { font-weight: 600; color: var(--heading); border-top: 2px solid var(--line); border-bottom: 0; }
+.tab-fees tfoot td.muted { font-weight: 400; color: var(--muted); }
+.tab-fees .fees-pager { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+
+/* one student */
+.tab-fees .fees-student { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+.tab-fees .fees-back { margin: 0; }
+.tab-fees .fees-student h2:focus, .tab-fees .fees-receipt h2:focus { outline: none; }
+.tab-fees .fees-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px 16px; margin: 0; }
+.tab-fees .fees-fact dt { font-size: 12px; color: var(--muted); }
+.tab-fees .fees-fact dd { margin: 0; color: var(--heading); overflow-wrap: anywhere; }
+.tab-fees .fees-pay, .tab-fees .fees-add { margin-top: 6px; }
+.tab-fees h4 { margin-top: 16px; }
+.tab-fees td.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+.tab-fees td.status { font-weight: 600; }
+.tab-fees tr.reversed td, .tab-fees tr.void td { color: var(--muted); }
+.tab-fees tr.reversed td.num, .tab-fees tr.void td.num { text-decoration: line-through; }
+.tab-fees tr.reversal td { color: var(--danger); background: var(--danger-soft); }
+.tab-fees tr.correction td { color: var(--muted); }
+.tab-fees tr.fees-reason td { background: var(--panel-soft); }
+.tab-fees tr.fees-reason .row { align-items: flex-end; }
+
+/* import and fees campaign */
+.tab-fees .drop { display: flex; flex-direction: column; gap: 4px; padding: 18px; border: 2px dashed var(--input-line);
+  border-radius: var(--radius-card); background: var(--panel-soft); cursor: pointer; }
+.tab-fees .drop:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tab-fees .drop-title { font-weight: 600; color: var(--heading); }
+.tab-fees .file-input { font-size: 13px; }
+.tab-fees #fees-imp-map h3 { margin-top: 16px; }
+.tab-fees .fees-map { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px 14px; margin-bottom: 12px; }
+.tab-fees .fees-map-fees { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+.tab-fees .fees-fee-group { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px 14px; align-items: end;
+  border: 1px solid var(--line); border-radius: var(--radius-button); padding: 10px 14px 14px; margin: 0; min-width: 0; }
+.tab-fees .fees-fee-group legend { font-weight: 600; font-size: 13px; padding: 0 4px; color: var(--heading); }
+.tab-fees #fees-imp-preview h3 { margin-top: 16px; }
+.tab-fees .fees-problems { margin: 6px 0 0; padding-left: 20px; font-size: 14px; color: var(--danger); }
+.tab-fees .fees-done { padding: 10px 14px; border-radius: var(--radius-button); background: var(--ok-soft); color: var(--heading); margin: 12px 0 0; }
+.tab-fees .fees-c-form { display: flex; flex-direction: column; gap: 12px; }
+.tab-fees .fees-c-form p { margin: 0; }
+
+/* receipt */
+.tab-fees .fees-receipt { max-width: 640px; }
+.tab-fees .fees-r-head { text-align: center; border-bottom: 2px solid var(--line); padding-bottom: 10px; margin-bottom: 12px; }
+.tab-fees .fees-r-inst { font-family: var(--font-display); font-weight: 800; font-size: 20px; color: var(--heading); }
+.tab-fees .fees-r-head h2 { margin: 4px 0 0; font-size: 16px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.tab-fees .fees-r-void { color: var(--danger); font-weight: 700; margin: 8px 0 0; }
+.tab-fees .fees-r-lines { margin: 0; }
+.tab-fees .fees-r-line { display: grid; grid-template-columns: 140px 1fr; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line-soft); }
+.tab-fees .fees-r-line dt { color: var(--muted); font-size: 13px; }
+.tab-fees .fees-r-line dd { margin: 0; color: var(--heading); overflow-wrap: anywhere; }
+.tab-fees #fees-r-amount { font-weight: 700; font-size: 18px; font-variant-numeric: tabular-nums; }
+.tab-fees .fees-r-foot { margin: 12px 0; }
+
+@media (max-width: 699px) {
+  .tab-fees .fees-card-value { font-size: 22px; }
+  .tab-fees tfoot tr { display: block; }
+  .tab-fees tfoot td { display: block; border: 0; padding: 2px 0; text-align: left; }
+  .tab-fees tfoot td:empty { display: none; }
+  .tab-fees .fees-r-line { grid-template-columns: 1fr; gap: 2px; }
+  .tab-fees .fees-pager button { flex: 1 1 auto; }
+}
+
+/* Printing a receipt: fees.js puts fees-printing on <body> just for the print, so these two rules start at
+   body (the only rules here that do). Everything but the receipt is hidden, in black on white. */
+@media print {
+  body.fees-printing * { visibility: hidden; }
+  body.fees-printing .tab-fees .fees-receipt, body.fees-printing .tab-fees .fees-receipt * { visibility: visible; }
+  .tab-fees .fees-receipt { position: absolute; left: 0; top: 0; width: 100%; max-width: none; border: 0; padding: 0;
+    background: #fff; color: #000; }
+  .tab-fees .fees-receipt dd, .tab-fees .fees-receipt dt, .tab-fees .fees-r-inst, .tab-fees .fees-r-head h2 { color: #000; }
+  .tab-fees .fees-r-actions { display: none; }
+}
