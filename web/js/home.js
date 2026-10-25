@@ -304,7 +304,7 @@
       $('rowPlan').textContent = planName(k) + (n >= TEAM_FROM ? ' (team price on request)' : '');
       $('rowSeat').textContent = inr(unit) + ' × ' + plural(n);
       $('rowYearLabel').textContent = yearly ? 'Billed yearly' : 'Billed monthly';
-      $('rowYear').textContent = yearly ? inr(perMonth * 12) + ' a year' : inr(perMonth) + ' a month';
+      $('rowYear').textContent = (yearly ? inr(perMonth * 12) + ' a year' : inr(perMonth) + ' a month') + ' + GST';
       // The chai line follows the real number: a cup of chai is about ₹10 to ₹15, so it is only claimed when true.
       var perDay = Math.max(1, Math.round(unit / 30));
       $('rowDay').textContent = 'about ₹' + perDay + ' a day' +
