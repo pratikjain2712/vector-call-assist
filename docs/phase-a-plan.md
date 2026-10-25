@@ -172,6 +172,12 @@ Decisions (25 Oct): payments are recorded by a new Accounts role (and owners), c
 - [ ] M · Reports, Home and Insights: collected = ledger payments; promised vs actually paid; promises kept measured against the ledger
 - [ ] S · Caller lead card shows the ledger: balance, last payment (amount, date, mode)
 - [ ] M · Demo data: students, fee plans and payments; campaigns tagged by class and board and open to all callers
+- [ ] L · Central template library: the Vector team writes and updates templates (AI on our side); every institute picks from the shared library (by purpose, class, board, language); new or changed templates reach all institutes without a release
+- [ ] S · AI script maker moves to the Vector team's own page; institutes get the library and the editor instead (pricing copy updated)
+- [ ] S · Placeholders filled on the call: {name}, {me}, {institute}, {student}, {class}, {board}, {amount_due}, {due_date}, {course}, {source}, {source_date}
+- [ ] M · Common answers in every script's search and helper column, e.g. "Where did you get my number?" (answered from the lead's source and date), "Is this a sales call?", "I'm on DND", "Don't call again"; the lead card shows where the lead came from
+- [ ] S · Cold-calling templates: permission first, honest source, easy exit
+
 
 ## Before release
 - [ ] Pilot with one institute on a fees campaign (2 callers, 1 week)
