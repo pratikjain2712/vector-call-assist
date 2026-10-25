@@ -10,6 +10,7 @@
 .tab-team #note-count.error { color: var(--danger); }
 .tab-team .stackform { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
 .tab-team .stackform label { width: 100%; }
+.tab-team #team-msg:empty { display: none; }
 .tab-team .team-notes { max-width: 260px; overflow-wrap: anywhere; color: var(--muted); font-size: 13px; }
 /* The Edit panel */
 .tab-team #caller-edit { border-color: var(--accent); }

@@ -159,7 +159,7 @@
     const msg = el('p', { className: 'msg', id: 'ix-test-msg', role: 'status' });
     const root = el('section', { className: 'panel ix-test', 'aria-labelledby': 'ix-test-title' }, [
       el('h2', { id: 'ix-test-title', text: 'Script test' }),
-      ownPicker ? el('label', { className: 'ix-test-pick' }, ['Campaign', picker]) : null,
+      ownPicker ? el('label', { className: 'ix-test-pick' }, ['Calling list', picker]) : null,
       body,
       msg,
     ]);

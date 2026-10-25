@@ -254,12 +254,12 @@
       const td = (node, label, cls) => el('td', { 'data-label': label, className: cls || '' }, [node]);
       const tags = tagsText(c);
       body.appendChild(el('tr', null, [
-        el('td', { 'data-label': 'Campaign', className: 'camp-name' }, [
+        el('td', { 'data-label': 'Calling list', className: 'camp-name' }, [
           el('span', { text: c.name }),
           tags ? el('span', { className: 'tag', text: tags }) : null,
         ]),
         td(typePill(c.call_type_key, c.call_type_label), 'Type'),
-        cell(c.script_name || 'No script', '', 'Script'),
+        cell(c.script_name || 'No call script', '', 'Call script'),
         td(progress(c.leads_called, c.leads_total), 'Called', 'num'),
         cell(callers || 'No callers yet', callers ? '' : 'muted', 'Callers'),
         cell(dateRange(c.start_date, c.end_date), '', 'Dates'),
@@ -764,7 +764,7 @@
     const previewBtn = button('Preview script', () => togglePreview(), 'linkish', 'camp-w-preview-btn');
     previewBtn.setAttribute('aria-expanded', 'false');
     previewBtn.setAttribute('aria-controls', 'camp-w-preview');
-    steps.appendChild(step(2, 'Script', hasScripts() ? [
+    steps.appendChild(step(2, 'Call script', hasScripts() ? [
       el('label', null, [scriptLabel, scriptSel]),
       el('p', { className: 'muted small', text: 'Callers always get the live version. A new version starts on their next call, never in the middle of one.' }),
       previewBtn,
