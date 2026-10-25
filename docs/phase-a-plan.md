@@ -155,6 +155,24 @@ Decisions on the open items: "Compare with" and "Apply plan" are built in Sprint
 - [ ] S · Live-Supabase run of the new browser tests (they ran on the fake backend only) and two callers asking `next_free_lead` at the same moment
 - [ ] S · Native Hindi review of the new caller strings (`camp.*` in `web/js/i18n.js`, drafts) and of the AI Hindi/Hinglish output
 
+## Phase A.2: open campaigns and the fee ledger (from the first demo, 25 Oct)
+Feedback from the first institute demo: admins have no time to attach callers to campaigns; callers should pick the campaign (e.g. "8th · CBSE · Fees"), the script follows the campaign, and fees need a real ledger, fed by admissions, so the institute sees what is actually paid, when and how.
+
+Decisions (25 Oct): payments are recorded by a new Accounts role (and owners), callers record promises only; UPI and cash are entered by hand with the reference (payment links and automatic matching later); every running campaign is open to every caller unless the admin restricts it; students come from an Excel import and from admissions confirmed in Vector.
+
+- [ ] S · Answer search (/) and the helper column work for every script, not only the built-in one
+- [ ] M · Open campaigns: campaigns open to all callers by default, optional restriction to chosen callers; tags for class (e.g. 8th) and board (CBSE, ICSE, State); open campaigns hand out the next free lead
+- [ ] M · Caller: campaign picker grouped and filtered by type, class and board; the campaign's script loads on pick
+- [ ] S · Admin: adding a caller is the only step; no campaign membership needed
+- [ ] L · Ledger: students (class, section, board, admission no, parents and phones), fee items (head, amount, due date, academic year), payments (amount, date, mode UPI/cash/cheque/card/bank, reference, recorded by; corrections by reversal, never deleted), balance per student
+- [ ] S · Accounts role: records payments, sees money and the ledger; cannot change callers or campaigns
+- [ ] M · Admin Fees tab: students list with filters and balance, student page (fees, payments, calls), record payment, receipt, Excel import of students and fees
+- [ ] M · Fees campaign from the ledger: pick class, board and due date; leads carry the student and the live balance; a recorded payment updates the lead and stops calls when nothing is due
+- [ ] S · Admission confirmed on a call becomes a student (fee plan added by Accounts)
+- [ ] M · Reports, Home and Insights: collected = ledger payments; promised vs actually paid; promises kept measured against the ledger
+- [ ] S · Caller lead card shows the ledger: balance, last payment (amount, date, mode)
+- [ ] M · Demo data: students, fee plans and payments; campaigns tagged by class and board and open to all callers
+
 ## Before release
 - [ ] Pilot with one institute on a fees campaign (2 callers, 1 week)
 - [ ] Check AI and WhatsApp cost logs after the pilot; set plan prices
