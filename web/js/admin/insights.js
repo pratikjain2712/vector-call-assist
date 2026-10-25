@@ -65,38 +65,45 @@
 
   // ---------- page ----------
 
+  // Inside Today: the weekly brief and the forecast ("What closes the gap", "Apply plan") are open; everything else
+  // (what-if, compare, best time, where calls end, promises kept, coaching, script test) is under "More analysis",
+  // closed until the person opens it (#today?more=1 opens it, the old #insights link does too).
   function build() {
-    box.appendChild(el('div', { className: 'tab-head ins-head' }, [
-      el('div', null, [
-        el('h1', { text: 'Insights' }),
-        el('p', { className: 'muted', text: 'What will happen, why, and what to change.' }),
-      ]),
+    box.appendChild(el('div', { className: 'row between ins-head' }, [
+      el('h2', { id: 'ins-title', text: 'This week' }),
       el('div', { className: 'row ins-filters' }, [
-        el('label', null, ['Campaign', el('select', { id: 'ins-campaign' })]),
-        el('label', null, ['Compare with', el('select', { id: 'ins-compare' })]),
+        el('label', null, ['Calling list', el('select', { id: 'ins-campaign' })]),
       ]),
     ]));
     box.appendChild(msg('ins-msg'));
-    box.appendChild(el('section', { id: 'insights-brief', className: 'ins-extra', 'aria-label': 'Weekly brief' }));
+    box.appendChild(el('section', { id: 'insights-brief', className: 'ins-extra', 'aria-label': 'This week in 4 lines' }));
     box.appendChild(el('div', { id: 'ins-empty', className: 'panel soon', hidden: true }, [
-      el('p', { text: 'No campaigns yet. Make a campaign on the Campaigns tab; its insights show here once calls come in.' }),
+      el('p', { text: 'No calling lists yet. Start one in Calling; the forecast shows here once calls come in.' }),
     ]));
     const body = el('div', { id: 'ins-body', className: 'ins-body', hidden: true });
-    body.appendChild(el('div', { className: 'ins-grid ins-grid-wide' }, [
-      el('section', { className: 'panel', id: 'ins-forecast', 'aria-labelledby': 'ins-forecast-title' }, [
-        el('h2', { id: 'ins-forecast-title', text: 'Forecast' }), el('div', { id: 'ins-forecast-out' }), msg('ins-forecast-msg'),
-      ]),
+    body.appendChild(el('section', { className: 'panel', id: 'ins-forecast', 'aria-labelledby': 'ins-forecast-title' }, [
+      el('h2', { id: 'ins-forecast-title', text: 'Forecast' }), el('div', { id: 'ins-forecast-out' }), msg('ins-forecast-msg'),
+    ]));
+    const more = el('details', { id: 'ins-more', className: 'panel ins-more' }, [
+      el('summary', { id: 'ins-more-toggle', text: 'More analysis' }),
+      el('p', { className: 'muted small', text: 'What-if, comparisons, best time to call, where calls end, promises kept, coaching and script tests.' }),
+    ]);
+    more.appendChild(el('div', { className: 'ins-grid ins-grid-wide' }, [
       el('section', { className: 'panel', id: 'ins-whatif', 'aria-labelledby': 'ins-whatif-title' }, [
         el('h2', { id: 'ins-whatif-title', text: 'What if…' }),
         el('p', { className: 'muted small', text: 'Move the sliders. The forecast updates.' }),
         el('div', { id: 'ins-whatif-out' }), msg('ins-whatif-msg'),
       ]),
-    ]));
-    body.appendChild(el('section', { className: 'panel', id: 'ins-compare-panel', 'aria-labelledby': 'ins-compare-title' }, [
-      el('h2', { id: 'ins-compare-title', text: 'Compare' }), el('div', { id: 'ins-compare-out' }), msg('ins-compare-msg'),
+      el('section', { className: 'panel', id: 'ins-compare-panel', 'aria-labelledby': 'ins-compare-title' }, [
+        el('div', { className: 'row between' }, [
+          el('h2', { id: 'ins-compare-title', text: 'Compare' }),
+          el('label', { className: 'ins-inline' }, ['With', el('select', { id: 'ins-compare' })]),
+        ]),
+        el('div', { id: 'ins-compare-out' }), msg('ins-compare-msg'),
+      ]),
     ]));
     // The heatmap gets the wider column: 14 hours of cells need about 560px before they scroll.
-    body.appendChild(el('div', { className: 'ins-grid ins-grid-wide' }, [
+    more.appendChild(el('div', { className: 'ins-grid ins-grid-wide' }, [
       el('section', { className: 'panel', id: 'ins-besttime', 'aria-labelledby': 'ins-besttime-title' }, [
         el('div', { className: 'row between' }, [
           el('h2', { id: 'ins-besttime-title', text: 'Best time to call: pickup rate' }),
@@ -108,7 +115,7 @@
         el('h2', { id: 'ins-ends-title', text: 'Where calls end in the script' }), el('div', { id: 'ins-ends-out' }), msg('ins-ends-msg'),
       ]),
     ]));
-    body.appendChild(el('div', { className: 'ins-grid' }, [
+    more.appendChild(el('div', { className: 'ins-grid' }, [
       el('section', { className: 'panel', id: 'ins-promises', 'aria-labelledby': 'ins-promises-title' }, [
         el('h2', { id: 'ins-promises-title', text: 'Are promises kept?' }), el('div', { id: 'ins-promises-out' }), msg('ins-promises-msg'),
       ]),
@@ -116,7 +123,8 @@
         el('h2', { id: 'ins-coaching-title', text: 'Caller coaching' }), el('div', { id: 'ins-coaching-out' }), msg('ins-coaching-msg'),
       ]),
     ]));
-    body.appendChild(el('section', { id: 'insights-abtest', className: 'ins-extra', 'aria-label': 'Script test' }));
+    more.appendChild(el('section', { id: 'insights-abtest', className: 'ins-extra', 'aria-label': 'Script test' }));
+    body.appendChild(more);
     box.appendChild(body);
 
     $('ins-campaign').addEventListener('change', () => pickCampaign($('ins-campaign').value, true));
@@ -201,7 +209,7 @@
   function pickCampaign(id, fromUser) {
     campaign = ((setup && setup.campaigns) || []).find((c) => c.id === id) || null;
     if (!campaign) return;
-    if (fromUser) history.replaceState(null, '', location.pathname + location.search + S.buildHash('insights', { campaign: id }));
+    if (fromUser) history.replaceState(null, '', location.pathname + location.search + S.buildHash('today', { campaign: id, more: $('ins-more').open ? '1' : null }));
     fillCompare();
     if (box) box.dispatchEvent(new CustomEvent('insights:campaign', { detail: { campaign } }));
     loadCampaign();
@@ -266,13 +274,13 @@
     const f = M.forecast(base, M.defaultPlan(base));
     out.appendChild(el('p', { className: 'muted small', text: 'Based on pace, pickup rate and promises kept. The range shows likely low to high.' }));
     const soFar = base.kind === 'amount'
-      ? 'Paid so far: ' + S.rupees(base.current) + ' (' + S.REPORTED_BY_CALLER + ')'
+      ? 'Paid so far, as parents said on calls: ' + S.rupees(base.current)
       : 'So far: ' + fmt(base.current);
     if (fc.money_hidden) out.appendChild(el('p', { className: 'money-note', text: 'Money is hidden for you, so this counts payments instead of amounts.' }));
 
     if (f.reason === 'no_end') {
       out.appendChild(el('p', { text: soFar + '.' }));
-      out.appendChild(el('p', { className: 'muted', text: 'Set an end date on the campaign to see a forecast.' }));
+      out.appendChild(el('p', { className: 'muted', text: 'Set an end date on the calling list to see a forecast.' }));
       return;
     }
     if (f.reason === 'no_data') {
@@ -331,7 +339,7 @@
   }
 
   function suggestionText(s) {
-    if (s.id === 'broken') return 'Call the ' + S.count(s.count) + ' broken promise' + (s.count === 1 ? '' : 's') + ' first';
+    if (s.id === 'broken') return 'Call again the ' + S.count(s.count) + (s.count === 1 ? ' parent' : ' parents') + ' who missed their promised date';
     if (s.id === 'evening') return 'Make ' + pct(s.share) + ' of calls at 7–9 pm (pickup ' + pct(s.pickupEvening) + ', other hours ' + pct(s.pickupDay) + ')';
     if (s.id === 'calls') return 'Add ' + S.count(s.extraCalls) + ' calls a day' + (s.reaches ? ' (reaches the target)' : '');
     return 'Add a caller (' + s.callers + ' in all)';
@@ -354,9 +362,17 @@
     wrap.appendChild(el('ul', { className: 'ins-gap-list' }, list.map((s) => el('li', null, [
       el('span', { text: suggestionText(s) }),
       el('span', { className: 'ins-gain', text: '+' + fmt(s.gain) }),
-      s.plan ? button('Try', () => { plan = Object.assign({}, s.plan); renderWhatIf(); $('ins-whatif').scrollIntoView({ block: 'nearest' }); }, 'ins-try') : null,
+      s.plan ? button('Try', () => {
+        plan = Object.assign({}, s.plan);
+        renderWhatIf();
+        $('ins-more').open = true;   // What-if is under More analysis
+        $('ins-whatif').scrollIntoView({ block: 'nearest' });
+      }, 'ins-try') : null,
     ]))));
-    wrap.appendChild(el('p', { className: 'muted small', text: 'Try moves the What-if sliders. Apply plan saves them on the campaign.' }));
+    wrap.appendChild(el('div', { className: 'row between ins-gap-foot' }, [
+      el('p', { className: 'muted small', text: 'Try shows the change in What-if (More analysis). Apply plan saves it on the calling list.' }),
+      button('Apply plan', applyPlan, 'primary', 'ins-apply-gap'),
+    ]));
     return wrap;
   }
 
@@ -380,12 +396,12 @@
     const f0 = M.forecast(base);
     if (!f0.ok) {
       out.appendChild(el('p', { className: 'muted', text: f0.reason === 'no_end'
-        ? 'What-if needs an end date on the campaign.' : 'What-if starts after ' + M.MIN_CALLS + ' calls.' }));
+        ? 'What-if needs an end date on the calling list.' : 'What-if starts after ' + M.MIN_CALLS + ' calls.' }));
       return;
     }
     const maxCallers = Math.max(10, base.callers * 2);
     const maxPer = Math.max(80, Math.ceil(base.perCaller * 2 / 10) * 10);
-    out.appendChild(slider('ins-wi-callers', 'Callers on this campaign', plan.callers, 1, maxCallers, 1,
+    out.appendChild(slider('ins-wi-callers', 'Callers on this list', plan.callers, 1, maxCallers, 1,
       (v) => { plan.callers = v; }, (v) => (v === base.callers ? String(v) : base.callers + ' → ' + v)));
     out.appendChild(slider('ins-wi-per', 'Calls per caller per day', Math.round(plan.perCaller), 1, maxPer, 1,
       (v) => { plan.perCaller = v; }, (v) => String(v)));
@@ -419,7 +435,7 @@
       else when = 'Does not reach the target by ' + dayText(base.endDate) + '.';
     }
     box2.appendChild(el('div', { className: 'small', text: when }));
-    box2.appendChild(el('div', { className: 'muted small', text: S.count(Math.round(M.paceFor(base, plan))) + ' calls a day for the campaign.' }));
+    box2.appendChild(el('div', { className: 'muted small', text: S.count(Math.round(M.paceFor(base, plan))) + ' calls a day for the calling list.' }));
   }
 
   // Saves the What-if values: callers (a note), the daily target and, when evening calls go up and the best-time
@@ -433,7 +449,7 @@
       title: 'Apply this plan to ' + campaign.name + '?',
       text: 'Daily target: ' + S.count(daily) + ' calls (' + callers + ' callers × ' + per + ' calls). ' +
         (hours ? 'Call hours: ' + M.callHoursText(hours) + '. ' : 'Call hours stay as they are. ') +
-        'The number of callers is saved as a note; add people to the campaign on the Campaigns tab.',
+        'The number of callers is saved as a note; add people to the list in Calling.',
       button: 'Apply plan',
       run: () => rpc('admin_apply_insights_plan', { p_campaign: campaign.id, p_callers: callers, p_calls_per_caller: per,
         p_evening_share: Math.round(plan.eveningShare * 100) / 100, p_daily_target: daily, p_call_hours: hours }),
@@ -585,7 +601,7 @@
     try {
       out.textContent = '';
       if (!hasScripts()) { addOn(out, 'See the script step where calls end, and fix that step.'); return; }
-      if (!campaign.script_id) { out.appendChild(el('p', { className: 'muted', text: 'This campaign has no script.' })); return; }
+      if (!campaign.script_id) { out.appendChild(el('p', { className: 'muted', text: 'This calling list has no call script.' })); return; }
       const rows = (await rpc('admin_insights_call_ends', args)) || [];
       if (seq !== loadSeq) return;
       const r = M.callEnds(rows);
@@ -616,7 +632,7 @@
     try {
       out.textContent = '';
       if (!PROMISE_TYPES.includes(campaign.call_type_key)) {
-        out.appendChild(el('p', { className: 'muted', text: 'Promises are tracked on fees and renewal campaigns.' }));
+        out.appendChild(el('p', { className: 'muted', text: 'Promises are tracked on fees and renewal calling lists.' }));
         return;
       }
       // Phase A.2: when the campaign's leads are linked to the fee ledger, a promise is kept when the payment is in
@@ -630,13 +646,13 @@
       const r = M.promiseBuckets(rows);
       const method = el('p', { className: 'ins-method small', id: 'ins-promises-method', 'data-method': lp ? 'ledger' : 'calls' });
       if (lp) {
-        method.textContent = 'Measured against the fee ledger: a promise is kept when the payment is recorded by ' +
+        method.textContent = 'Measured against Paid (office): a promise is kept when the fees office records the payment by ' +
           (Number(pvp.grace_days) || 2) + ' days after the promised date. ' + S.count(lp.kept) + ' kept, ' +
           S.count(lp.partPaid) + ' partly paid, ' + S.count(lp.broken) + ' broken, ' + S.count(lp.waiting) + ' still waiting.' +
           (lp.noStudent ? ' ' + S.count(lp.noStudent) + ' promises are not linked to a student, so they are not counted.' : '');
       } else {
         method.textContent = 'Measured on what callers reported: a promise is kept when a later call says it was ' +
-          (campaign.call_type_key === 'fees' ? 'paid' : 'renewed') + '. This campaign has no leads linked to the fee ledger.';
+          (campaign.call_type_key === 'fees' ? 'paid' : 'renewed') + '. This calling list has nobody linked to a student in Fees.';
       }
       out.appendChild(method);
       out.appendChild(el('p', { className: 'muted small', text: (campaign.call_type_key === 'fees' ? 'Paid' : 'Renewed') +
@@ -672,7 +688,7 @@
       coachRows = rows || [];
       out.textContent = '';
       const c = M.coaching(coachRows);
-      if (!c.rows.length) { out.appendChild(el('p', { className: 'muted', text: 'No callers on this campaign yet.' })); return; }
+      if (!c.rows.length) { out.appendChild(el('p', { className: 'muted', text: 'No callers on this list yet.' })); return; }
       out.appendChild(el('p', { className: 'muted small', text: 'Good results per 100 picked-up calls. Line = team average' + (c.team !== null ? ' (' + c.team + ')' : '') + '.' }));
       const max = Math.max(10, c.team || 0, ...c.rows.map((r) => r.per100 || 0));
       out.appendChild(C.barChart({
@@ -757,12 +773,14 @@
   S.registerTab({
     id: 'insights',
     label: 'Insights',
+    part: true,   // shown inside Today (js/admin/today.js)
     mount(container, c) {
       ctx = c;
       box = container;
       build();
     },
     show(params) {
+      if (params && params.more === '1') $('ins-more').open = true;
       const wanted = params && params.campaign;
       if (!setup) { loadSetup(wanted); return; }
       if (wanted && (!campaign || campaign.id !== wanted) && (setup.campaigns || []).some((x) => x.id === wanted)) {

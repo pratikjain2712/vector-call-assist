@@ -18,7 +18,7 @@
 (function () {
   // ---------- pure helpers ----------
 
-  const STATUS = { draft: 'Draft', running: 'Running', paused: 'Paused', closed: 'Closed' };
+  const STATUS = { draft: 'Not started', running: 'Running', paused: 'Paused', closed: 'Closed' };
   const statusLabel = (s) => STATUS[s] || String(s || '');
   const SHARE = { equal: 'Equal parts', next_free: 'One by one, whoever is free next' };
 
@@ -58,7 +58,7 @@
 
   // The buttons a campaign offers for its status: [{ status, label, danger }].
   function statusActions(status) {
-    if (status === 'draft') return [{ status: 'running', label: 'Start campaign' }, { status: 'closed', label: 'Close', danger: true }];
+    if (status === 'draft') return [{ status: 'running', label: 'Start calling' }, { status: 'closed', label: 'Close', danger: true }];
     if (status === 'running') return [{ status: 'paused', label: 'Pause' }, { status: 'closed', label: 'Close', danger: true }];
     if (status === 'paused') return [{ status: 'running', label: 'Resume' }, { status: 'closed', label: 'Close', danger: true }];
     return [];
@@ -88,7 +88,7 @@
   // f: { name, typeId, start, end, target, leads (ready rows), seats (ids), share, start: bool }.
   // Returns an error text, or '' when the form can be saved.
   function formProblem(f, starting) {
-    if (!String(f.name || '').trim()) return 'Give the campaign a name.';
+    if (!String(f.name || '').trim()) return 'Give the calling list a name.';
     if (String(f.name).trim().length > 120) return 'Keep the name under 120 characters.';
     if (!f.typeId) return 'Pick a type.';
     if (f.startDate && f.endDate && f.endDate < f.startDate) return 'The end date is before the start date.';
@@ -129,7 +129,7 @@
   function releaseProblem(v) {
     if (v === '' || v === null || v === undefined) return '';
     const n = Number(v);
-    return Number.isInteger(n) && n >= 1 && n <= 720 ? '' : 'Hours before follow-ups go back to the pool: a whole number from 1 to 720.';
+    return Number.isInteger(n) && n >= 1 && n <= 720 ? '' : 'Hours before follow-ups go to other callers: a whole number from 1 to 720.';
   }
 
   // "220 leads added. 12 bad numbers and 8 repeats skipped." from admin_add_leads counts.
@@ -172,7 +172,7 @@
   let pickers = {};        // lead pickers by prefix: { sheet, map, built }
   let xlsxLoading = null;
 
-  const NOT_YET = 'Not available yet: the database needs the campaigns update.';
+  const NOT_YET = 'Not available yet: the database needs the calling lists update.';
   const cell = (text, cls, label) => el('td', { text: text === null || text === undefined ? '' : String(text), className: cls || '', 'data-label': label || null });
   const head = (cols) => el('thead', null, [el('tr', null, cols.map((c) => el('th', { text: c[0], className: c[1] || '' })))]);
   const msg = (id) => el('p', { id, className: 'msg', role: 'status' });
@@ -192,19 +192,19 @@
   function build() {
     box.appendChild(el('div', { className: 'tab-head camp-head' }, [
       el('div', null, [
-        el('h1', { text: 'Campaigns' }),
-        el('p', { className: 'muted', text: 'A campaign is one script, one lead list and the callers who work on it.' }),
+        el('h2', { text: 'Calling lists' }),
+        el('p', { className: 'muted', text: 'A calling list is the people to call, the call script and who calls them.' }),
       ]),
-      el('a', { href: S.buildHash('campaigns', { new: '1' }), id: 'camp-new', className: 'button-link primary', text: '+ New campaign' }),
+      el('a', { href: S.buildHash('calling', { new: '1' }), id: 'camp-new', className: 'button-link primary', text: '+ New calling list' }),
     ]));
 
-    box.appendChild(el('section', { className: 'panel', id: 'camp-list', 'aria-label': 'All campaigns' }, [
+    box.appendChild(el('section', { className: 'panel', id: 'camp-list', 'aria-label': 'All calling lists' }, [
       msg('camp-list-msg'),
       el('div', { className: 'scroll' }, [el('table', { className: 'stack' }, [
-        head([['Campaign'], ['Type'], ['Script'], ['Called', 'num'], ['Callers'], ['Dates'], ['Status'], ['']]),
+        head([['Calling list'], ['Type'], ['Call script'], ['Called', 'num'], ['Callers'], ['Dates'], ['Status'], ['']]),
         el('tbody', { id: 'camp-body' }),
       ])]),
-      el('p', { id: 'camp-empty', className: 'muted', hidden: true, text: 'No campaigns yet. Start one with New campaign.' }),
+      el('p', { id: 'camp-empty', className: 'muted', hidden: true, text: 'No calling lists yet. Start one with New calling list.' }),
     ]));
 
     box.appendChild(el('section', { className: 'panel', id: 'camp-detail', hidden: true, 'aria-labelledby': 'camp-d-name' }));
@@ -224,7 +224,7 @@
       renderList();
     } catch (err) {
       if (my !== seq || !ctx) return;
-      say('camp-list-msg', err.message === NOT_YET ? NOT_YET : 'Could not load campaigns: ' + err.message, err.message !== NOT_YET);
+      say('camp-list-msg', err.message === NOT_YET ? NOT_YET : 'Could not load calling lists: ' + err.message, err.message !== NOT_YET);
     }
   }
 
@@ -254,17 +254,17 @@
       const td = (node, label, cls) => el('td', { 'data-label': label, className: cls || '' }, [node]);
       const tags = tagsText(c);
       body.appendChild(el('tr', null, [
-        el('td', { 'data-label': 'Campaign', className: 'camp-name' }, [
+        el('td', { 'data-label': 'Calling list', className: 'camp-name' }, [
           el('span', { text: c.name }),
           tags ? el('span', { className: 'tag', text: tags }) : null,
         ]),
         td(typePill(c.call_type_key, c.call_type_label), 'Type'),
-        cell(c.script_name || 'No script', '', 'Script'),
+        cell(c.script_name || 'No call script', '', 'Call script'),
         td(progress(c.leads_called, c.leads_total), 'Called', 'num'),
         cell(callers || 'No callers yet', callers ? '' : 'muted', 'Callers'),
         cell(dateRange(c.start_date, c.end_date), '', 'Dates'),
         el('td', { 'data-label': 'Status' }, [el('span', { className: 'status st-' + c.status, text: statusLabel(c.status) })]),
-        el('td', { 'data-label': '' }, [el('a', { href: S.buildHash('campaigns', { id: c.id }), text: 'Open',
+        el('td', { 'data-label': '' }, [el('a', { href: S.buildHash('calling', { id: c.id }), text: 'Open',
           'aria-label': 'Open ' + c.name })]),
       ]));
     });
@@ -284,20 +284,24 @@
       const [d] = await Promise.all([rpc('admin_campaign_detail', { p_campaign: id }), ensureSeats()]);
       if (my !== seq || !ctx) return;
       current = Array.isArray(d) ? d[0] : d;
-      if (!current) throw new Error('campaign not found');
+      if (!current) throw new Error('calling list not found');
       renderDetail();
     } catch (err) {
       if (my !== seq || !ctx) return;
       current = null;
       pane.textContent = '';
-      pane.appendChild(el('p', null, [el('a', { href: S.buildHash('campaigns'), text: '← All campaigns' })]));
-      pane.appendChild(el('p', { className: 'msg error', text: /not found/i.test(err.message) ? 'This campaign was not found.' : 'Could not open the campaign: ' + err.message }));
+      pane.appendChild(el('p', null, [el('a', { href: S.buildHash('calling'), text: '← All calling lists' })]));
+      pane.appendChild(el('p', { className: 'msg error', text: /not found/i.test(err.message) ? 'This calling list was not found.' : 'Could not open the calling list: ' + err.message }));
     }
   }
 
   function fact(label, value) {
     return el('div', { className: 'fact' }, [el('dt', { text: label }), el('dd', { text: value })]);
   }
+  // A fact, a field or a chip group shown only with "Show advanced options" on (simple mode hides it).
+  const advFact = (label, value) => { const f = fact(label, value); f.classList.add('adv'); return f; };
+  const advanced = (node) => { node.classList.add('adv'); return node; };
+  let wizardSeq = 0;
   function stat(label, value, cls) {
     return el('div', { className: 'stat ' + (cls || '') }, [el('span', { className: 'stat-n', text: S.count(value || 0) }), el('span', { className: 'stat-l', text: label })]);
   }
@@ -309,7 +313,7 @@
     const leads = c.leads || {};
     const closed = c.status === 'closed';
 
-    pane.appendChild(el('p', { className: 'back' }, [el('a', { href: S.buildHash('campaigns'), text: '← All campaigns' })]));
+    pane.appendChild(el('p', { className: 'back' }, [el('a', { href: S.buildHash('calling'), text: '← All calling lists' })]));
     pane.appendChild(el('div', { className: 'row between d-head' }, [
       el('h2', { id: 'camp-d-name', text: c.name }),
       el('span', { className: 'status st-' + c.status, id: 'camp-d-status', text: statusLabel(c.status) }),
@@ -318,11 +322,11 @@
       el('div', { className: 'fact' }, [el('dt', { text: 'Type' }), el('dd', null, [typePill(c.call_type_key, c.call_type_label)])]),
       fact('Script', c.script_name ? c.script_name + (c.script_live_version ? ' v' + c.script_live_version + ' (live)' : '') : 'No script'),
       fact('Dates', dateRange(c.start_date, c.end_date)),
-      fact('Daily target', c.daily_target ? S.count(c.daily_target) + ' calls' : 'None'),
-      fact('Share leads', SHARE[c.share_mode] || c.share_mode),
+      advFact('Daily target', c.daily_target ? S.count(c.daily_target) + ' calls' : 'None'),
+      advFact('Share leads', SHARE[c.share_mode] || c.share_mode),
       fact('Who can call', whoCanCall(c)),
       fact('Class and board', tagsText(c) || 'Any'),
-      fact('Follow-ups back to the pool', 'After ' + S.count(c.release_after_hours || 24) + ' working hours without a call'),
+      advFact('Follow-ups go to other callers', 'After ' + S.count(c.release_after_hours || 24) + ' working hours without a call'),
     ]));
 
     pane.appendChild(el('h3', { text: 'Progress' }));
@@ -358,7 +362,7 @@
       pane.appendChild(el('div', { className: 'actions d-actions' }, actions.map((a) =>
         button(a.label, () => askStatus(a), a.danger ? 'danger' : (a.status === 'running' ? 'primary' : ''), 'camp-d-' + (a.status === 'running' ? (c.status === 'draft' ? 'start' : 'resume') : a.status === 'paused' ? 'pause' : 'close')))));
     } else {
-      pane.appendChild(el('p', { className: 'muted', text: 'This campaign is closed. Its results stay in Reports.' }));
+      pane.appendChild(el('p', { className: 'muted', text: 'This calling list is closed. Its results stay in Reports.' }));
     }
     pane.appendChild(msg('camp-d-msg'));
 
@@ -378,8 +382,8 @@
       pane.appendChild(el('p', { className: 'muted', text: 'No callers yet.' }));
     }
     if (c.open_to_all === true) {
-      pane.appendChild(el('p', { className: 'muted small', id: 'camp-d-open-note', text: 'Every caller can work this campaign. A caller who stops calling for ' +
-        S.count(c.release_after_hours || 24) + ' working hours gets their due follow-ups taken back into the pool.' }));
+      pane.appendChild(el('p', { className: 'muted small', id: 'camp-d-open-note', text: 'Every caller can work this list. A caller who stops calling for ' +
+        S.count(c.release_after_hours || 24) + ' working hours has their due follow-ups given to other callers.' }));
     } else if (!closed) pane.appendChild(buildCallerEditor(c, callers));
     if (!closed) pane.appendChild(buildMoreLeads());
     if (!closed) pane.appendChild(buildDetailsEditor(c));
@@ -389,9 +393,9 @@
   function askStatus(a) {
     const c = current;
     const texts = {
-      running: c.status === 'draft' ? 'Callers on this campaign see it and start calling.' : 'Callers can call this campaign again.',
-      paused: 'Callers stop getting leads from this campaign until you resume it. Nothing is lost.',
-      closed: 'Callers stop calling this campaign for good. A closed campaign cannot be opened again. Results stay in Reports.',
+      running: c.status === 'draft' ? 'Callers see this list and start calling.' : 'Callers can call this list again.',
+      paused: 'Callers stop getting people from this list until you resume it. Nothing is lost.',
+      closed: 'Callers stop calling this list for good. A closed list cannot be opened again. Results stay in Reports.',
     };
     ctx.confirm({
       title: a.label + ': ' + c.name,
@@ -410,7 +414,7 @@
     const form = el('form', { className: 'subform', id: 'camp-d-callers-form' }, [
       el('h4', { text: 'Change callers' }),
       seatChecks('camp-d-seat', on),
-      el('label', null, ['Share leads', shareSelect('camp-d-share', c.share_mode, null)]),
+      el('label', { className: 'adv' }, ['Share leads', shareSelect('camp-d-share', c.share_mode, null)]),
       el('div', { className: 'row' }, [el('button', { type: 'submit', text: 'Save callers' })]),
       msg('camp-d-callers-msg'),
     ]);
@@ -419,7 +423,7 @@
       if (busy) return;
       const ids = checkedSeats('camp-d-seat');
       const mode = $('camp-d-share').value;
-      if (!ids.length && c.status === 'running') { say('camp-d-callers-msg', 'A running campaign needs at least one caller. Pause it first.', true); return; }
+      if (!ids.length && c.status === 'running') { say('camp-d-callers-msg', 'A running calling list needs at least one caller. Pause it first.', true); return; }
       busy = true;
       say('camp-d-callers-msg', 'Saving…');
       try {
@@ -473,7 +477,7 @@
       el('div', { className: 'row' }, [
         el('label', null, ['Start', el('input', { id: 'camp-d-startdate', type: 'date', value: c.start_date || '' })]),
         el('label', null, ['End', el('input', { id: 'camp-d-enddate', type: 'date', value: c.end_date || '' })]),
-        el('label', null, ['Daily target (calls)', el('input', { id: 'camp-d-target', type: 'number', min: '1', max: '10000', step: '1',
+        el('label', { className: 'adv' }, ['Daily target (calls)', el('input', { id: 'camp-d-target', type: 'number', min: '1', max: '10000', step: '1',
           inputmode: 'numeric', value: c.daily_target ? String(c.daily_target) : '' })]),
       ]),
       el('div', { className: 'row' }, [
@@ -482,13 +486,13 @@
           el('option', { value: 'some', text: 'Only chosen callers' }),
         ])]),
         el('label', null, ['Class', el('input', { id: 'camp-d-class', type: 'text', maxlength: '20', list: 'camp-class-list', value: c.class_label || '', placeholder: 'Any' })]),
-        el('label', null, ['Board', el('select', { id: 'camp-d-board' }, [el('option', { value: '', text: 'Any' })]
+        el('label', { className: 'adv' }, ['Board', el('select', { id: 'camp-d-board' }, [el('option', { value: '', text: 'Any' })]
           .concat(BOARDS.map((b) => el('option', { value: b, text: b }))))]),
       ]),
       el('datalist', { id: 'camp-class-list' }, CLASSES.map((x) => el('option', { value: x }))),
-      el('label', null, ['Return follow-ups to the pool after (working hours without a call)',
+      el('label', { className: 'adv' }, ['Give follow-ups to other callers after (working hours without a call)',
         el('input', { id: 'camp-d-release', type: 'number', min: '1', max: '720', step: '1', inputmode: 'numeric', value: String(c.release_after_hours || 24) })]),
-      el('p', { className: 'muted small', text: 'Call backs and promises stay with the caller who spoke to the parent. If that caller makes no call in this campaign for this many working hours (Sundays not counted), their due follow-ups go back to the pool for others.' }),
+      el('p', { className: 'muted small adv', text: 'Call backs and promises stay with the caller who spoke to the parent. If that caller makes no call in this list for this many working hours (Sundays not counted), their due follow-ups go to other callers.' }),
       el('div', { className: 'row' }, [el('button', { type: 'submit', text: 'Save details' })]),
       msg('camp-d-edit-msg'),
     ]);
@@ -529,7 +533,7 @@
   function seatChecks(prefix, on) {
     const list = seats.slice().sort((a, b) => (a.role === 'admin') - (b.role === 'admin') || String(a.label).localeCompare(String(b.label)));
     const wrap = el('fieldset', { className: 'checks', id: prefix + 's' }, [el('legend', { text: 'Who calls' })]);
-    if (!list.length) wrap.appendChild(el('p', { className: 'muted small', text: 'No active seats yet. Add seats in the Callers tab.' }));
+    if (!list.length) wrap.appendChild(el('p', { className: 'muted small', text: 'Nobody on your team yet. Add people on the Team tab.' }));
     list.forEach((s) => {
       wrap.appendChild(el('label', { className: 'check' }, [
         el('input', { type: 'checkbox', className: prefix, value: s.seat_id, checked: on.has(s.seat_id) }),
@@ -696,13 +700,13 @@
 
   function buildWizard() {
     return el('section', { className: 'panel', id: 'camp-wizard', hidden: true, 'aria-labelledby': 'camp-w-title' }, [
-      el('p', { className: 'back' }, [el('a', { href: S.buildHash('campaigns'), text: '← All campaigns' })]),
-      el('h2', { id: 'camp-w-title', text: 'New campaign' }),
+      el('p', { className: 'back' }, [el('a', { href: S.buildHash('calling'), text: '← All calling lists' })]),
+      el('h2', { id: 'camp-w-title', text: 'New calling list' }),
       el('form', { id: 'camp-w-form', novalidate: 'novalidate' }, [
         el('div', { className: 'steps', id: 'camp-w-steps' }),
         el('div', { className: 'row end' }, [
-          el('button', { type: 'button', id: 'camp-w-draft', text: 'Save as draft' }),
-          el('button', { type: 'submit', id: 'camp-w-start', text: 'Start campaign' }),
+          el('button', { type: 'button', id: 'camp-w-draft', text: 'Save, start later' }),
+          el('button', { type: 'submit', id: 'camp-w-start', text: 'Start calling' }),
         ]),
         msg('camp-w-msg'),
       ]),
@@ -725,12 +729,14 @@
   }
 
   async function openWizard() {
+    const my = ++wizardSeq;   // the form is built once, by the last call (the view can be shown twice while loading)
     const steps = $('camp-w-steps');
     steps.textContent = '';
     pickers = {};
     say('camp-w-msg', 'Loading…');
     await Promise.all([loadTypes(), loadScripts(), ensureSeats(), loadFeatures()]);
-    if (!ctx) return;
+    if (!ctx || my !== wizardSeq) return;
+    steps.textContent = '';
     say('camp-w-msg', '');
 
     const typeSel = el('select', { id: 'camp-w-type', required: true }, types.map((t) => el('option', { value: t.id, text: t.label })));
@@ -743,9 +749,9 @@
         el('label', null, ['Start', el('input', { id: 'camp-w-startdate', type: 'date' })]),
         el('label', null, ['End', el('input', { id: 'camp-w-enddate', type: 'date' })]),
       ]),
-      chipGroup('camp-w-class', 'Class (callers pick campaigns by class)', [['', 'Any']].concat(CLASSES.map((x) => [x, x]), [['custom', 'Other class']])),
+      chipGroup('camp-w-class', 'Class (callers pick calling lists by class)', [['', 'Any']].concat(CLASSES.map((x) => [x, x]), [['custom', 'Other class']])),
       el('label', { id: 'camp-w-class-other-field', hidden: true }, ['Other class', el('input', { id: 'camp-w-class-other', type: 'text', maxlength: '20', placeholder: 'Nursery, LKG, B.Com 1st year' })]),
-      chipGroup('camp-w-board', 'Board', [['', 'Any']].concat(BOARDS.map((b) => [b, b]))),
+      advanced(chipGroup('camp-w-board', 'Board', [['', 'Any']].concat(BOARDS.map((b) => [b, b])))),
     ]));
     steps.querySelectorAll('input[name="camp-w-class"]').forEach((i) => i.addEventListener('change', () => {
       const custom = $('camp-w-class-custom').checked;
@@ -758,7 +764,7 @@
     const previewBtn = button('Preview script', () => togglePreview(), 'linkish', 'camp-w-preview-btn');
     previewBtn.setAttribute('aria-expanded', 'false');
     previewBtn.setAttribute('aria-controls', 'camp-w-preview');
-    steps.appendChild(step(2, 'Script', hasScripts() ? [
+    steps.appendChild(step(2, 'Call script', hasScripts() ? [
       el('label', null, [scriptLabel, scriptSel]),
       el('p', { className: 'muted small', text: 'Callers always get the live version. A new version starts on their next call, never in the middle of one.' }),
       previewBtn,
@@ -776,16 +782,16 @@
     steps.appendChild(step(4, 'Who can call', [
       el('div', { className: 'who', role: 'radiogroup', 'aria-label': 'Who can call' }, [
         el('label', { className: 'check' }, [el('input', { type: 'radio', name: 'camp-w-who', id: 'camp-w-who-all', value: 'all', checked: true }),
-          el('span', null, [el('strong', { text: 'All callers' }), el('span', { className: 'muted small', text: ' Every caller sees this campaign and takes the next free lead. Nothing to set up.' })])]),
+          el('span', null, [el('strong', { text: 'All callers' }), el('span', { className: 'muted small', text: ' Every caller sees this list and takes the next person. Nothing to set up.' })])]),
         el('label', { className: 'check' }, [el('input', { type: 'radio', name: 'camp-w-who', id: 'camp-w-who-some', value: 'some' }),
           el('span', null, [el('strong', { text: 'Only these callers' }), el('span', { className: 'muted small', text: ' Pick who works on it.' })])]),
       ]),
       el('div', { id: 'camp-w-some', hidden: true }, [
         seatChecks('camp-w-seat', new Set()),
-        el('label', null, ['Share leads', shareSelect('camp-w-share', 'equal', null)]),
+        el('label', { className: 'adv' }, ['Share leads', shareSelect('camp-w-share', 'equal', null)]),
       ]),
-      el('label', null, ['Daily target (calls a day, all callers)', target]),
-      el('p', { className: 'muted small', id: 'camp-w-target-hint' }),
+      el('label', { className: 'adv' }, ['Daily target (calls a day, all callers)', target]),
+      el('p', { className: 'muted small adv', id: 'camp-w-target-hint' }),
     ]));
     steps.querySelectorAll('input[name="camp-w-who"]').forEach((i) => i.addEventListener('change', () => {
       $('camp-w-some').hidden = !$('camp-w-who-some').checked;
@@ -909,15 +915,15 @@
       }
       if (start) await rpc('admin_update_campaign', { p_campaign: id, p_status: 'running' });
       busy = false;
-      ctx.status((start ? 'Campaign started: ' : 'Draft saved: ') + f.name.trim() + '. ' + notes.join(' '));
-      ctx.navigate('campaigns', { id });
+      ctx.status((start ? 'Calling list started: ' : 'Saved, not started yet: ') + f.name.trim() + '. ' + notes.join(' '));
+      ctx.navigate('calling', { id });
     } catch (err) {
       busy = false;
       $('camp-w-draft').disabled = false;
       $('camp-w-start').disabled = false;
       if (!id) { say('camp-w-msg', err.message, true); return; }
-      ctx.status('The campaign was saved as a draft, but this step failed: ' + err.message + ' Finish it here.', true);
-      ctx.navigate('campaigns', { id });
+      ctx.status('The calling list was saved but not started, and this step failed: ' + err.message + ' Finish it here.', true);
+      ctx.navigate('calling', { id });
     }
   }
 
@@ -937,7 +943,8 @@
 
   S.registerTab({
     id: 'campaigns',
-    label: 'Campaigns',
+    label: 'Calling lists',
+    part: true,   // shown inside Calling (js/admin/calling.js)
     mount(container, c) {
       ctx = c;
       box = container;

@@ -1,4 +1,4 @@
-// The Campaigns tab: New campaign in four steps with a CSV lead sheet (bad numbers and repeats are counted
+// Calling > Calling lists (the old Campaigns tab): New calling list in four steps with a CSV lead sheet (bad numbers and repeats are counted
 // and skipped), the campaign page (progress, callers, pause and resume) and the list. Runs on the fake
 // backend; on the local stack it runs against the real functions (20261024100020_campaign_admin.sql).
 const { test, expect, env } = require('./fixtures');
@@ -21,21 +21,22 @@ async function signInAdmin(page, hash) {
   await page.locator('#gate-submit').click();
 }
 
-test('an admin starts a campaign from a lead sheet, then pauses and resumes it', async ({ page }) => {
+test('an admin starts a calling list from a lead sheet, then pauses and resumes it', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await signInAdmin(page, '#campaigns');
-  await expect(page.locator('#tab-link-campaigns')).toHaveAttribute('aria-current', 'page');
+  await signInAdmin(page, '#campaigns');   // an old link: Calling > Calling lists
+  await expect(page.locator('#tab-link-calling')).toHaveAttribute('aria-current', 'page');
+  await expect(page).toHaveURL(/#calling$/);
   await expect(page.locator('#camp-empty')).toBeVisible();
 
   await page.locator('#camp-new').click();
-  await expect(page).toHaveURL(/#campaigns\?new=1$/);
+  await expect(page).toHaveURL(/#calling\?new=1$/);
   await expect(page.locator('#camp-w-step1 > legend')).toHaveText('1 · Details');
   await expect(page.locator('#camp-w-step4 > legend')).toHaveText('4 · Who can call');
 
   // Starting needs a name, leads and a caller; the page says what is missing.
   await page.locator('#camp-w-start').click();
-  await expect(page.locator('#camp-w-msg')).toHaveText('Give the campaign a name.');
+  await expect(page.locator('#camp-w-msg')).toHaveText('Give the calling list a name.');
 
   // 1 · Details: the type list comes from the call types (Fees collection is picked first).
   await page.locator('#camp-w-name').fill('E2E Nov fees');
@@ -58,7 +59,11 @@ test('an admin starts a campaign from a lead sheet, then pauses and resumes it',
   await page.locator('#camp-w-start').click();
   await expect(page.locator('#camp-w-msg')).toHaveText('Pick at least one caller before you start.');
 
-  // Equal parts shows how many each.
+  // Equal parts shows how many each (sharing and the daily target are advanced options).
+  await expect(page.locator('#camp-w-share')).toBeHidden();
+  await page.locator('#account-toggle').click();
+  await page.locator('#account-advanced').check();
+  await page.locator('#account-toggle').click();
   await page.locator('#camp-w-seats label', { hasText: 'Rep 1' }).locator('input').check();
   await page.locator('#camp-w-seats label', { hasText: 'Rep 2' }).locator('input').check();
   await expect(page.locator('#camp-w-share option').first()).toHaveText('Equal parts (2 each)');
@@ -66,8 +71,8 @@ test('an admin starts a campaign from a lead sheet, then pauses and resumes it',
   await expect(page.locator('#camp-w-target-hint')).toHaveText('About 20 a day for each caller.');
 
   await page.locator('#camp-w-start').click();
-  await expect(page).toHaveURL(/#campaigns\?id=/);
-  await expect(page.locator('#status')).toContainText('Campaign started: E2E Nov fees. 4 leads added.');
+  await expect(page).toHaveURL(/#calling\?id=/);
+  await expect(page.locator('#status')).toContainText('Calling list started: E2E Nov fees. 4 leads added.');
   await expect(page.locator('#camp-d-name')).toHaveText('E2E Nov fees');
   await expect(page.locator('#camp-d-status')).toHaveText('Running');
   await expect(page.locator('#camp-d-progress')).toContainText('0 / 4');
@@ -93,7 +98,7 @@ test('an admin starts a campaign from a lead sheet, then pauses and resumes it',
 
   // The list shows the campaign with its progress, callers and dates.
   await page.locator('#camp-detail .back a').click();
-  await expect(page).toHaveURL(/#campaigns$/);
+  await expect(page).toHaveURL(/#calling$/);
   const row = page.locator('#camp-body tr', { hasText: 'E2E Nov fees' });
   await expect(row).toContainText('Fees collection');
   await expect(row).toContainText('0 / 6');
@@ -103,14 +108,14 @@ test('an admin starts a campaign from a lead sheet, then pauses and resumes it',
   expect(errors).toEqual([]);
 });
 
-test('New campaign fits a phone screen and a draft can be saved without leads', async ({ page }) => {
+test('New calling list fits a phone screen and can be saved, not started, without leads', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 740 });
-  await signInAdmin(page, '#campaigns?new=1');
+  await signInAdmin(page, '#calling?new=1');
   await expect(page.locator('#camp-w-name')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
   await page.locator('#camp-w-name').fill('E2E draft');
   await page.locator('#camp-w-draft').click();
-  await expect(page.locator('#camp-d-status')).toHaveText('Draft');
+  await expect(page.locator('#camp-d-status')).toHaveText('Not started');
   await expect(page.locator('#camp-d-start')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
   // Starting a draft without leads is refused by the server, and the message says why.

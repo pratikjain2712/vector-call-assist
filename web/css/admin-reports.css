@@ -66,8 +66,8 @@
 .tab-reports .fees-modes .mode-value { font-weight: 700; color: var(--heading); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .tab-reports .fees-modes .mode-count { font-size: 12px; color: var(--muted); }
 .tab-reports .fees-reported { margin: 12px 0 4px; padding: 8px 12px; border-left: 3px solid var(--line); color: var(--text); }
-.tab-reports #fees-ledger h3 { margin: 16px 0 0; }
-.tab-reports #fees-ledger h3:first-child { margin-top: 0; }
+.tab-reports #rp-fees-ledger h3 { margin: 16px 0 0; }
+.tab-reports #rp-fees-ledger h3:first-child { margin-top: 0; }
 .tab-reports td.status.ledger-good { color: var(--ok); }
 .tab-reports td.status.ledger-part { color: var(--warn); }
 .tab-reports td.status.ledger-late { color: var(--danger); }

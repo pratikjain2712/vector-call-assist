@@ -83,13 +83,13 @@ test('needs attention: the four rules in order, with links', () => {
   const items = H.attentionItems(SUMMARY, { canSeeMoney: true });
   assert.deepStrictEqual(items.map((i) => i.key), ['promises', 'phone-s1', 'script-sc1', 'idle-s2']);
   assert.strictEqual(items[0].text, '6 fee promises are due today.');
-  assert.strictEqual(items[0].detail, '₹54,000 in total, reported by caller.');
-  assert.deepStrictEqual([items[0].tab, items[0].params], ['reports', { report: 'fees' }]);
+  assert.strictEqual(items[0].detail, '₹54,000 in total. Parent said (not paid yet).');
+  assert.deepStrictEqual([items[0].tab, items[0].params], ['fees/report', null]);
   assert.strictEqual(items[1].text, 'Sana\'s phone is offline.');
   assert.ok(/Calls cannot start\.$/.test(items[1].detail));
-  assert.deepStrictEqual([items[1].tab, items[1].params], ['callers', { seat: 's1' }]);
+  assert.deepStrictEqual([items[1].tab, items[1].params], ['team', { seat: 's1' }]);
   assert.strictEqual(items[2].text, 'Vector sales v7: 40% of picked-up calls end at the Fees step.');
-  assert.deepStrictEqual(items[2].params, { script: 'sc1' });
+  assert.deepStrictEqual([items[2].tab, items[2].params], ['today/reports', { script: 'sc1' }]);
   assert.strictEqual(items[3].text, 'Amit has made no calls for 50 min.');
 });
 test('needs attention: no ₹ without money access', () => {

@@ -1,6 +1,6 @@
 // Phase A.2: the Fees tab and the Accounts role, on the fake backend (tests/e2e/fake-backend.js, block
 // "Phase A.2: fees"; the ledger SQL itself is tested in supabase/tests/ledger_test.sql). An Accounts seat sees
-// only Fees and Reports, records a UPI payment, sees the balance drop, prints a receipt, reverses the payment,
+// only Fees (with its collection report), records a UPI payment, sees the balance drop, prints a receipt, reverses the payment,
 // imports a small CSV and makes a fees campaign from the ledger.
 const { test, expect, env, isFake } = require('./fixtures');
 
@@ -17,22 +17,27 @@ async function signIn(page, email, hash) {
   await page.locator('#gate-submit').click();
 }
 
-test('Accounts: only Fees and Reports; a UPI payment, its receipt, its reversal, an import and a fees campaign', async ({ page, backend }) => {
+test('Accounts: only Fees; a UPI payment, its receipt, its reversal, an import and a fees calling list', async ({ page, backend }) => {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   const { email } = backend.fees.addAccounts();
   await signIn(page, email);
 
-  // Only Fees and Reports, and Fees opens first.
+  // Only Fees, and it opens first. The password is in the account menu.
   await expect(page.locator('#tab-link-fees')).toHaveAttribute('aria-current', 'page');
-  await expect(page.locator('#tabs a')).toHaveCount(2);
-  await expect(page.locator('#tab-link-reports')).toBeVisible();
-  for (const id of ['home', 'insights', 'campaigns', 'scripts', 'callers', 'settings']) await expect(page.locator('#tab-link-' + id)).toHaveCount(0);
-  await expect(page.locator('#fees-password')).toHaveAttribute('href', 'reset.html');
+  await expect(page.locator('#tabs a')).toHaveCount(1);
+  for (const id of ['today', 'calling', 'team', 'settings', 'home', 'reports', 'callers']) await expect(page.locator('#tab-link-' + id)).toHaveCount(0);
+  await page.locator('#account-toggle').click();
+  await expect(page.locator('#account-password')).toHaveAttribute('href', 'reset.html');
+  await expect(page.locator('#account-password')).toHaveText('Change your password');
+  await page.locator('#account-toggle').click();
 
   // Summary and list: Aarav owes 7,000 now; Diya has paid.
   await expect(page.locator('#fees-card-due')).toContainText('₹7,000');
-  await expect(page.locator('#fees-card-due')).toContainText('recorded in ledger');
+  await expect(page.locator('#fees-card-due')).toContainText('1 student');
+  await expect(page.locator('#fees-card-due')).toContainText('minus paid (office)');
+  // Kiran left the school: his payments this week count in Collected (the fees office recorded them).
+  await expect(page.locator('#fees-card-collected')).toContainText('Collected this month');
   await expect(page.locator('#fees-body tr')).toHaveCount(2);
   await expect(page.locator('#fees-foot')).toContainText('₹37,000');   // total fees 22,000 + 15,000
   await page.locator('#fees-f-due').check();
@@ -48,14 +53,14 @@ test('Accounts: only Fees and Reports; a UPI payment, its receipt, its reversal,
   await expect(page.locator('#fs-name')).toHaveText('Aarav Shah');
   await expect(page.locator('#fs-due')).toContainText('₹7,000');
   await expect(page.locator('#fs-calls')).toContainText('Will pay on date');
-  await expect(page.locator('#fs-calls')).toContainText('reported by caller');
+  await expect(page.locator('#fs-calls')).toContainText('parent said');
 
   // A UPI payment needs a reference.
   await page.locator('#fs-pay-amount').fill('2,000');
   await page.locator('#fs-pay-mode').selectOption('upi');
   await page.locator('#fs-pay button[type="submit"]').click();
   await expect(page.locator('#fs-pay-msg')).toContainText('reference');
-  expect(backend.db.fees.payments.length).toBe(2);
+  expect(backend.db.fees.payments.filter((p) => p.amount === 2000 && p.mode === 'upi')).toHaveLength(0);   // nothing recorded without a reference
   await page.locator('#fs-pay-ref').fill('UTR998877665544');
   await page.locator('#fs-pay button[type="submit"]').click();
   await expect(page.locator('#fs-msg')).toContainText('Payment of ₹2,000 recorded');
@@ -126,32 +131,52 @@ test('Accounts: only Fees and Reports; a UPI payment, its receipt, its reversal,
   await page.locator('#fees-c-script').selectOption({ label: 'Fees reminder' });
   await page.locator('#fees-c-form button[type="submit"]').click();
   await expect(page.locator('#fees-c-made')).toContainText('every caller can pick it');
-  await expect(page.locator('#fees-c-link')).toHaveCount(0);   // Accounts has no Campaigns tab
+  await expect(page.locator('#fees-c-link')).toHaveCount(0);   // Accounts has no Calling tab
   const made = backend.db.fees.lastCampaign;
   expect(made.args).toMatchObject({ p_name: 'Fees · 8 · CBSE', p_class_label: '8', p_board: 'CBSE', p_open_to_all: true, p_min_due: 0 });
   expect(made.args.p_script).toBe(backend.db.fees.scripts[0].id);
   expect(made.leads).toBe(3);   // Aarav, Kabir and Isha
   expect(backend.db.campaigns.find((c) => c.id === made.id).status).toBe('running');
 
-  // Reports: Fees collection from the ledger, for every campaign and caller; Accounts gets no campaign or caller
-  // filter (those lists are for owners and managers) and no error.
-  await page.locator('#tab-link-reports').click();
-  await expect(page.locator('#fees-msg')).toContainText('Collected and paid after a call');
+  // The collection report inside Fees: from the ledger, for every calling list and caller; Accounts gets no list
+  // or caller filter (those lists are for owners and managers) and no error. Old #reports links come here too.
+  await page.locator('#fees-view-report').click();
+  await expect(page).toHaveURL(/#fees\/report$/);
+  await expect(page.locator('#rp-fees-msg')).toContainText('Collected in these dates');
+  await expect(page.locator('#rp-picker')).toBeHidden();
+  await expect(page.locator('#rp-excel')).toBeVisible();
   await expect(page.locator('#rp-campaign')).toBeHidden();
   await expect(page.locator('#rp-caller')).toBeHidden();
   await expect(page.locator('#rp-msg')).toHaveText('');
   expect(errors).toEqual([]);
 });
 
-test('an owner sees the Fees tab with the other tabs, on a phone without sideways scrolling', async ({ page }) => {
-  await page.setViewportSize({ width: 375, height: 740 });
+test('an owner on a phone: students as cards, Record payment opens the payment form, nothing scrolls sideways', async ({ page, backend }) => {
+  backend.db.reports.money = true;
+  await page.setViewportSize({ width: 390, height: 844 });
   await signIn(page, env().users.admin.email, '#fees');
   await expect(page.locator('#tab-link-fees')).toHaveAttribute('aria-current', 'page');
-  await expect(page.locator('#tab-link-home')).toBeVisible();
+  await expect(page.locator('#tab-link-today')).toBeVisible();
   await expect(page.locator('#fees-body tr')).toHaveCount(2);
-  await expect(page.locator('#fees-password')).toHaveCount(0);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
-  await page.locator('#fees-body a', { hasText: 'Aarav Shah' }).click();
+  // A card: name, class and due now; the other columns are on the student's page.
+  const aarav = page.locator('#fees-body tr', { hasText: 'Aarav Shah' });
+  await expect(aarav.locator('td.fees-due')).toBeVisible();
+  await expect(aarav.locator('td.fees-class')).toBeVisible();
+  await expect(aarav.locator('td[data-label="Parent"]')).toBeHidden();
+  await expect(aarav.locator('td[data-label="Total fees"]')).toBeHidden();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await aarav.getByRole('link', { name: 'Record payment for Aarav Shah' }).click();
+  await expect(page).toHaveURL(/#fees\?student=.*&pay=1$/);
   await expect(page.locator('#fs-pay')).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+  await expect(page.locator('#fs-pay-amount')).toBeFocused();
+  const form = await page.locator('#fs-pay').boundingBox();
+  expect(form.x >= 0 && form.x + form.width <= 390).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
+test('a wide screen keeps the table, without the Record payment column', async ({ page }) => {
+  await signIn(page, env().users.admin.email, '#fees');
+  await expect(page.locator('#fees-body tr')).toHaveCount(2);
+  await expect(page.locator('#fees-body tr').first().locator('td[data-label="Parent"]')).toBeVisible();
+  await expect(page.locator('#fees-body .fees-pay').first()).toBeHidden();
 });

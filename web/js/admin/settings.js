@@ -1,9 +1,10 @@
 'use strict';
-/* Settings tab of the admin app (web/admin.html), Sprint 10: call types and their result buttons (add a type,
-   add or remove an institute's own results), the institute's name and time zone, "Hide money everywhere"
-   (owners), the plan (trial days left, seats, add-ons from my_features; AI drafts used for platform admins only), WhatsApp (an empty
-   section that js/admin/settings-whatsapp.js fills when it exists), the signed-in admin's password, the terms
-   they accepted, and the admin activity log.
+/* Settings tab of the admin app (web/admin.html), owners only. Simple by default: "Show advanced options" (the
+   switch at the top, also in the account menu), the institute's name and time zone, common answers and WhatsApp.
+   With advanced options on (class "adv"): call result options (kinds of call and their result options: add a
+   kind, add or remove an institute's own results), "Hide money everywhere", the plan (trial days left, seats,
+   add-ons from my_features; AI drafts used for platform admins only), the terms they accepted, and the activity
+   log. The password moved to the account menu (js/admin/shell.js).
    Reads: admin_list_call_types, admin_institute_settings (20261024100023; my_trial_status and my_features on an
    older database), admin_ai_usage (scripts feature; optional), my_terms_status, admin_audit_log. Writes:
    admin_upsert_call_type, admin_upsert_call_type_result, admin_set_institute, admin_set_hide_money. The database
@@ -46,7 +47,7 @@
   function planText(st) {
     const s = st || {};
     const seats = s.seat_limit !== undefined && s.seat_limit !== null
-      ? ' · ' + S.count(s.seats_used || 0) + ' of ' + S.count(s.seat_limit) + ' seats used' : '';
+      ? ' · ' + S.count(s.seats_used || 0) + ' of ' + S.count(s.seat_limit) + ' team members' : '';
     if (s.status === 'trial') {
       const d = s.trial_days_left;
       if (d === null || d === undefined) return 'Trial' + seats;
@@ -99,12 +100,12 @@
     'institute.created': 'Created the institute',
     'institute.trial_started': 'Started the free trial',
     'institute.changed': 'Changed the institute settings',
-    'seat.invited': 'Invited a person to a seat',
-    'seat.claimed': 'Joined a seat',
-    'seat.reassigned': 'Gave a seat to someone else',
-    'seat.revoked': 'Removed a person from a seat',
+    'seat.invited': 'Added a person to the team',
+    'seat.claimed': 'Joined the team',
+    'seat.reassigned': 'Gave a place to someone else',
+    'seat.revoked': 'Removed a person from the team',
     'seat.role_set': 'Changed a role',
-    'pairing.reset': 'Reset a phone or laptop pairing',
+    'pairing.reset': 'Signed out a phone or laptop',
     'device.registered': 'Paired a phone or laptop',
     'rep_target.set': 'Set a daily target',
     'supervisor_note.added': 'Added a note for a caller',
@@ -113,21 +114,21 @@
     'money.hidden': 'Turned on "Hide money everywhere"',
     'money.shown': 'Turned off "Hide money everywhere"',
     'money.exported': 'Downloaded a file with money',
-    'call_type.added': 'Added a call type',
-    'call_type.changed': 'Changed a call type',
-    'call_type_result.added': 'Added a result button',
-    'call_type_result.changed': 'Changed a result button',
-    'script.draft_saved': 'Saved a script draft',
-    'script.published': 'Published a script',
-    'campaign.created': 'Created a campaign',
-    'campaign.changed': 'Changed a campaign',
-    'campaign.running': 'Started a campaign',
-    'campaign.paused': 'Paused a campaign',
-    'campaign.closed': 'Closed a campaign',
-    'campaign.members_set': 'Changed the callers of a campaign',
-    'leads.added': 'Added leads',
-    'leads.moved': 'Moved leads',
-    'leads.shared': 'Shared leads among callers',
+    'call_type.added': 'Added a kind of call',
+    'call_type.changed': 'Changed a kind of call',
+    'call_type_result.added': 'Added a result option',
+    'call_type_result.changed': 'Changed a result option',
+    'script.draft_saved': 'Saved a call script (not ready)',
+    'script.published': 'Made a call script ready for callers',
+    'campaign.created': 'Made a calling list',
+    'campaign.changed': 'Changed a calling list',
+    'campaign.running': 'Started a calling list',
+    'campaign.paused': 'Paused a calling list',
+    'campaign.closed': 'Closed a calling list',
+    'campaign.members_set': 'Changed the callers of a calling list',
+    'leads.added': 'Added people to call',
+    'leads.moved': 'Moved calls to another caller',
+    'leads.shared': 'Shared calls among callers',
   };
 
   // One activity log row in plain English, such as 'Changed a role: Ravi to manager'.
@@ -193,23 +194,10 @@
     else say(id, (prefix || '') + (err && err.message ? err.message : 'Try again.'), true);
   }
 
-  // A reset link to the signed-in admin's own email. reset.html asks for the new password.
-  async function sendReset() {
-    const email = ctx && ctx.email;
-    if (!email) { say('reset-msg', 'Sign in again to send a reset link.', true); return; }
-    const btn = $('reset-send');
-    btn.disabled = true;
-    try {
-      const { error } = await ctx.client.auth.resetPasswordForEmail(email, {
-        redirectTo: new URL('reset.html', location.href).href,
-      });
-      if (error) throw error;
-      say('reset-msg', 'Reset link requested for ' + email + '. Check that inbox for the link.');
-    } catch (err) {
-      say('reset-msg', 'Could not send the reset link: ' + (err && err.message ? err.message : 'try again.'), true);
-    } finally {
-      btn.disabled = false;
-    }
+  // The switch follows "Show advanced options" when it changes elsewhere (the account menu).
+  function syncAdvanced(e) {
+    const sw = document.getElementById('settings-advanced-switch');
+    if (sw) sw.checked = !!(e && e.detail && e.detail.on);
   }
 
   // ---------- page ----------
@@ -221,28 +209,38 @@
   function build(box) {
     box.appendChild(el('div', { className: 'tab-head' }, [el('h1', { text: 'Settings' })]));
 
-    box.appendChild(el('div', { className: 'panel', id: 'settings-call-types' }, [
-      el('h2', { text: 'Call types and their result buttons' }),
+    // Simple by default: "Show advanced options" shows the rarely used sections (call result options, money,
+    // plan, terms, activity log) and the extra fields on other tabs. Per login, in this browser only.
+    box.appendChild(el('div', { className: 'panel', id: 'settings-advanced' }, [
+      el('label', { className: 'switch' }, [
+        el('input', { type: 'checkbox', id: 'settings-advanced-switch', role: 'switch', checked: S.isAdvanced() }),
+        el('span', { text: 'Show advanced options' }),
+      ]),
+      el('p', { className: 'muted small', text: 'Off: only what you need every day. On: also call result options, money, plan, terms, the activity log, and extra fields in Calling and Team. Remembered on this browser.' }),
+    ]));
+
+    box.appendChild(el('div', { className: 'panel adv', id: 'settings-call-types' }, [
+      el('h2', { text: 'Call result options' }),
       el('p', { id: 'ct-common', className: 'muted' }),
       msg('ct-msg'),
       el('ul', { id: 'ct-list', className: 'plain ct-list' }),
-      el('h3', { text: 'Add a result button' }),
+      el('h3', { text: 'Add a result option' }),
       el('form', { id: 'ctr-form', className: 'row wrap' }, [
-        el('label', null, ['Call type', el('select', { id: 'ctr-type' })]),
-        el('label', null, ['Button name', el('input', { id: 'ctr-label', type: 'text', maxlength: '60', placeholder: 'Asked for brochure', required: true })]),
+        el('label', null, ['Kind of call', el('select', { id: 'ctr-type' })]),
+        el('label', null, ['Option name', el('input', { id: 'ctr-label', type: 'text', maxlength: '60', placeholder: 'Asked for brochure', required: true })]),
         el('fieldset', { className: 'ct-flags' }, [
           el('legend', { text: 'The caller must give' }),
           check('ctr-date', 'A date'), check('ctr-amount', 'An amount (₹)'), check('ctr-reason', 'A reason'),
         ]),
         check('ctr-good', 'Counts as a good result'),
-        el('button', { type: 'submit', text: 'Add button' }),
+        el('button', { type: 'submit', text: 'Add option' }),
       ]),
       msg('ctr-msg'),
-      el('h3', { text: 'Add a call type' }),
-      el('p', { className: 'muted small', text: 'Every new type gets the five common buttons. Add its own buttons above after you add it.' }),
+      el('h3', { text: 'Add a kind of call' }),
+      el('p', { className: 'muted small', text: 'Every new kind gets the five common options. Add its own options above after you add it.' }),
       el('form', { id: 'ct-form', className: 'row wrap' }, [
-        el('label', null, ['Type name', el('input', { id: 'ct-label', type: 'text', maxlength: '60', placeholder: 'Parent meeting', required: true })]),
-        el('button', { type: 'submit', text: 'Add call type' }),
+        el('label', null, ['Name', el('input', { id: 'ct-label', type: 'text', maxlength: '60', placeholder: 'Parent meeting', required: true })]),
+        el('button', { type: 'submit', text: 'Add kind of call' }),
       ]),
       msg('ct-add-msg'),
     ]));
@@ -268,7 +266,7 @@
       el('ul', { id: 'answers-list', className: 'plain answers-list' }),
     ]));
 
-    box.appendChild(el('div', { className: 'panel', id: 'settings-money' }, [
+    box.appendChild(el('div', { className: 'panel adv', id: 'settings-money' }, [
       el('h2', { text: 'Money' }),
       el('label', { className: 'switch', id: 'hide-money-field' }, [
         el('input', { type: 'checkbox', id: 'hide-money', role: 'switch' }),
@@ -279,7 +277,7 @@
       msg('money-msg'),
     ]));
 
-    box.appendChild(el('div', { className: 'panel', id: 'settings-plan' }, [
+    box.appendChild(el('div', { className: 'panel adv', id: 'settings-plan' }, [
       el('h2', { text: 'Plan' }),
       el('p', { id: 'plan-text', className: 'plan-text' }),
       el('ul', { id: 'plan-features', className: 'plain' }),
@@ -290,24 +288,14 @@
     // Filled by js/admin/settings-whatsapp.js (the WhatsApp feature), when it exists.
     box.appendChild(el('section', { id: 'settings-whatsapp', 'aria-label': 'WhatsApp' }));
 
-    box.appendChild(el('div', { className: 'panel', id: 'login' }, [
-      el('h2', { text: 'Your password' }),
-      el('p', { className: 'muted', text: 'Change it now while you are signed in, or email yourself a reset link.' }),
-      el('div', { className: 'row' }, [
-        el('a', { className: 'button-link', href: 'reset.html', text: 'Change your password' }),
-        el('button', { type: 'button', id: 'reset-send', text: 'Email me a reset link', onClick: sendReset }),
-      ]),
-      el('p', { id: 'reset-msg', className: 'msg', role: 'status' }),
-    ]));
-
-    box.appendChild(el('div', { className: 'panel', id: 'settings-terms' }, [
+    box.appendChild(el('div', { className: 'panel adv', id: 'settings-terms' }, [
       el('h2', { text: 'Terms you accepted' }),
       el('ul', { id: 'terms-list', className: 'plain' }),
       msg('terms-msg'),
     ]));
 
-    box.appendChild(el('div', { className: 'panel', id: 'settings-log' }, [
-      el('h2', { text: 'Admin activity log' }),
+    box.appendChild(el('div', { className: 'panel adv', id: 'settings-log' }, [
+      el('h2', { text: 'Activity log' }),
       el('p', { className: 'muted small', text: 'What owners and managers changed, newest first.' }),
       el('div', { className: 'scroll' }, [el('table', { className: 'stack' }, [
         el('thead', null, [el('tr', null, ['When', 'Who', 'What'].map((h) => el('th', { text: h })))]),
@@ -328,6 +316,8 @@
     $('ctr-form').addEventListener('submit', (e) => { e.preventDefault(); addResult(); });
     $('inst-form').addEventListener('submit', (e) => { e.preventDefault(); saveInstitute(); });
     $('hide-money').addEventListener('change', askHideMoney);
+    $('settings-advanced-switch').addEventListener('change', () => S.setAdvanced($('settings-advanced-switch').checked));
+    document.addEventListener('vector:advanced', syncAdvanced);
     $('log-newer').addEventListener('click', () => loadLog(Math.max(0, logOffset - LOG_PAGE)));
     $('log-older').addEventListener('click', () => loadLog(logOffset + LOG_PAGE));
   }
@@ -351,7 +341,7 @@
     list.textContent = '';
     const common = [];
     types.forEach((t) => (t.results || []).forEach((r) => { if (r.common && !common.includes(r.label)) common.push(r.label); }));
-    $('ct-common').textContent = common.length ? 'Every call type has these: ' + common.join(' · ') + '.' : '';
+    $('ct-common').textContent = common.length ? 'Every kind of call has these: ' + common.join(' · ') + '.' : '';
     types.forEach((t) => {
       const own = (t.results || []).filter((r) => !r.common);
       const chips = el('ul', { className: 'ct-results' });
@@ -366,7 +356,7 @@
         }
         chips.appendChild(li);
       });
-      if (!own.length) chips.appendChild(el('li', { className: 'muted small', text: 'Only the common buttons so far.' }));
+      if (!own.length) chips.appendChild(el('li', { className: 'muted small', text: 'Only the common options so far.' }));
       const headBits = [el('h3', { text: t.label })];
       if (t.built_in) headBits.push(el('span', { className: 'ct-tag', text: 'Built in' }));
       if (!t.active) headBits.push(el('span', { className: 'ct-tag off', text: 'Off' }));
@@ -389,7 +379,7 @@
     try {
       const id = await rpc('admin_upsert_call_type', { p_id: null, p_label: c.text });
       $('ct-label').value = '';
-      say('ct-add-msg', 'Call type "' + c.text + '" added. Add its result buttons above.');
+      say('ct-add-msg', '"' + c.text + '" added. Add its result options above.');
       await loadTypes(typeof id === 'string' ? id : null);
     } catch (err) { report('ct-add-msg', err, 'Could not add the call type: '); }
   }
@@ -408,7 +398,7 @@
       });
       $('ctr-form').reset();
       $('ctr-type').value = typeId;
-      say('ctr-msg', 'Button "' + c.text + '" added to ' + (t ? t.label : 'the call type') + '. Callers see it on their next call.');
+      say('ctr-msg', 'Option "' + c.text + '" added to ' + (t ? t.label : 'that kind of call') + '. Callers see it on their next call.');
       await loadTypes(typeId);
     } catch (err) { report('ctr-msg', err, 'Could not add the button: '); }
   }
@@ -416,8 +406,8 @@
   function askToggleType(t) {
     ctx.confirm({
       title: (t.active ? 'Turn off "' : 'Turn on "') + t.label + '"',
-      text: t.active ? 'New campaigns cannot use this type. Campaigns that use it now keep working.'
-        : 'New campaigns can use this type again.',
+      text: t.active ? 'New calling lists cannot use it. Calling lists that use it now keep working.'
+        : 'New calling lists can use it again.',
       button: t.active ? 'Turn off' : 'Turn on',
       run: () => rpc('admin_upsert_call_type', { p_id: t.id, p_label: t.label, p_active: !t.active }),
       done: '"' + t.label + '" is ' + (t.active ? 'off.' : 'on.'),
@@ -428,7 +418,7 @@
   function askRemoveResult(t, r) {
     ctx.confirm({
       title: 'Remove "' + r.label + '" from ' + t.label,
-      text: 'Callers no longer see this button. Calls already saved with it keep it in the reports.',
+      text: 'Callers no longer see this option. Calls already saved with it keep it in the reports.',
       button: 'Remove',
       danger: true,
       run: () => rpc('admin_upsert_call_type_result', {
@@ -690,6 +680,7 @@
     unmount() {
       try { if (waModule && typeof waModule.unmount === 'function') waModule.unmount(); } catch (err) { /* cleared anyway */ }
       waModule = null;
+      document.removeEventListener('vector:advanced', syncAdvanced);
       ctx = null;
       types = [];
       inst = null;

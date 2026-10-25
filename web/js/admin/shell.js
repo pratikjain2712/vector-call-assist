@@ -1,9 +1,18 @@
 'use strict';
-/* Admin app shell (web/admin.html): sign-in gate, top bar (institute, signed-in email, sign out), the tab bar
-   and hash routes (#home, #callers …, so a tab can be linked and the back button works). Each tab is a module
-   in web/js/admin/<tab>.js that registered itself with VectorAdminShared.registerTab; the shell mounts a tab
-   the first time it is opened and keeps it (hidden) after that, so typing in a tab is not lost on a switch.
-   Sign-out unmounts every tab.
+/* Admin app shell (web/admin.html): sign-in gate, top bar (institute, the account menu, sign out), the tab bar
+   and hash routes (#today, #calling/scripts, #team?seat=…, so a tab can be linked and the back button works).
+   Five tabs at most (owner feedback: "too many options"): Today, Fees, Calling, Team, Settings, by role
+   (VectorAdminShared.tabsFor): an owner all five; a manager Today, Calling, Team and Fees only with money access;
+   Accounts Fees only. Old links (#home, #insights, #campaigns, #scripts, #callers, #reports) are sent to their
+   new place without a new history entry (VectorAdminShared.redirectRoute).
+   Each tab is a module in web/js/admin/<tab>.js that registered itself with VectorAdminShared.registerTab; the
+   shell mounts a tab the first time it is opened and keeps it (hidden) after that, so typing in a tab is not
+   lost on a switch. A module with part: true is a piece a tab shows inside itself (Today shows Home and Insights,
+   Calling shows Calling lists, Call scripts and Reports, Fees shows the fees collection report):
+   ctx.part(id, container) mounts it once (or moves it into that container), ctx.showPart(id, params, sub)
+   passes the route on. Sign-out unmounts every tab and part.
+   The account menu holds "Change your password", "Email me a reset link" and "Show advanced options" (simple by
+   default, remembered per login in this browser: VectorAdminShared.startAdvanced).
    The admin signs in by password or emailed link, like cloud.js. Reports are read with admin_* RPCs, which
    the database checks. Seat changes go through the seat-admin Edge Function (supabase/functions/seat-admin).
    Money: ctx.canSeeMoney comes from the can_see_money RPC; a database without it (or any error) gives false,
@@ -19,28 +28,25 @@
   const TITLE = 'Vector admin';
 
   let client = null;
-  let mySeat = null;         // my active seat row (admins only)
+  let mySeat = null;         // my active seat row (admins and Accounts)
   let ctx = null;            // what every tab gets; made again for each sign-in
   let activeUser = null;
   let claimedFor = null;     // user id whose invitation was tried this sign-in (cleared on sign-out)
   let pending = null;        // the action waiting for the in-page confirmation
   let current = null;        // id of the open tab
   let userNavigated = false; // true after a click on a tab, so focus moves to the new tab (not on first load)
-  const mounted = new Map(); // tab id -> its container, once mounted
+  const mounted = new Map(); // tab or part id -> its container, once mounted
 
   const show = (section) => SECTIONS.forEach((s) => { $(s).hidden = s !== section; });
 
-  // Phase A.2: fees. An Accounts seat (role 'accounts') may use this page too, with the Fees and Reports tabs
-  // only (it changes its password from the Fees tab). A tab can also hide itself with visible(ctx), such as
-  // Fees for a manager who cannot see money.
-  const ACCOUNTS_TABS = ['fees', 'reports'];
-  const isAccountsSeat = (seat) => !!seat && (seat.role === 'accounts' || seat.access_role === 'accounts');
+  const isAccountsSeat = (seat) => S.seatKind(seat) === 'accounts';
   const mayUseAdmin = (seat) => S.isAdminRole(seat.role) || isAccountsSeat(seat);
+  // The tabs of this person, in order: the role's tabs (tabsFor) that are registered, minus a tab that hides itself.
   function shownTabs() {
-    return S.tabs().filter((t) => !ctx || ((!isAccountsSeat(ctx.seat) || ACCOUNTS_TABS.includes(t.id))
-      && (typeof t.visible !== 'function' || t.visible(ctx))));
+    if (!ctx) return [];
+    return S.tabsFor(ctx.seat, ctx.canSeeMoney).map((id) => S.tab(id))
+      .filter((t) => t && !t.part && (typeof t.visible !== 'function' || t.visible(ctx)));
   }
-  // end Phase A.2: fees
   const say = S.say;
 
   async function rpc(name, args) {
@@ -74,7 +80,7 @@
     } catch (err) { throw new Error('No connection. Try again.'); }
     let out = {};
     try { out = await res.json(); } catch (err) { out = {}; }
-    if (!res.ok) throw new Error(out.error || 'The seat change did not go through. Try again.');
+    if (!res.ok) throw new Error(out.error || 'The change did not go through. Try again.');
     return out;
   }
 
@@ -102,6 +108,11 @@
     $('gate-form').addEventListener('submit', sendLink);
     $('gate-password').addEventListener('input', syncGateButton);
     $('signout').addEventListener('click', () => { client.auth.signOut(); });
+    $('account-reset').addEventListener('click', sendReset);
+    $('account-advanced').addEventListener('change', () => S.setAdvanced($('account-advanced').checked));
+    document.addEventListener('vector:advanced', (e) => { $('account-advanced').checked = !!(e.detail && e.detail.on); });
+    $('account').addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('account').open = false; $('account-toggle').focus(); } });
+    document.addEventListener('click', (e) => { if ($('account').open && !$('account').contains(e.target)) $('account').open = false; });
     $('confirm-go').addEventListener('click', runPending);
     $('confirm-cancel').addEventListener('click', cancelPending);
     $('confirm').addEventListener('keydown', (e) => { if (e.key === 'Escape') cancelPending(); });
@@ -141,6 +152,23 @@
     say('gate-msg', error ? gateMessage(error) : 'Check your email for the sign-in link.', !!error);
   }
 
+  // A reset link to the signed-in person's own email (the account menu). reset.html asks for the new password.
+  async function sendReset() {
+    const email = ctx && ctx.email;
+    if (!email) { say('account-msg', 'Sign in again to send a reset link.', true); return; }
+    const btn = $('account-reset');
+    btn.disabled = true;
+    try {
+      const { error } = await client.auth.resetPasswordForEmail(email, { redirectTo: new URL('reset.html', location.href).href });
+      if (error) throw error;
+      say('account-msg', 'Reset link sent to ' + email + '.');
+    } catch (err) {
+      say('account-msg', 'Could not send the reset link: ' + (err && err.message ? err.message : 'try again.'), true);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   async function onSession(session) {
     if (!session) {
       activeUser = null;
@@ -157,17 +185,20 @@
     await claimInvite(session.user.id);
     let data;
     try { data = await rpc('my_active_seat'); } catch (err) {
-      say('gate-msg', 'Could not check your seat: ' + err.message, true);
+      say('gate-msg', 'Could not check your access: ' + err.message, true);
       show('gate');
       return;
     }
     const row = Array.isArray(data) ? data[0] : data;
-    if (!row || !row.id || !mayUseAdmin(row)) { show('notadmin'); return; }   // Phase A.2: fees (Accounts)
+    if (!row || !row.id || !mayUseAdmin(row)) { show('notadmin'); return; }
     mySeat = row;
     const [institute, canSeeMoney] = await Promise.all([loadInstitute(row), loadMoneyAccess(row)]);
     ctx = makeContext(session.user.email || null, institute, canSeeMoney);
     $('institute').textContent = institute.name || '';
     $('institute').hidden = !institute.name;
+    $('account').hidden = false;
+    S.startAdvanced(session.user.email || session.user.id);
+    $('account-advanced').checked = S.isAdvanced();
     drawTabs();
     show('app');
     route();
@@ -210,11 +241,14 @@
       status: (text, isError) => say('status', text, isError),
       navigate,
       route: () => S.parseHash(location.hash),
+      tabIds: () => shownTabs().map((t) => t.id),
+      part: mountPart,
+      showPart,
       helpers: S,
     });
   }
 
-  // Unmounts every tab and clears the app, for a sign-out or a different login.
+  // Unmounts every tab and part and clears the app, for a sign-out or a different login.
   function signedOut() {
     mounted.forEach((box, id) => {
       const def = S.tab(id);
@@ -231,38 +265,81 @@
     $('tabs').textContent = '';
     $('who').textContent = '';
     $('institute').textContent = '';
+    $('account').hidden = true;
+    $('account').open = false;
+    say('account-msg', '');
     say('status', '');
     document.title = TITLE;
   }
 
-  // ---------- tabs and routes ----------
+  // ---------- tabs, parts and routes ----------
 
   function drawTabs() {
     const nav = $('tabs');
     nav.textContent = '';
-    shownTabs().forEach((t) => {   // Phase A.2: fees
+    const list = shownTabs();
+    nav.setAttribute('data-count', String(list.length));
+    document.body.classList.toggle('one-tab', list.length < 2);
+    list.forEach((t) => {
       nav.appendChild(S.el('a', { href: S.buildHash(t.id), 'data-tab': t.id, id: 'tab-link-' + t.id, text: t.label }));
     });
     nav.hidden = false;
   }
 
-  // Opens a tab from code, such as a "See results" button. Adds a history entry, so Back returns.
+  // Opens a tab from code, such as a "See results" button. Adds a history entry, so Back returns. An old tab id
+  // ('campaigns', 'reports' …) goes straight to its new place. tabId may name a sub-view: 'calling/scripts'.
   function navigate(tabId, params) {
-    const hash = S.buildHash(tabId, params);
+    const parsed = S.parseHash('#' + tabId);
+    const r = { tab: parsed.tab, sub: parsed.sub, params: params || {} };
+    const moved = S.redirectRoute(r, { accounts: ctx && isAccountsSeat(ctx.seat) });
+    const hash = S.routeHash(moved || r);
     if (location.hash === hash) route();
     else location.hash = hash;
   }
 
-  // Shows the tab named in the address (mounting it the first time), or Home for anything else.
+  // A part (a module with part: true) inside a tab's container: mounted the first time, moved there after.
+  // Returns the part's box, or null when there is no such part.
+  function mountPart(id, container) {
+    const def = S.tab(id);
+    if (!def || !ctx) return null;
+    let box = mounted.get(id);
+    if (!box) {
+      box = S.el('div', { id: 'tab-' + id, className: 'part tab-' + id });
+      container.appendChild(box);
+      mounted.set(id, box);
+      try { def.mount(box, ctx); } catch (err) {
+        box.textContent = '';
+        box.appendChild(S.el('p', { className: 'msg error', text: 'This part could not open: ' + err.message }));
+      }
+    } else if (box.parentNode !== container) {
+      container.appendChild(box);
+    }
+    box.hidden = false;
+    return box;
+  }
+  function showPart(id, params, sub) {
+    const def = S.tab(id);
+    if (!def || typeof def.show !== 'function' || !mounted.has(id)) return;
+    try { def.show(params || {}, sub || null); } catch (err) { say('status', err.message, true); }
+  }
+
+  // Shows the tab named in the address (mounting it the first time), or the first tab for anything else.
   function route() {
     if (!ctx) return;
-    const r = S.parseHash(location.hash);
-    const ids = shownTabs().map((t) => t.id);   // Phase A.2: fees
+    let r = S.parseHash(location.hash);
+    const moved = S.redirectRoute(r, { accounts: isAccountsSeat(ctx.seat) });
+    if (moved) {
+      // An old link: rewrite the address to the new place, without a new history entry.
+      r = moved;
+      history.replaceState(null, '', location.pathname + location.search + S.routeHash(r));
+    }
+    const ids = shownTabs().map((t) => t.id);
     const id = S.resolveTab(r, ids);
     if (!id) return;
     if (r.tab !== id) {
-      // An unknown tab, an empty address or a sign-in link's leftovers: show Home without adding a history entry.
+      // An unknown tab, an empty address or a sign-in link's leftovers: show the first tab without a history entry.
       history.replaceState(null, '', location.pathname + location.search + S.buildHash(id));
+      r = { tab: id, sub: null, params: {} };
     }
     const def = S.tab(id);
     let box = mounted.get(id);
@@ -277,7 +354,8 @@
         box.appendChild(S.el('p', { className: 'msg error', text: 'This tab could not open: ' + err.message }));
       }
     }
-    mounted.forEach((b, key) => { b.hidden = key !== id; });
+    // Tabs are the sections in #panels; parts live inside a tab and show with it.
+    Array.from($('panels').children).forEach((b) => { if (b.classList.contains('tab-panel')) b.hidden = b !== box; });
     document.querySelectorAll('#tabs a[data-tab]').forEach((a) => {
       if (a.getAttribute('data-tab') === id) a.setAttribute('aria-current', 'page');
       else a.removeAttribute('aria-current');
@@ -286,7 +364,7 @@
     if (current !== id) say('status', '');
     current = id;
     if (typeof def.show === 'function') {
-      try { def.show(r.tab === id ? r.params : {}); } catch (err) { say('status', err.message, true); }
+      try { def.show(r.params || {}, r.sub || null); } catch (err) { say('status', err.message, true); }
     }
     if (userNavigated) {
       userNavigated = false;

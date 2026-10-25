@@ -396,6 +396,16 @@ function createFakeBackend(world) {
   });
   // End of Phase A.2: reports.
   const ADMIN_EMPTY = ['admin_weekly_summary', 'admin_rep_progress', 'list_supervisor_notes'];
+  // Simplify: a daily target from the Team tab's Edit panel (set_rep_target, 0004_admin_views.sql), kept in db.targets.
+  db.targets = [];
+  RPC.set_rep_target = (u, a) => {
+    const s = u && seatOf(u.id);
+    const x = db.seats.find((y) => y.id === a.p_seat);
+    if (!s || s.role !== 'admin' || !x || x.institute_id !== s.institute_id) return pgErr(403, '42501', 'admin access needed');
+    if (!['calls', 'connected_calls', 'talk_minutes'].includes(a.p_metric)) return pgErr(400, '22023', 'unknown metric');
+    db.targets.push({ seat_id: a.p_seat, metric: a.p_metric, daily_target: a.p_daily_target });
+    return json(200, null);
+  };
   // Phase A: insights (canned answers in fake-insights.js)
   const insights = createFakeInsights(world, { requireAdmin, json, pgErr });
   Object.assign(RPC, insights.RPC);
@@ -1312,6 +1322,17 @@ function createFakeBackend(world) {
       campaign_name: 'Fees October', lead_id: null, result_key: 'will_pay', result_label: 'Will pay on date', promised_date: shift(3),
       promised_amount: 7000, caller: 'Rep 1', corrects_id: null, note: 'Will pay after salary' });
     F.scripts.push({ id: crypto.randomUUID(), institute_id: instA, name: 'Fees reminder', call_type_id: FEES_TYPE.id, script_versions: [{ published: true }] });
+    // Kiran left the school this week after paying: not in the list of active students and owes nothing, but the
+    // payments of the last days count in "Collected" (UPI, bank, cash, and one cash payment reversed).
+    const kiran = newStudent(instA, { admission_no: 'A103', name: 'Kiran Left', class_label: '10', section: 'A', board: 'CBSE', academic_year: '2026-27',
+      parent_name: 'Sunil Left', phone: '+919876500003', status: 'left' });
+    addItem(kiran, 'Term 1 tuition', 18000, shift(-30));
+    addPayment(kiran, { amount: 5000, paid_on: shift(-3), mode: 'upi', reference: 'UTR000301', recorded_by: world.seats.admin });
+    addPayment(kiran, { amount: 10000, paid_on: shift(-2), mode: 'bank', reference: 'UTR000302', recorded_by: world.seats.admin });
+    addPayment(kiran, { amount: 2000, paid_on: shift(-1), mode: 'cash', recorded_by: world.seats.admin });
+    const wrong = addPayment(kiran, { amount: 3000, paid_on: shift(-1), mode: 'cash', recorded_by: world.seats.admin });
+    addPayment(kiran, { amount: 3000, paid_on: shift(-1), mode: 'cash', reverses_id: wrong.id, note: 'Entered twice', recorded_by: world.seats.admin });
+    addPayment(kiran, { amount: 1000, paid_on: shift(0), mode: 'upi', reference: 'UTR000303', recorded_by: world.seats.admin });
 
     const studentRow = (st, money) => ({ student_id: st.id, admission_no: st.admission_no, name: st.name, class_label: st.class_label, section: st.section,
       board: st.board, academic_year: st.academic_year, parent_name: st.parent_name, phone: st.phone, alt_phone: st.alt_phone, status: st.status,
@@ -1518,6 +1539,49 @@ function createFakeBackend(world) {
           paid_amount: money ? rows.reduce((t, r) => t + Math.min(r.paid_amount, r.promised_amount), 0) : null, rows });
       },
     });
+    // Simplify (one number, one definition): admin_fees_ledger and admin_home_ledger count due now and collected
+    // from this block's students and payments, as the real functions do (student_balance_rows, ledger_collected),
+    // so the Fees tab, its collection report and Today show the same numbers. Promised and "Promised date missed"
+    // stay the reports block's sample promises.
+    function collectedIn(inst, from, to) {
+      const all = F.payments.filter((p) => p.institute_id === inst && !p.reverses_id && !p.opening && p.paid_on >= from && p.paid_on <= to);
+      const ok = all.filter(live);
+      const group = (key) => {
+        const m = {};
+        ok.forEach((p) => { const g = m[p[key]] || (m[p[key]] = { [key === 'paid_on' ? 'day' : 'mode']: p[key], payments: 0, amount: 0 }); g.payments++; g.amount += p.amount; });
+        return Object.values(m);
+      };
+      return { payments: ok.length, reversed: all.length - ok.length, total: ok.reduce((t, p) => t + p.amount, 0),
+        by_mode: group('mode').sort((x, y) => x.mode.localeCompare(y.mode)), by_day: group('paid_on').sort((x, y) => x.day.localeCompare(y.day)) };
+    }
+    const feesLedgerReports = RPC.admin_fees_ledger;
+    RPC.admin_fees_ledger = (u, a) => {
+      const res = feesLedgerReports(u, a);
+      if (res.status !== 200) return res;
+      const s = reader(u);
+      const money = moneyFor(s);
+      const out = JSON.parse(res.body);
+      const due = F.students.filter((st) => st.institute_id === a.p_institute && st.status === 'active').map((st) => balance(st).balance_due_now).filter((v) => v > 0);
+      const col = collectedIn(a.p_institute, a.p_from, a.p_to);
+      const m = (v) => (money ? v : null);
+      out.money_hidden = !money;
+      out.today = today();
+      out.due_now = { students: due.length, amount: m(due.reduce((t, v) => t + v, 0)) };
+      out.collected = { payments: col.payments, reversed: col.reversed, total: m(col.total),
+        by_mode: col.by_mode.map((x) => ({ ...x, amount: m(x.amount) })), by_day: col.by_day.map((x) => ({ ...x, amount: m(x.amount) })) };
+      ['promised', 'broken'].forEach((k) => { if (out[k] && !money) out[k].amount = null; });
+      return json(200, out);
+    };
+    const homeLedgerReports = RPC.admin_home_ledger;
+    RPC.admin_home_ledger = (u, a) => {
+      const res = homeLedgerReports(u, a);
+      if (res.status !== 200) return res;
+      const s = seatOf(u.id);
+      const out = JSON.parse(res.body);
+      const col = collectedIn(s.institute_id, today(), today());
+      out.collected = { payments: col.payments, amount: db.reports.money ? col.total : null };
+      return json(200, out);
+    };
     // can_see_money: Accounts always; everyone else as before.
     const moneyBefore = RPC.can_see_money;
     RPC.can_see_money = (u, a) => {

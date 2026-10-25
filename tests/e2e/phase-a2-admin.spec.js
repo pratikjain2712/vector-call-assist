@@ -1,6 +1,6 @@
-// Phase A.2: admin. The shared template library in the Scripts tab (filters, preview, "Use this template"), the
-// Library view for the Vector team only, open campaigns with class and board tags, "Back to pool" and the
-// Accounts role on the Callers tab, and the common answers card in Settings. Uses the fake backend
+// Phase A.2: admin. The shared template library in Call scripts ("+ New script", See all, filters, preview, "Use
+// this template"), the Library view for the Vector team only, open calling lists with class and board tags, "Give
+// their calls to others" (was Back to pool) and the Accounts role on the Team tab, and the common answers card in Settings. Uses the fake backend
 // (tests/e2e/fake-backend.js, block "Phase A.2: admin"), which reads supabase/templates/*.json like the
 // migration's seed.
 const crypto = require('node:crypto');
@@ -12,6 +12,11 @@ async function signInAdmin(page, hash) {
   await page.locator('#gate-password').fill(env().password);
   await page.locator('#gate-submit').click();
 }
+async function advanced(page) {
+  await page.locator('#account-toggle').click();
+  await page.locator('#account-advanced').check();
+  await page.locator('#account-toggle').click();
+}
 
 test.beforeEach(() => { test.skip(!isFake(), 'uses the fake backend'); });
 
@@ -19,9 +24,11 @@ test('an owner filters the template library by Fees and Hinglish, previews one a
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await signInAdmin(page, '#scripts');
-  await expect(page.locator('#tab-link-scripts')).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('#tab-link-calling')).toHaveAttribute('aria-current', 'page');
   await page.locator('#scripts-template').click();
   await expect(page.locator('#scripts-templates')).toBeVisible();
+  await expect(page.locator('#tpl-results article')).toHaveCount(6);   // suggestions first
+  await page.locator('#tpl-all').click();
   await expect(page.locator('#tpl-count')).toHaveText('26 templates');
 
   await page.locator('#tpl-type').selectOption('fees');
@@ -41,11 +48,11 @@ test('an owner filters the template library by Fees and Hinglish, previews one a
   await preview.click();
   await expect(preview).toHaveAttribute('aria-expanded', 'true');
   await expect(card.locator('.tpl-preview')).toContainText('Steps');
-  await expect(card.locator('.tpl-preview')).toContainText('Pushback answers');
+  await expect(card.locator('.tpl-preview')).toContainText('Answers to objections');
   await expect(card.locator('.tpl-preview .tpl-check').first()).toContainText('Fill in:');
 
   await card.getByRole('button', { name: 'Use the Fee reminder before the due date (Hinglish) template' }).click();
-  await expect(page).toHaveURL(/#scripts\?new=template$/);
+  await expect(page).toHaveURL(/#calling\/scripts\?new=template$/);
   await expect(page.locator('#script-name')).toHaveValue('Fee reminder before the due date (Hinglish)');
   await expect(page.locator('#script-type option:checked')).toHaveText('Fees collection');
   await expect(page.locator('#problem-list')).toContainText('Check this');
@@ -81,9 +88,10 @@ test('the Library view is for the Vector team: an owner does not see it, a platf
   expect(backend.db.templates.find((t) => t.key === 'fees_overdue').active).toBe(false);
 });
 
-test('an owner creates an open campaign for class 8th and CBSE', async ({ page, backend }) => {
+test('an owner creates an open calling list for class 8th and CBSE', async ({ page, backend }) => {
   await signInAdmin(page, '#campaigns?new=1');
   await expect(page.locator('#camp-w-name')).toBeVisible();
+  await advanced(page);   // the board, and the hours before follow-ups go to other callers
   await page.locator('#camp-w-name').fill('8th CBSE fees');
   await page.locator('label.chip', { hasText: '8th' }).click();
   await page.locator('#camp-w-board-chips label.chip', { hasText: 'CBSE' }).click();
@@ -103,7 +111,7 @@ test('an owner creates an open campaign for class 8th and CBSE', async ({ page, 
   await expect(facts).toContainText('All callers');
   await expect(facts).toContainText('8th · CBSE');
   await expect(facts).toContainText('After 24 working hours without a call');
-  await expect(page.locator('#camp-d-open-note')).toContainText('Every caller can work this campaign');
+  await expect(page.locator('#camp-d-open-note')).toContainText('Every caller can work this list');
 
   await page.locator('#camp-d-release').fill('48');
   await page.locator('#camp-d-edit button[type="submit"]').click();
@@ -116,7 +124,7 @@ test('an owner creates an open campaign for class 8th and CBSE', async ({ page, 
   await expect(row).toContainText('All callers');
 });
 
-test('Callers: "Back to pool" says how many leads go back, and the role select has Accounts', async ({ page, backend }) => {
+test('Team: "Give their calls to others" says how many people go, and the role select has Accounts', async ({ page, backend }) => {
   const rep1 = env().seatInfo.rep1;
   const campaign = { id: crypto.randomUUID(), institute_id: env().institutes.a, name: 'Open fees', call_type_id: null, status: 'running',
     open_to_all: true, share_mode: 'next_free', created_at: new Date().toISOString() };
@@ -131,53 +139,56 @@ test('Callers: "Back to pool" says how many leads go back, and the role select h
     extra: {}, assigned_seat_id: rep1.id, status: 'callback' });
 
   await signInAdmin(page, '#callers');
+  await page.locator('#team-add').click();   // "+ Add person"
   await expect(page.locator('#invite-note')).toContainText('This is the only step');
 
-  // Invite an Accounts seat: the role choice is Caller / Manager / Accounts.
+  // Add an Accounts person: the role choice is Caller / Manager / Accounts.
   await expect(page.locator('#invite-role option')).toHaveText(['Caller', 'Manager', 'Accounts']);
   await page.locator('#invite-email').fill('fees.office@e2e.example.com');
   await page.locator('#invite-label').fill('Fees office');
   await page.locator('#invite-role').selectOption('accounts');
-  await expect(page.locator('#invite-role-help')).toContainText('An accounts seat records fee payments');
+  await expect(page.locator('#invite-role-help')).toContainText('An accounts person records fee payments');
   await page.locator('#invite-form button[type="submit"]').click();
-  await expect(page.locator('#confirm-text')).toContainText('as accounts for fees.office@e2e.example.com');
+  await expect(page.locator('#confirm-text')).toContainText('as accounts with fees.office@e2e.example.com');
   await page.locator('#confirm-go').click();
-  await expect(page.locator('#status')).toContainText('Seat "Fees office" added for fees.office@e2e.example.com.');
+  await expect(page.locator('#status')).toContainText('"Fees office" added with fees.office@e2e.example.com.');
   expect(backend.db.seats.find((s) => s.label === 'Fees office')).toMatchObject({ role: 'accounts', status: 'invited', invite_email: 'fees.office@e2e.example.com' });
   await expect(page.locator('#seat-body')).toContainText('Fees office');
-  await page.getByRole('button', { name: 'Back to pool: leads of Rep 1' }).click();
+  await expect(page.locator('#seat-body tr', { hasText: 'Fees office' })).toContainText('Invited, not signed in yet');
+  await page.locator('#seat-body tr[data-seat="' + rep1.id + '"]').getByRole('button', { name: 'Edit Rep 1' }).click();
+  await page.locator('#release-go').click();
   await expect(page.locator('#confirm')).toBeVisible();
-  await expect(page.locator('#confirm-text')).toContainText('2 leads not finished yet of "Rep 1"');
+  await expect(page.locator('#confirm-text')).toContainText('2 people not called yet of "Rep 1"');
   await page.locator('#confirm-go').click();
-  await expect(page.locator('#status')).toHaveText('2 leads of "Rep 1" back in the pool.');
+  await expect(page.locator('#status')).toHaveText('2 people of "Rep 1" given to the other callers.');
   expect(backend.db.leads.filter((l) => l.campaign_id === campaign.id && l.assigned_seat_id === rep1.id).map((l) => l.status)).toEqual(['done']);
   expect(backend.db.leads.find((l) => l.name === 'Old lead').assigned_seat_id).toBe(rep1.id);
 
   // The role select has Accounts, with its one-line explanation.
-  await page.locator('#seat-body tr[data-seat="' + rep1.id + '"]').getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(page.locator('#caller-edit')).toBeVisible();
   await expect(page.locator('#edit-role option[value="accounts"]')).toHaveText('Accounts');
-  await expect(page.locator('#edit-role-accounts')).toContainText('records fee payments');
-  // An open campaign needs no membership: only campaigns for chosen callers are listed.
-  await expect(page.locator('#edit-campaign-list')).not.toContainText('Open fees');
   await page.locator('#edit-role').selectOption('accounts');
+  await expect(page.locator('#edit-role-help')).toContainText('records fee payments');
+  // An open calling list needs no membership: only lists for chosen callers are listed.
+  await expect(page.locator('#edit-campaign-list')).not.toContainText('Open fees');
   await page.locator('#edit-role-save').click();
   await expect(page.locator('#confirm-text')).toContainText('records fee payments');
   await page.locator('#confirm-go').click();
   await expect(page.locator('#status')).toHaveText('"Rep 1" is now accounts.');
   expect(backend.db.seats.find((s) => s.id === rep1.id).role).toBe('accounts');
 
-  // An Accounts seat stays in the seats list with its role, but is not a caller: no "now" status, no Back to pool,
-  // no campaigns or leads to move, and nobody can move leads to it.
+  // An Accounts person stays in the team with the role, but is not a caller: no "now" status or calls, nothing
+  // to give to others, no calling lists or calls to move, and nobody can move calls to them.
   const row = page.locator('#seat-body tr[data-seat="' + rep1.id + '"]');
   await expect(row).toContainText('Accounts');
-  await expect(row.locator('td').nth(4)).toHaveText('');
-  await expect(row).toContainText('No phone needed');
-  await expect(row).not.toContainText('No calls yet');
-  await expect(row.getByRole('button', { name: 'Back to pool: leads of Rep 1' })).toHaveCount(0);
+  await expect(row.locator('td[data-label="Status"]')).toHaveText('No phone needed');
+  await expect(row.locator('td[data-label="Today\'s calls"]')).toHaveText('—');
+  await expect(row).not.toContainText('Not calling today');
+  await advanced(page);
   await expect(page.locator('#edit-campaigns')).toBeHidden();
   await expect(page.locator('#edit-move')).toBeHidden();
   await expect(page.locator('#edit-release')).toBeHidden();
-  await page.locator('#seat-body tr[data-seat="' + env().seatInfo.rep2.id + '"]').getByRole('button', { name: 'Edit', exact: true }).click();
+  await page.locator('#seat-body tr[data-seat="' + env().seatInfo.rep2.id + '"]').getByRole('button', { name: 'Edit Rep 2' }).click();
   await expect(page.locator('#edit-move')).toBeVisible();
   await expect(page.locator('#move-to option')).not.toContainText(['Rep 1']);
   await expect(page.locator('#move-to')).not.toContainText('Rep 1');

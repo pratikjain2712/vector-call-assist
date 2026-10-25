@@ -1,0 +1,24 @@
+/* Today tab (js/admin/today.js): the heading with "Reports", the getting-started checklist, and the room for the
+   Home and Insights parts (their own styles are in admin-home.css and admin-insights.css). */
+.tab-today .today-head { flex-direction: row; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.tab-today .today-main { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+.tab-today #today-reports { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.tab-today #today-reports[hidden] { display: none; }
+.tab-today .today-check { border-color: var(--accent); background: var(--accent-soft); }
+.tab-today .today-check h2 { margin: 0; }
+.tab-today .today-check-list { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.tab-today .today-check-list li { display: flex; align-items: center; gap: 10px; border: 0; padding: 6px 0; flex-wrap: wrap; }
+.tab-today .today-check-mark { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--input-line); display: inline-flex;
+  align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: var(--on-accent); flex: 0 0 auto; }
+.tab-today .today-check-item.done .today-check-mark { background: var(--ok); border-color: var(--ok); }
+.tab-today .today-check-item.done .today-check-text { color: var(--muted); text-decoration: line-through; }
+.tab-today .today-check-text { flex: 1 1 200px; color: var(--heading); }
+.tab-today .today-check-link { font-weight: 600; }
+.tab-today .ins-head h2 { margin: 0; }
+.tab-today details.ins-more > summary { cursor: pointer; font-weight: 600; color: var(--heading); font-size: 16px; }
+.tab-today details.ins-more > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tab-today details.ins-more[open] { display: flex; flex-direction: column; gap: var(--gap); }
+.tab-today details.ins-more > .panel { border-color: var(--line-soft); }
+@media (max-width: 699px) {
+  .tab-today .today-head > a { width: auto; }
+}

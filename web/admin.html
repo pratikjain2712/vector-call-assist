@@ -10,7 +10,11 @@
 <title>Vector admin</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@700;800&display=swap">
 <link rel="stylesheet" href="css/admin.css">
-<!-- One file per tab (js/admin/<tab>.js), so each tab's styles can change without touching the others. -->
+<!-- One file per tab or part (js/admin/<tab>.js), so each one's styles can change without touching the others.
+     The five tabs: Today (today.js: Home and Insights inside), Fees, Calling (calling.js: Calling lists, Call
+     scripts, Reports), Team (callers.js) and Settings. -->
+<link rel="stylesheet" href="css/admin-today.css">
+<link rel="stylesheet" href="css/admin-calling.css">
 <link rel="stylesheet" href="css/admin-home.css">
 <link rel="stylesheet" href="css/admin-insights.css">
 <link rel="stylesheet" href="css/admin-campaigns.css">
@@ -34,7 +38,19 @@
       <span id="institute" class="institute" hidden></span>
     </div>
     <div class="who">
-      <span id="who"></span>
+      <!-- The account menu: password and "Show advanced options", next to Sign out. Filled in by js/admin/shell.js. -->
+      <details id="account" class="account" hidden>
+        <summary id="account-toggle">Your account</summary>
+        <div class="account-pop">
+          <p id="who" class="account-email"></p>
+          <a id="account-password" class="button-link" href="reset.html">Change your password</a>
+          <button type="button" id="account-reset">Email me a reset link</button>
+          <label class="switch account-adv"><input type="checkbox" id="account-advanced" role="switch">
+            <span>Show advanced options</span></label>
+          <p class="muted small">Advanced shows rarely used settings and columns. Only on this browser.</p>
+          <p id="account-msg" class="msg" role="status"></p>
+        </div>
+      </details>
       <button id="signout" type="button">Sign out</button>
     </div>
   </div>
@@ -44,7 +60,7 @@
 <main>
   <section id="off" class="panel" hidden>
     <h2>Cloud is not set up</h2>
-    <p>Cloud is not set up for this site, so there is nothing to show here. Results stay in each rep's browser.</p>
+    <p>Cloud is not set up for this site, so there is nothing to show here. Results stay in each caller's browser.</p>
   </section>
 
   <section id="gate" class="panel narrow" hidden>
@@ -61,7 +77,7 @@
 
   <section id="notadmin" class="panel narrow" hidden>
     <h2>No admin access</h2>
-    <p>This login is not an active admin of an institute. Ask an admin of your institute to check your seat.</p>
+    <p>This login is not an active admin of an institute. Ask the owner of your institute to add you on the Team tab.</p>
   </section>
 
   <section id="app" hidden>
@@ -118,6 +134,9 @@
 <!-- /Phase A.2: fees -->
 <script src="js/admin/reports.js"></script>
 <script src="js/admin/settings.js"></script>
+<!-- The tabs that hold parts: Today (Home, Insights, Reports) and Calling (Calling lists, Call scripts, Reports). -->
+<script src="js/admin/today.js"></script>
+<script src="js/admin/calling.js"></script>
 <script src="js/admin/shell.js"></script>
 </body>
 </html>

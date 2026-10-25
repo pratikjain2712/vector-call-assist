@@ -1,30 +1,39 @@
-/* Callers tab (js/admin/callers.js): rep progress bars, target boxes, supervisor notes and the "Edit caller" panel. */
-.tab-callers .target-input { width: 7.5em; }
-.tab-callers .bar { height: 8px; background: var(--line-soft); border-radius: 4px; overflow: hidden; margin-top: 4px; min-width: 90px; }
-.tab-callers .bar-fill { height: 100%; background: var(--chart-2); }
-.tab-callers .bar-fill.met { background: var(--ok); }
-.tab-callers .note { padding: 8px 0; border-bottom: 1px solid var(--line-soft); }
-.tab-callers .note-text { white-space: pre-wrap; overflow-wrap: anywhere; }
-.tab-callers #note-count.error { color: var(--danger); }
-.tab-callers .stackform { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
-.tab-callers .stackform label { width: 100%; }
-.tab-callers .health.ok { color: var(--ok); }
-.tab-callers .health.warn { color: var(--warn); }
-.tab-callers h3 { margin-top: 14px; }
-/* Edit caller */
-.tab-callers #caller-edit { border-color: var(--accent); }
-.tab-callers #caller-edit:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
-.tab-callers #caller-edit .row.between h2 { margin: 0; }
-.tab-callers .edit-block { border: 0; border-top: 1px solid var(--line-soft); margin: 14px 0 0; padding: 14px 0 0; min-width: 0; }
-.tab-callers .edit-block legend { font-weight: 600; color: var(--heading); padding: 0; margin-bottom: 8px; float: left; width: 100%; }
-.tab-callers .edit-checks { clear: both; display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 10px; }
-.tab-callers .check, .tab-callers .switch { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; cursor: pointer; }
-.tab-callers .switch { margin-top: 12px; font-weight: 600; }
-.tab-callers .switch input { width: 18px; height: 18px; accent-color: var(--accent); }
-.tab-callers .check input { width: 18px; height: 18px; accent-color: var(--accent); }
+/* Team tab (js/admin/callers.js): one table of people, the hint under a name, and the Edit panel. On a phone the
+   table becomes a list of cards (table.stack in admin.css): name with its hint, role, today's calls, status, Edit. */
+.tab-team .target-input { width: 7.5em; }
+.tab-team .team-name strong { color: var(--heading); }
+.tab-team .team-hint { margin-top: 4px; font-size: 13px; color: var(--warn); }
+.tab-team .row-actions { text-align: right; white-space: nowrap; }
+.tab-team .row-actions button { padding: 6px 14px; }
+.tab-team .note { padding: 8px 0; border-bottom: 1px solid var(--line-soft); }
+.tab-team .note-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.tab-team #note-count.error { color: var(--danger); }
+.tab-team .stackform { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.tab-team .stackform label { width: 100%; }
+.tab-team #team-msg:empty { display: none; }
+.tab-team .team-notes { max-width: 260px; overflow-wrap: anywhere; color: var(--muted); font-size: 13px; }
+/* The Edit panel */
+.tab-team #caller-edit { border-color: var(--accent); }
+.tab-team #caller-edit:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tab-team #caller-edit .row.between h2 { margin: 0; }
+.tab-team .edit-block { border: 0; border-top: 1px solid var(--line-soft); margin: 14px 0 0; padding: 14px 0 0; min-width: 0; }
+.tab-team .edit-block legend { font-weight: 600; color: var(--heading); padding: 0; margin-bottom: 8px; float: left; width: 100%; }
+.tab-team .edit-checks { clear: both; display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 10px; }
+.tab-team .switch { margin-top: 12px; font-weight: 600; }
+.tab-team #team-invite { border-color: var(--accent); }
 @media (max-width: 699px) {
-  .tab-callers #caller-edit .row.between { flex-wrap: nowrap; }
-  .tab-callers #caller-edit .row.between > * { flex: 0 1 auto; width: auto; }
-  .tab-callers table.stack td .target-input { width: 100%; }
-  .tab-callers .bar { min-width: 0; }
+  .tab-team #caller-edit .row.between { flex-wrap: nowrap; }
+  .tab-team #caller-edit .row.between > * { flex: 0 1 auto; width: auto; }
+  .tab-team .tab-head.row > button { width: auto; flex: 0 0 auto; }
+  /* A person as a card: the name line on top, then role, calls and status, the Edit button at the end. */
+  .tab-team table.stack tr { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 10px 0; }
+  .tab-team table.stack td { padding: 0; }
+  .tab-team table.stack td.team-name { grid-column: 1 / -1; }
+  .tab-team table.stack td.team-name::before, .tab-team table.stack td.row-actions::before { content: none; }
+  .tab-team table.stack td[data-label="Role"]::before,
+  .tab-team table.stack td[data-label="Status"]::before { content: none; }
+  .tab-team table.stack td.num { text-align: left; }
+  .tab-team table.stack td.row-actions { grid-column: 1 / -1; text-align: left; }
+  .tab-team table.stack td.row-actions button { width: 100%; min-height: 40px; }
+  .tab-team table.stack td .target-input { width: 100%; }
 }

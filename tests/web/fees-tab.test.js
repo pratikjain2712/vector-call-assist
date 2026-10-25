@@ -183,19 +183,13 @@ test('month range and collections by mode', () => {
   assert.deepStrictEqual(F.collectedByMode({ by_mode: [{ mode: 'cash', payments: 2, amount: 3000 }, { mode: 'upi', payments: 1, amount: 9000 }] })
     .map((m) => [m.label, m.amount]), [['UPI', 9000], ['Cash', 3000]]);
 });
-test('promises added up over campaigns: still to come, and broken', () => {
-  const t = F.promiseTotals([
-    { promises: 3, kept: 1, waiting: 1, part_paid: 1, broken: 0, rows: [
-      { state: 'kept', promised_amount: 5000, paid_amount: 5000 },
-      { state: 'waiting', promised_amount: 4000, paid_amount: 0 },
-      { state: 'part_paid', promised_amount: 6000, paid_amount: 2500 },
-    ] },
-    { promises: 1, broken: 1, rows: [{ state: 'broken', promised_amount: 7000, paid_amount: 0 }] },
-    null,
-  ]);
-  assert.deepStrictEqual(t, { open: 2, open_amount: 7500, broken: 1, broken_amount: 7000, kept: 1, promises: 4, money: true });
-  const hidden = F.promiseTotals([{ money_hidden: true, waiting: 2, broken: 1, rows: [{ state: 'waiting', promised_amount: null }] }]);
-  assert.deepStrictEqual([hidden.open, hidden.open_amount, hidden.broken, hidden.money], [2, null, 1, false]);
+test('the summary no longer adds up promises per calling list in the browser (one definition, on the server)', () => {
+  // "Broken promises" used to be promises_vs_payments of each running fees list added up here (every promise call,
+  // 2 days of grace); Reports counted open promises in admin_fees_ledger. Both now read admin_fees_ledger.
+  assert.strictEqual(F.promiseTotals, undefined);
+  const src = fs.readFileSync(path.join(root, 'web', 'js', 'admin', 'fees.js'), 'utf8');
+  assert.ok(!/promises_vs_payments|ledger_collected/.test(src.replace(/\/\*[\s\S]*?\*\//g, '')));
+  assert.ok(/S\.loadFeeNumbers\(ctx, r\)/.test(src) && /S\.feeCards\(summary, 'this month'\)/.test(src));
 });
 test('fees campaign name', () => {
   assert.strictEqual(F.campaignName({}), 'Fees');
@@ -215,7 +209,7 @@ test('who sees the tab and who changes the ledger', () => {
   assert.deepStrictEqual([owner, manager, accounts].map((s) => F.canMakeCampaign(s, true)), [true, true, true]);
   assert.strictEqual(F.canMakeCampaign(manager, false), false);
   assert.strictEqual(F.isAccounts({ role: 'accounts' }), true);
-  assert.deepStrictEqual(F.ACCOUNTS_TABS, ['fees', 'reports']);
+  assert.deepStrictEqual(F.ACCOUNTS_TABS, ['fees']);   // the fees collection report is inside Fees
 });
 
 // ----- static checks -----
@@ -227,7 +221,7 @@ test('the tab is registered, loaded after its helpers, and styled with .tab-fees
   assert.ok(html.indexOf('<script src="js/lead-upload.js">') < html.indexOf('<script src="js/admin/fees.js">'));
   assert.ok(html.indexOf('<script src="js/admin/fees.js">') < html.indexOf('<script src="js/admin/shell.js">'));
   assert.ok(html.includes('<link rel="stylesheet" href="css/admin-fees.css">'));
-  assert.ok(/Phase A\.2: fees/.test(shell) && /ACCOUNTS_TABS = \['fees', 'reports'\]/.test(shell));
+  assert.ok(/S\.tabsFor\(ctx\.seat, ctx\.canSeeMoney\)/.test(shell));
   assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|\beval\(|style=/.test(src));
   const css = fs.readFileSync(path.join(root, 'web', 'css', 'admin-fees.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const selectors = [];

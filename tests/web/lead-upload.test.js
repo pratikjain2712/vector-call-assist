@@ -155,7 +155,7 @@ test("scriptChoices offers live scripts only, and filters by type once the switc
 test("formProblem checks the form before a save", () => {
   const ok = { name: "Nov fees", typeId: "t", startDate: "2026-11-01", endDate: "2026-11-20", target: "40", leadCount: 3, seatCount: 2 };
   assert.equal(C.formProblem(ok, true), "");
-  assert.equal(C.formProblem({ ...ok, name: " " }, false), "Give the campaign a name.");
+  assert.equal(C.formProblem({ ...ok, name: " " }, false), "Give the calling list a name.");
   assert.equal(C.formProblem({ ...ok, typeId: "" }, false), "Pick a type.");
   assert.equal(C.formProblem({ ...ok, endDate: "2026-10-01" }, false), "The end date is before the start date.");
   assert.match(C.formProblem({ ...ok, target: "0" }, false), /daily target/);

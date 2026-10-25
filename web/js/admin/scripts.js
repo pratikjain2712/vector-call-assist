@@ -32,11 +32,13 @@
   function usedInText(list) {
     const rows = Array.isArray(list) ? list : [];
     if (!rows.length) return 'Not used';
-    return rows.map((c) => String(c.name || '') + (c.status === 'closed' ? ' (closed)' : c.status === 'draft' ? ' (draft)' : '')).join(', ');
+    return rows.map((c) => String(c.name || '') + (c.status === 'closed' ? ' (closed)' : c.status === 'draft' ? ' (not started)' : '')).join(', ');
   }
 
-  // "v3", or "Draft" when nothing is published.
-  const liveText = (row) => (row && row.live_version ? 'v' + row.live_version : 'Draft');
+  // "Ready for callers" when a version is live (published), else "Not ready". The version number goes in a
+  // small detail line (versionText).
+  const liveText = (row) => (row && row.live_version ? 'Ready for callers' : 'Not ready');
+  const versionText = (row) => (row && row.live_version ? 'version ' + row.live_version : '');
 
   // "3 of 20 AI drafts used this month", or '' when usage is unknown.
   function usageText(u) {
@@ -85,13 +87,13 @@
     return classes + ' · ' + boards;
   }
 
-  // "10 steps · 6 pushback answers · 4 facts to fill in".
+  // "10 steps · 6 answers to objections · 4 facts to fill in".
   function templateSize(row) {
     const r = row || {};
     const n = (Array.isArray(r.steps) ? r.steps : []).length;
     const p = (Array.isArray(r.pushbacks) ? r.pushbacks : []).length;
     const marks = Number(r.check_marks) || 0;
-    return n + ' step' + (n === 1 ? '' : 's') + ' · ' + p + ' pushback answer' + (p === 1 ? '' : 's') +
+    return n + ' step' + (n === 1 ? '' : 's') + ' · ' + p + (p === 1 ? ' answer to an objection' : ' answers to objections') +
       (marks ? ' · ' + marks + ' fact' + (marks === 1 ? '' : 's') + ' to fill in' : '');
   }
 
@@ -108,6 +110,19 @@
   function filterLocal(rows, args) {
     const a = args || {};
     return (rows || []).filter((r) => (!a.p_call_type || r.call_type === a.p_call_type) && (!a.p_language || r.language === a.p_language));
+  }
+
+  // "+ New script" first shows a few templates for the kinds of calls the institute makes (the call types of its
+  // calling lists), then "See all": at most n templates of those types, in library order. No calling lists yet,
+  // or no template of their types: the first n of the library.
+  const SUGGESTIONS = 6;
+  function suggestTemplates(list, typeKeys, n) {
+    const all = Array.isArray(list) ? list : [];
+    const max = n || SUGGESTIONS;
+    const keys = new Set((typeKeys || []).filter(Boolean));
+    if (!keys.size) return all.slice(0, max);
+    const mine = all.filter((t) => keys.has(t.call_type));
+    return (mine.length ? mine : all).slice(0, max);
   }
 
   // A comma or line separated list: trimmed, blanks and repeats dropped. "8th, 9th\n9th" -> ['8th', '9th'].
@@ -134,7 +149,7 @@
     } catch (err) { return { error: what + ' is not valid JSON: ' + err.message }; }
   }
 
-  const pure = { goodRate, usedInText, liveText, usageText, usageLeft, briefProblem, scoreBadge, BOARDS, CLASSES,
+  const pure = { SUGGESTIONS, suggestTemplates, goodRate, usedInText, liveText, versionText, usageText, usageLeft, briefProblem, scoreBadge, BOARDS, CLASSES,
     languageLabel, templateArgs, templateTags, templateSize, localTemplates, filterLocal, splitList, libraryProblems, readJsonList };
   if (typeof module !== 'undefined' && module.exports) { module.exports = pure; return; }
 
@@ -167,6 +182,9 @@
   let tplSeq = 0;
   let libRows = [];         // every template, for the Library view
   let answers = [];         // every common answer, for the Library view
+  let listTypes = [];       // call type keys of the institute's calling lists (for the suggested templates)
+  let seeAll = false;       // the template picker shows every template with filters (else the suggestions)
+  let libraryTotal = 0;     // templates in the library, for "See all N"
 
   const hasFeature = (f) => !features || features.indexOf(f) >= 0;
   const typeById = (id) => types.find((t) => t.id === id) || null;
@@ -182,16 +200,18 @@
   // ---------- data ----------
 
   async function load() {
-    const [list, t, f, pa] = await Promise.all([
-      ctx.rpc('admin_list_scripts').catch((err) => { say('scripts-msg', 'Could not load scripts: ' + err.message, true); return []; }),
+    const [list, t, f, pa, camps] = await Promise.all([
+      ctx.rpc('admin_list_scripts').catch((err) => { say('scripts-msg', 'Could not load call scripts: ' + err.message, true); return []; }),
       ctx.rpc('admin_list_call_types').catch(() => []),
       ctx.rpc('my_features').catch(() => null),
       ctx.rpc('is_platform_admin').catch(() => false),
+      ctx.rpc('admin_campaign_list').catch(() => []),
     ]);
     rows = Array.isArray(list) ? list : [];
     types = Array.isArray(t) ? t : [];
     features = Array.isArray(f) ? f : null;
     platformAdmin = pa === true || (Array.isArray(pa) && pa[0] === true);
+    listTypes = (Array.isArray(camps) ? camps : []).map((c) => c.call_type_key).filter(Boolean);
     E.setCallTypes(types);
     renderList();
     renderAddOn();
@@ -208,7 +228,7 @@
     try {
       rows = (await ctx.rpc('admin_list_scripts')) || [];
       say('scripts-msg', '');
-    } catch (err) { say('scripts-msg', 'Could not load scripts: ' + err.message, true); }
+    } catch (err) { say('scripts-msg', 'Could not load call scripts: ' + err.message, true); }
     renderList();
   }
 
@@ -233,7 +253,12 @@
       let row = rows.find((r) => r.id === p.edit);
       if (!row) { await reloadList(); row = rows.find((r) => r.id === p.edit); }
       if (row && await E.open(row)) { pendingNew = false; showView('editor'); return; }
-      if (!row) say('scripts-msg', 'That script was not found.', true);
+      if (!row) say('scripts-msg', 'That call script was not found.', true);
+    } else if (p.new === 'pick' && hasFeature('scripts')) {
+      // "+ New script" from a link (Today's checklist): the list with the template picker open.
+      showView('list');
+      openTemplates();
+      return;
     } else if (p.new && hasFeature('scripts')) {
       if (p.new === 'blank' && !pendingNew) {
         if (E.startNew(null)) { showView('editor'); return; }
@@ -244,7 +269,7 @@
         loadLibrary();
         return;
       }
-      say('scripts-msg', 'The script library is kept by the Vector team. Start from a template, or write a script by hand.');
+      say('scripts-msg', 'The script library is kept by the Vector team. Press + New script to start from one of its scripts.');
     }
     showView('list');
   }
@@ -257,6 +282,7 @@
     ['scripts-template', 'new-script'].forEach((id) => { $(id).disabled = !on; });
   }
 
+  // The institute's own scripts come first on the page; the template library only opens on "+ New script".
   function renderList() {
     const body = $('scripts-body');
     body.textContent = '';
@@ -267,22 +293,26 @@
       const t = typeById(r.call_type_id);
       const actions = [];
       if (canEdit) actions.push(el('button', { type: 'button', className: 'linkish', text: 'Edit', 'aria-label': 'Edit ' + r.name,
-        onClick: () => ctx.navigate('scripts', { edit: r.id }) }));
+        onClick: () => ctx.navigate('calling/scripts', { edit: r.id }) }));
       if (r.live_version_id) {
         if (actions.length) actions.push(el('span', { className: 'muted', 'aria-hidden': 'true', text: ' · ' }));
         actions.push(el('button', { type: 'button', className: 'linkish', text: 'Report', 'aria-label': 'Report for ' + r.name,
-          onClick: () => ctx.navigate('reports', { script: r.id, version: r.live_version_id }) }));
+          onClick: () => ctx.navigate('calling/reports', { script: r.id, version: r.live_version_id }) }));
       }
       const name = el('td', { 'data-label': 'Script', className: 'name' }, [el('span', { text: r.name })]);
       if (r.check_marks > 0) name.appendChild(el('span', { className: 'to-check', text: r.check_marks + ' to check' }));
+      const ver = versionText(r);
       body.appendChild(el('tr', null, [
         name,
         el('td', { 'data-label': 'Type', text: r.call_type_label || (t ? t.label : 'No type') }),
-        el('td', { 'data-label': 'Live version', className: r.live_version ? '' : 'muted', text: liveText(r) }),
+        el('td', { 'data-label': 'For callers', className: r.live_version ? 'live' : 'muted' }, [
+          el('span', { text: liveText(r) }),
+          ver ? el('span', { className: 'ver small muted', text: ver }) : null,
+        ]),
         el('td', { 'data-label': 'Used in', className: (r.used_in || []).length ? '' : 'muted', text: usedInText(r.used_in) }),
-        el('td', { 'data-label': 'Calls (90 days)', className: 'num', text: r.calls ? S.count(r.calls) : '—' }),
-        el('td', { 'data-label': 'Good result', className: 'num', text: goodRate(r.calls, r.good_calls) }),
-        el('td', { 'data-label': 'Changed', text: S.formatDate(r.changed_at, { year: false }) }),
+        el('td', { 'data-label': 'Calls (90 days)', className: 'num adv', text: r.calls ? S.count(r.calls) : '—' }),
+        el('td', { 'data-label': 'Good result', className: 'num adv', text: goodRate(r.calls, r.good_calls) }),
+        el('td', { 'data-label': 'Changed', className: 'adv', text: S.formatDate(r.changed_at, { year: false }) }),
         el('td', { 'data-label': '', className: 'row-actions' }, actions),
       ]));
     });
@@ -291,10 +321,30 @@
   // ---------- template library (institutes) ----------
 
   function toggleTemplates() {
+    if (!$('scripts-templates').hidden) { closeTemplates(); return; }
+    openTemplates();
+  }
+  // Opens the picker on its suggestions: up to 6 templates for the institute's kinds of calls, then "See all".
+  function openTemplates() {
     const panel = $('scripts-templates');
-    panel.hidden = !panel.hidden;
-    $('scripts-template').setAttribute('aria-expanded', String(!panel.hidden));
-    if (!panel.hidden) { loadTemplates(); $('tpl-type').focus(); }
+    panel.hidden = false;
+    $('scripts-template').setAttribute('aria-expanded', 'true');
+    seeAll = false;
+    $('tpl-filters').hidden = true;
+    loadTemplates();
+    const h = $('scripts-templates-title');
+    h.setAttribute('tabindex', '-1');
+    h.focus();
+  }
+  function closeTemplates() {
+    $('scripts-templates').hidden = true;
+    $('scripts-template').setAttribute('aria-expanded', 'false');
+  }
+  function showAllTemplates() {
+    seeAll = true;
+    $('tpl-filters').hidden = false;
+    loadTemplates();
+    $('tpl-type').focus();
   }
 
   // The purpose, language and board selects; the purpose list is the built-in call types.
@@ -312,9 +362,11 @@
 
   const filterForm = () => ({ callType: $('tpl-type').value, classLabel: $('tpl-class').value, board: $('tpl-board').value, language: $('tpl-language').value });
 
+  // Suggestions: every template (no filters), then the ones for the institute's kinds of calls (suggestTemplates).
+  // "See all": the filters, and every template that fits them.
   async function loadTemplates() {
     const my = ++tplSeq;
-    const args = templateArgs(filterForm());
+    const args = seeAll ? templateArgs(filterForm()) : templateArgs({});
     say('tpl-msg', 'Loading templates…');
     let list;
     try {
@@ -328,14 +380,19 @@
       list = filterLocal(localTemplates(TPL.TEMPLATES), args);
       say('tpl-msg', 'Showing the built-in templates. The shared library needs the database update.');
     } else say('tpl-msg', '');
-    templates = Array.isArray(list) ? list : [];
+    const all = Array.isArray(list) ? list : [];
+    templates = seeAll ? all : suggestTemplates(all, listTypes, SUGGESTIONS);
+    if (!seeAll) libraryTotal = all.length;
     renderTemplates();
   }
 
   function renderTemplates() {
     const grid = $('tpl-results');
     grid.textContent = '';
-    $('tpl-count').textContent = templates.length === 1 ? '1 template' : templates.length + ' templates';
+    $('tpl-count').textContent = seeAll ? (templates.length === 1 ? '1 template' : templates.length + ' templates')
+      : (listTypes.length ? 'Suggested for your calling lists' : 'Suggested');
+    $('tpl-all').hidden = seeAll || libraryTotal <= templates.length;
+    $('tpl-all').textContent = 'See all ' + libraryTotal;
     $('tpl-none').hidden = templates.length > 0;
     templates.forEach((t, i) => {
       const t2 = typeByKey(t.call_type);
@@ -370,7 +427,7 @@
     });
   }
 
-  // Steps (what to say, the choices or the result) and pushback answers, with the facts to fill in.
+  // Steps (what to say, the choices or the result) and answers to objections, with the facts to fill in.
   function fillPreview(box, t) {
     const type = typeByKey(t.call_type);
     const resultLabel = (key) => { const r = type && (type.results || []).find((x) => x.key === key); return r ? r.label : key; };
@@ -386,7 +443,7 @@
     box.appendChild(el('h4', { text: 'Steps' }));
     box.appendChild(steps);
     if ((t.pushbacks || []).length) {
-      box.appendChild(el('h4', { text: 'Pushback answers' }));
+      box.appendChild(el('h4', { text: 'Answers to objections' }));
       box.appendChild(el('ul', { className: 'plain pb-chips' }, t.pushbacks.map((p) => el('li', null, [
         el('span', { className: 'pb-label', text: '"' + p.label + '"' }),
         el('span', { className: 'pb-answer', text: p.answer }),
@@ -401,18 +458,20 @@
     const script = { name: t.name, call_type: t.call_type, steps: JSON.parse(JSON.stringify(t.steps || [])), pushbacks: JSON.parse(JSON.stringify(t.pushbacks || [])) };
     if (!E.startNew(script, 'Started from the "' + t.name + '" template. Add your own facts where it says "Check this", then save.')) return;
     pendingNew = true;
-    $('scripts-templates').hidden = true;
-    $('scripts-template').setAttribute('aria-expanded', 'false');
-    ctx.navigate('scripts', { new: 'template' });
+    closeTemplates();
+    ctx.navigate('calling/scripts', { new: 'template' });
   }
 
   function buildTemplates() {
     const field = (label, input) => el('label', { className: 'fld' }, [el('span', { text: label }), input]);
     const classInput = el('input', { id: 'tpl-class', type: 'text', maxlength: '20', list: 'tpl-class-list', placeholder: 'Any class', autocomplete: 'off' });
     const panel = el('section', { className: 'panel', id: 'scripts-templates', hidden: true, 'aria-labelledby': 'scripts-templates-title' }, [
-      el('h2', { id: 'scripts-templates-title', text: 'Start from a template' }),
-      el('p', { className: 'muted small', text: 'Ready scripts from the Vector team for fees, admissions, sales and more. You add your own facts (fees, dates, address) where it says "Check this" before callers use it.' }),
-      el('form', { id: 'tpl-filters', className: 'tpl-filters', 'aria-label': 'Filter templates' }, [
+      el('div', { className: 'row between' }, [
+        el('h2', { id: 'scripts-templates-title', text: 'New script: pick a ready one' }),
+        el('button', { type: 'button', id: 'tpl-close', className: 'linkish', text: 'Close' }),
+      ]),
+      el('p', { className: 'muted small', text: 'Ready scripts from the Vector team. You add your own facts (fees, dates, address) where it says "Check this" before callers use it.' }),
+      el('form', { id: 'tpl-filters', className: 'tpl-filters', 'aria-label': 'Filter templates', hidden: true }, [
         field('Purpose', el('select', { id: 'tpl-type' })),
         field('Class', classInput),
         el('datalist', { id: 'tpl-class-list' }, CLASSES.map((c) => el('option', { value: c }))),
@@ -424,6 +483,10 @@
       el('p', { id: 'tpl-msg', className: 'msg', role: 'status' }),
       el('div', { className: 'tpl-grid', id: 'tpl-results' }),
       el('p', { id: 'tpl-none', className: 'muted', hidden: true, text: 'No template fits these filters. Try "All purposes" or "Any language", or write a script by hand.' }),
+      el('div', { className: 'row tpl-more' }, [
+        el('button', { type: 'button', id: 'tpl-all', text: 'See all' }),
+        el('button', { type: 'button', id: 'new-script', className: 'linkish', text: 'Or write one by hand' }),
+      ]),
     ]);
     return panel;
   }
@@ -893,33 +956,37 @@
 
   function build(box) {
     const btn = (id, text, cls, extra) => el('button', Object.assign({ id, type: 'button', text, className: cls || '' }, extra || {}));
+    const settingsLink = !ctx.tabIds || ctx.tabIds().includes('settings');
 
-    // List view
+    // List view: the institute's own scripts first; the template library opens on "+ New script".
     box.appendChild(el('div', { id: 'scripts-list-view', className: 'view' }, [
-      el('div', { className: 'tab-head scripts-head' }, [
+      el('div', { className: 'row between scripts-head' }, [
         el('div', null, [
-          el('h1', { text: 'Scripts' }),
-          el('p', { className: 'muted', text: 'Each script has a type. The type decides the result buttons callers see. Callers see a script only after you publish it.' }),
+          el('h2', { text: 'Call scripts' }),
+          el('p', { className: 'muted', text: 'What callers say, step by step. Callers see a script once it is ready for callers.' }),
         ]),
         el('div', { className: 'start-row' }, [
-          btn('scripts-template', 'Start from a template', 'primary', { 'aria-expanded': 'false', 'aria-controls': 'scripts-templates' }),
-          btn('new-script', 'Write by hand'),
+          btn('scripts-template', '+ New script', 'primary', { 'aria-expanded': 'false', 'aria-controls': 'scripts-templates' }),
           btn('scripts-library-open', 'Library', '', { hidden: true, title: 'Vector team: templates, common answers and AI drafts' }),
         ]),
       ]),
-      el('p', { id: 'scripts-addon', className: 'addon-note', hidden: true, text: 'Scripts is not in your plan, so you can only look at your scripts. Add Scripts to use this.' }),
+      el('p', { id: 'scripts-addon', className: 'addon-note', hidden: true, text: 'Call scripts are not in your plan, so you can only look at your scripts. Add Scripts to use this.' }),
       el('p', { id: 'scripts-msg', className: 'msg', role: 'status' }),
-      buildTemplates(),
-      el('section', { className: 'panel', 'aria-label': 'Your scripts' }, [
+      el('section', { className: 'panel', 'aria-label': 'Your call scripts' }, [
         el('div', { className: 'scroll' }, [el('table', { id: 'scripts-table', className: 'stack' }, [
           el('thead', null, [el('tr', null, [
-            ['Script'], ['Type'], ['Live version'], ['Used in'], ['Calls', 'num'], ['Good result', 'num'], ['Changed'], [''],
+            ['Script'], ['Type'], ['For callers'], ['Used in'], ['Calls', 'num adv'], ['Good result', 'num adv'], ['Changed', 'adv'], [''],
           ].map(([h, c]) => el('th', { text: h, className: c || '', scope: 'col' })))]),
           el('tbody', { id: 'scripts-body' }),
         ])]),
-        el('p', { id: 'scripts-empty', className: 'muted', hidden: true, text: 'No scripts yet. Start from a template or write one by hand. Need a script that is not in the library? Ask the Vector team.' }),
-        el('p', { className: 'muted small', text: 'Calls and good results are for the last 90 days.' }),
+        el('p', { id: 'scripts-empty', className: 'muted', hidden: true, text: 'No call scripts yet. Press + New script to start from a ready one. Need a script that is not in the library? Ask the Vector team.' }),
+        el('p', { className: 'muted small adv', text: 'Calls and good results are for the last 90 days.' }),
       ]),
+      buildTemplates(),
+      el('p', { className: 'muted small', id: 'scripts-answers-note' }, settingsLink ? [
+        'Answers to common questions (your address, fees, website) are filled in once for every script, in ',
+        el('a', { href: '#settings', id: 'scripts-answers-link', text: 'Settings, Common answers' }), '.',
+      ] : ['Answers to common questions (your address, fees, website) are filled in once for every script by your owner, in Settings.']),
     ]));
 
     box.appendChild(buildLibraryView());
@@ -936,16 +1003,19 @@
 
   function wire() {
     $('scripts-template').addEventListener('click', toggleTemplates);
+    $('tpl-close').addEventListener('click', closeTemplates);
+    $('tpl-all').addEventListener('click', showAllTemplates);
     $('tpl-filters').addEventListener('submit', (e) => { e.preventDefault(); loadTemplates(); });
     ['tpl-type', 'tpl-board', 'tpl-language'].forEach((id) => $(id).addEventListener('change', loadTemplates));
     $('tpl-class').addEventListener('change', loadTemplates);
     $('new-script').addEventListener('click', () => {
       if (!E.startNew(null)) return;
       pendingNew = true;
-      ctx.navigate('scripts', { new: 'blank' });
+      closeTemplates();
+      ctx.navigate('calling/scripts', { new: 'blank' });
     });
-    $('scripts-library-open').addEventListener('click', () => ctx.navigate('scripts', { library: 1 }));
-    $('lib-back').addEventListener('click', () => ctx.navigate('scripts'));
+    $('scripts-library-open').addEventListener('click', () => ctx.navigate('calling/scripts', { library: 1 }));
+    $('lib-back').addEventListener('click', () => ctx.navigate('calling/scripts'));
     $('lib-new').addEventListener('click', () => fillLibraryForm(null));
     $('lib-form').addEventListener('submit', publishTemplate);
     ['lib-steps', 'lib-pushbacks', 'lib-type'].forEach((id) => $(id).addEventListener('change', checkLibraryForm));
@@ -959,17 +1029,18 @@
 
   S.registerTab({
     id: 'scripts',
-    label: 'Scripts',
+    label: 'Call scripts',
+    part: true,   // shown inside Calling (js/admin/calling.js)
     mount(box, c) {
       ctx = c;
       window.addEventListener('beforeunload', onLeave);
       const editorBox = build(box);
       E.mount(editorBox, c, {
-        onBack: () => ctx.navigate('scripts'),
+        onBack: () => ctx.navigate('calling/scripts'),
         onSaved: (id) => {
           pendingNew = false;
           // The address now names the saved script, so a reload or a shared link opens it.
-          history.replaceState(null, '', location.pathname + location.search + S.buildHash('scripts', { edit: id }));
+          history.replaceState(null, '', location.pathname + location.search + S.buildHash('calling/scripts', { edit: id }));
           reloadList();
         },
       });
@@ -982,6 +1053,7 @@
       E.unmount();
       ctx = null; rows = []; types = []; features = null; usage = null; draft = null; pendingNew = false; busy = false; ready = null;
       platformAdmin = false; templates = []; libraryMissing = false; tplSeq++; libRows = []; answers = [];
+      listTypes = []; seeAll = false; libraryTotal = 0;
     },
   });
 })();

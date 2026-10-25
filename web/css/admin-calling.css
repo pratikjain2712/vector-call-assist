@@ -1,0 +1,4 @@
+/* Calling tab (js/admin/calling.js): the three views (Calling lists, Call scripts, Reports). The views' own styles
+   are in admin-campaigns.css, admin-scripts.css and admin-reports.css. */
+.tab-calling .calling-view { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+.tab-calling .calling-view[hidden] { display: none; }

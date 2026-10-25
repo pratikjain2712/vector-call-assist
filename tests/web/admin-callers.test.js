@@ -54,25 +54,37 @@ test('now words', () => {
   assert.strictEqual(C.nowText(null), '');
 });
 
-// ---------- Phase A.2: Accounts role and "Back to pool" ----------
+// ---------- Phase A.2: Accounts role and "Give their calls to others" (was "Back to pool") ----------
 test('the Accounts role has a name and a one-line explanation', () => {
   assert.strictEqual(C.roleLabel({ access_role: 'accounts', role: 'accounts' }), 'Accounts');
   assert.strictEqual(C.roleOf({ role: 'accounts' }), 'accounts');
   assert.match(C.ROLE_HELP.accounts, /fee payments/);
 });
-test('Back to pool texts say how many leads go back', () => {
-  assert.strictEqual(C.releaseText('Asha', 3, null), '3 leads not finished yet of "Asha" in every campaign that is not closed go back to the pool, so any caller can take them. Call backs and promises keep their date and history.');
-  assert.match(C.releaseText('Asha', 1, 'Oct fees'), /^1 lead not finished yet of "Asha" in "Oct fees"/);
-  assert.match(C.releaseText('Asha', null, null), /^Every lead not finished yet/);
-  assert.strictEqual(C.releasedText('Asha', 1), '1 lead of "Asha" back in the pool.');
-  assert.strictEqual(C.releasedText('Asha', 4), '4 leads of "Asha" back in the pool.');
+test('"Give their calls to others" texts say how many people go to the other callers', () => {
+  assert.strictEqual(C.releaseText('Asha', 3, null), '3 people not called yet of "Asha" in every calling list that is not closed go to the other callers, so anyone can call them. Call backs and promises keep their date and history.');
+  assert.match(C.releaseText('Asha', 1, 'Oct fees'), /^1 person not called yet of "Asha" in "Oct fees"/);
+  assert.match(C.releaseText('Asha', null, null), /^Everyone not called yet/);
+  assert.strictEqual(C.releasedText('Asha', 1), '1 person of "Asha" given to the other callers.');
+  assert.strictEqual(C.releasedText('Asha', 4), '4 people of "Asha" given to the other callers.');
+  // No jargon left in the texts a person reads.
+  [C.releaseText('Asha', 3, null), C.releasedText('Asha', 2), C.inviteRoleHelp('admin'), C.inviteRoleHelp('accounts')]
+    .forEach((t) => assert.ok(!/\b(pool|leads?|seats?|campaigns?)\b/i.test(t), t));
+});
+
+test('the coaching hint under a caller\'s name', () => {
+  assert.strictEqual(C.personHint({ calls: 0 }), 'Not calling today');
+  assert.strictEqual(C.personHint({ calls: 0, now: { status: 'on_call' } }), '');   // the first call is going on
+  assert.strictEqual(C.personHint({ calls: 14, connected: 3, talkMinutes: 5 }), 'Few calls picked up (3 of 14). Try calling at another time.');
+  assert.strictEqual(C.personHint({ calls: 20, connected: 12, talkMinutes: 8 }), 'Short calls (about 40 s each). Check how the call opens.');
+  assert.strictEqual(C.personHint({ calls: 20, connected: 12, talkMinutes: 30 }), '');
+  assert.strictEqual(C.personHint({ calls: 5, connected: 0 }), '');   // too few calls to say
 });
 
 test('the invite form offers Caller, Manager and Accounts, with one line each', () => {
   assert.deepStrictEqual(C.INVITE_ROLES.map((r) => [r.value, r.label]), [['rep', 'Caller'], ['admin', 'Manager'], ['accounts', 'Accounts']]);
   assert.strictEqual(C.inviteRoleHelp('rep'), 'A caller only makes calls.');
-  assert.match(C.inviteRoleHelp('admin'), /^A manager runs campaigns/);
-  assert.match(C.inviteRoleHelp('accounts'), /^An accounts seat records fee payments/);
+  assert.match(C.inviteRoleHelp('admin'), /^A manager runs calling lists and the team/);
+  assert.match(C.inviteRoleHelp('accounts'), /^An accounts person records fee payments/);
 });
 console.log('admin-callers.test: ' + passed + ' passed, ' + failed + ' failed');
 if (failed) process.exit(1);

@@ -3,12 +3,14 @@
 // shell's own ctx is private). Fake backend only: the local stack has no campaign or script test seeded.
 const { test, expect, env, isFake } = require('./fixtures');
 
+// Signs in on the Team tab: Today holds the Insights cards itself, so it stays unmounted here and the cards this
+// test mounts are the only ones on the page.
 async function adminSignIn(page) {
-  await page.goto('/admin.html');
+  await page.goto('/admin.html#team');
   await page.locator('#gate-email').fill(env().users.admin.email);
   await page.locator('#gate-password').fill(env().password);
   await page.locator('#gate-submit').click();
-  await expect(page.locator('#tab-link-home')).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('#tab-link-team')).toHaveAttribute('aria-current', 'page');
 }
 
 // Mounts both cards in a box styled like the Insights tab. Confirmations are kept in window.__ixJobs so the
@@ -100,7 +102,7 @@ test.describe('insights extra', () => {
     await page.emulateMedia({ colorScheme: 'dark' });
     await adminSignIn(page);
     await mountCards(page, CAMPAIGN);
-    await expect(page.locator('#ix-test-body')).toContainText('Script tests are part of the Scripts add-on. Add Scripts to use this.');
+    await expect(page.locator('#ix-test-body')).toContainText('Script tests are part of Scripts, an extra (paid). Add Scripts to use this.');
     await expect(page.locator('#ix-brief-lines li')).toHaveCount(4);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
     // Dark mode: the brief turns into a soft panel, not the dark card.
