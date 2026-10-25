@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Loads (or reloads) the demo institute in one go: the 7 demo logins, then the demo data.
+# Loads (or reloads) the demo institute in one go: the 8 demo logins, then the demo data.
 # Needs Node 18+ (npm install done in the repo) and psql. Steps and where to find the values: docs/demo.md.
 #
 #   export SUPABASE_URL=https://<ref>.supabase.co

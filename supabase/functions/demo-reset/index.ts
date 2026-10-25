@@ -1,7 +1,7 @@
 // Rebuilds the demo institute "Sunrise Coaching Academy (Demo)" with fresh dates, so "Today" on Home is live.
 // Only the demo owner (owner.sunrise@example.com) may call it. It runs supabase/demo/demo_seed.sql as one
 // transaction against this project's database; the seed touches the demo institute only (docs/demo.md).
-// The 7 demo logins must already exist. Deploy with JWT verification on.
+// The 8 demo logins must already exist. Deploy with JWT verification on.
 import postgres from "npm:postgres@3.4.5";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 

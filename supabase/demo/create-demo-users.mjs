@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Creates (or updates) the 7 demo logins of "Sunrise Coaching Academy (Demo)" with one shared password.
+// Creates (or updates) the 8 demo logins of "Sunrise Coaching Academy (Demo)" with one shared password.
 // Run it before demo_seed.sql, which finds these users by email. Safe to run again: an existing user gets the
 // password set again and is marked confirmed; nothing else changes.
 //
@@ -17,6 +17,7 @@ export const DEMO_USERS = [
   { email: 'neha.sunrise@example.com', name: 'Neha', role: 'Caller' },
   { email: 'amit.sunrise@example.com', name: 'Amit', role: 'Caller' },
   { email: 'sana.sunrise@example.com', name: 'Sana', role: 'Caller' },
+  { email: 'accounts.sunrise@example.com', name: 'Kavita Joshi', role: 'Accounts (fees office)' },
 ];
 
 function fail(message) {
