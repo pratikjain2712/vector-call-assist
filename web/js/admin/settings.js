@@ -11,6 +11,10 @@
    missing function leaves the others working.
    The WhatsApp section is filled by js/admin/settings-whatsapp.js (window.VectorSettingsWhatsApp: mount(section,
    ctx), unmount()); an ES module exporting mount (or a default function) also works. Missing: nothing is shown.
+   Phase A.2: a "Common answers" card. Every script answers common questions on calls (my_common_answers,
+   migration 20261025140000_template_library.sql); a few need the institute's own facts (address, office
+   landline, website, fee range, discount policy). Owners and managers fill them in with
+   admin_fill_common_answer; until then callers do not see that answer.
    The pure helpers below are also loaded by tests/web/admin-settings.test.js (Node, no DOM). */
 (function () {
   const S = (typeof window !== 'undefined' && window.VectorAdminShared) || require('./shared.js');
@@ -27,8 +31,8 @@
   const FEATURES = [
     { key: 'scripts', name: 'Scripts', on: 'Guided scripts, the script editor, script reports and where calls end.',
       off: 'Add Scripts to use guided scripts, the script editor, script reports and where calls end.' },
-    { key: 'ai_drafts', name: 'AI script maker', on: 'Make script drafts with AI.',
-      off: 'Add Scripts to use the AI script maker.' },
+    { key: 'ai_drafts', name: 'Script library', on: 'Ready scripts for fees, admissions and sales calls, updated by our team, plus new scripts on request.',
+      off: 'Add Scripts to use the ready script library.' },
   ];
 
   // The time zone choices, with the institute's own zone added when it is not in the short list.
@@ -148,8 +152,16 @@
     return r.target_label ? text + ': ' + r.target_label : text;
   }
 
+  // Phase A.2: the common answers that need the institute's facts (my_common_answers rows with a "check" list).
+  const answersToFill = (rows) => (Array.isArray(rows) ? rows : []).filter((r) => Array.isArray(r.check) && r.check.length > 0);
+  // '2 of 5 filled in'.
+  function fillSummary(rows) {
+    const list = answersToFill(rows);
+    return list.filter((r) => r.filled).length + ' of ' + list.length + ' filled in';
+  }
+
   const pure = { LOG_PAGE, AI_LIMIT, TIME_ZONES, FEATURES, zoneChoices, planText, featureRows, aiUsageText, resultNeeds,
-    checkLabel, actionText };
+    checkLabel, actionText, answersToFill, fillSummary };
   if (typeof module !== 'undefined' && module.exports) { module.exports = pure; return; }
 
   // ---------- the tab (browser only) ----------
@@ -164,6 +176,7 @@
   let logOffset = 0;
   let logSeq = 0;
   let waModule = null;    // settings-whatsapp.js, once loaded
+  let standard = new Map();   // common answer key -> the standard wording (Phase A.2)
 
   const msg = (id) => el('p', { id, className: 'msg', role: 'status' });
   const isOwner = () => !!(inst ? inst.is_owner
@@ -243,6 +256,16 @@
       ]),
       el('p', { id: 'inst-note', className: 'muted small', hidden: true, text: 'Only an owner can change these.' }),
       msg('inst-msg'),
+    ]));
+
+    box.appendChild(el('div', { className: 'panel', id: 'settings-answers' }, [
+      el('div', { className: 'row between' }, [
+        el('h2', { text: 'Common answers' }),
+        el('span', { id: 'answers-count', className: 'muted small' }),
+      ]),
+      el('p', { className: 'muted small', text: 'Every script answers common questions on calls, such as "Where did you get my number?". These need your institute\'s facts. Callers see an answer only after you fill it in.' }),
+      msg('answers-msg'),
+      el('ul', { id: 'answers-list', className: 'plain answers-list' }),
     ]));
 
     box.appendChild(el('div', { className: 'panel', id: 'settings-money' }, [
@@ -501,6 +524,67 @@
     });
   }
 
+  // ---------- common answers (Phase A.2) ----------
+
+  async function loadAnswers() {
+    try {
+      const [rows, global] = await Promise.all([
+        rpc('my_common_answers'),
+        // The standard wording, shown next to the institute's own answer.
+        ctx.client.from('common_answers').select('key, answer').then((r) => (r && !r.error ? r.data || [] : [])).catch(() => []),
+      ]);
+      if (!ctx) return;
+      standard = new Map(global.map((g) => [g.key, g.answer]));
+      renderAnswers(rows || []);
+      say('answers-msg', '');
+    } catch (err) {
+      if (!ctx) return;
+      renderAnswers([]);
+      report('answers-msg', err, 'Could not load common answers: ');
+    }
+  }
+
+  function renderAnswers(rows) {
+    const list = $('answers-list');
+    list.textContent = '';
+    const todo = answersToFill(rows);
+    $('answers-count').textContent = todo.length ? fillSummary(rows) : '';
+    todo.forEach((r) => {
+      const id = 'answer-fill-' + r.key;
+      const box = el('textarea', { id, rows: '3', maxlength: '600', 'aria-describedby': id + '-hint',
+        placeholder: 'The whole answer, with your facts' });
+      box.value = r.filled ? r.answer : '';
+      const std = standard.get(r.key) || (r.filled ? '' : r.answer);
+      const state = el('span', { className: 'pill ' + (r.filled ? 'pill-ok' : 'pill-warn'), text: r.filled ? 'Filled in' : 'Not filled in yet' });
+      const save = el('button', { type: 'button', text: 'Save', 'aria-label': 'Save the answer to: ' + r.label });
+      const rowMsg = el('p', { className: 'msg', role: 'status', id: id + '-msg' });
+      save.addEventListener('click', () => saveAnswer(r, box, save, rowMsg));
+      list.appendChild(el('li', { className: 'answer', 'data-key': r.key }, [
+        el('div', { className: 'row between' }, [el('strong', { text: r.label }), state]),
+        std ? el('p', { className: 'muted small', text: 'Standard answer: ' + std }) : null,
+        el('label', { for: id, text: 'Your answer (callers say this)' }),
+        box,
+        el('p', { className: 'muted small', id: id + '-hint', text: (r.check || []).join(' ') + ' Leave it empty to stop callers using this answer.' }),
+        el('div', { className: 'row' }, [save]),
+        rowMsg,
+      ]));
+    });
+    if (!todo.length) list.appendChild(el('li', { className: 'muted', text: 'No answer needs your facts.' }));
+  }
+
+  async function saveAnswer(r, box, btn, rowMsg) {
+    btn.disabled = true;
+    try {
+      const saved = await rpc('admin_fill_common_answer', { p_key: r.key, p_answer: box.value });
+      ctx.status(saved ? 'Saved the answer to "' + r.label + '". Callers see it now.' : 'Cleared the answer to "' + r.label + '". Callers no longer see it.');
+      await loadAnswers();
+    } catch (err) {
+      report(rowMsg, err, 'Not saved: ');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   function renderPlan() {
     $('plan-text').textContent = inst ? planText(inst) : '';
     const list = $('plan-features');
@@ -589,6 +673,7 @@
       wire();
       loadTypes();
       loadInstitute();
+      loadAnswers();
       loadAiUsage();
       loadTerms();
       loadLog(0);

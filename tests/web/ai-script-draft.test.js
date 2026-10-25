@@ -346,6 +346,13 @@ test('handle: a caller seat or no seat is 403', async () => {
   assert.strictEqual((await req(fakeDb({ seat: { id: 's', institute_id: 'i1', role: 'rep' } }), fakeFetch([]))).status, 403);
   assert.strictEqual((await req(fakeDb({ seat: null }), fakeFetch([]))).status, 403);
 });
+test('handle: an institute admin who is not on the Vector team is 403 (Phase A.2)', async () => {
+  const db = Object.assign(fakeDb(), { isPlatformAdmin: async () => false });
+  const out = await req(db, fakeFetch([]));
+  assert.strictEqual(out.status, 403);
+  assert.strictEqual(out.body.code, 'not_platform_admin');
+  assert.strictEqual(db.reserved.length, 0);
+});
 test('handle: without the ai_drafts add-on it is 403 and nothing is reserved', async () => {
   const db = fakeDb({ feature: false });
   const out = await req(db, fakeFetch([]));

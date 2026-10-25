@@ -88,3 +88,33 @@
   .tab-scripts .start-row > button { flex: 1 1 100%; }
   .tab-scripts td.row-actions:empty { display: none; }
 }
+
+/* Phase A.2: template library (filters, cards, preview) and the Library view for the Vector team */
+.tab-scripts .pill { display: inline-block; padding: 2px 9px; border-radius: var(--radius-pill); font-size: 12px; font-weight: 600;
+  background: var(--panel-soft); color: var(--heading); border: 1px solid var(--line); }
+.tab-scripts .pill.tone-accent { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.tab-scripts .tpl-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; margin: 10px 0 4px; }
+@media (min-width: 760px) { .tab-scripts .tpl-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.tab-scripts .fld { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.tab-scripts .fld input, .tab-scripts .fld select, .tab-scripts .fld textarea { width: 100%; min-width: 0; }
+.tab-scripts .tpl h3 { margin: 0; overflow-wrap: anywhere; }
+.tab-scripts .tpl-tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tab-scripts .tpl-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: auto; padding-top: 4px; }
+.tab-scripts .tpl .tpl-actions button { margin-top: 0; }
+.tab-scripts .tpl-preview { border-top: 1px dashed var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 6px;
+  overflow-wrap: anywhere; }
+.tab-scripts .tpl-preview h4 { margin: 4px 0 0; }
+.tab-scripts .tpl-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.tab-scripts .tpl-check { display: block; font-size: 13px; color: var(--warn); background: var(--warn-soft);
+  border-radius: var(--radius-control); padding: 2px 8px; margin-top: 2px; }
+.tab-scripts .lib-form { display: flex; flex-direction: column; gap: 10px; }
+.tab-scripts .lib-form h3 { margin: 0; overflow-wrap: anywhere; }
+.tab-scripts .lib-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+@media (min-width: 700px) { .tab-scripts .lib-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.tab-scripts textarea.code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+.tab-scripts fieldset.checks { border: 1px solid var(--line); border-radius: var(--radius-button); padding: 8px 12px;
+  display: flex; flex-wrap: wrap; gap: 6px 16px; min-width: 0; }
+.tab-scripts fieldset.checks legend { padding: 0 6px; font-weight: 600; color: var(--heading); }
+.tab-scripts tr.muted td { color: var(--muted); }
+.tab-scripts .subform { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.tab-scripts .subform h4 { margin: 0; }

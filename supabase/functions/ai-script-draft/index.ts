@@ -74,6 +74,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const { data, error } = await userDb.auth.getUser(t);
       return error || !data?.user ? null : data.user;
     },
+    // Phase A.2: only the Vector team (is_platform_admin, migration 20261025140000) may use the AI script maker.
+    isPlatformAdmin: async () => (await rpc(userDb, "is_platform_admin")) === true,
     activeSeat: async () => first(await rpc(userDb, "my_active_seat")) ?? null,
     hasFeature: async (inst: string, f: string) => (await rpc(userDb, "has_feature", { inst, feature: f })) === true,
     callTypes: async () => await rpc(userDb, "admin_list_call_types"),

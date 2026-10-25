@@ -68,5 +68,14 @@ test('the tab keeps the password panel and leaves a WhatsApp section', () => {
   ['\'login\'', '\'reset-send\'', '\'settings-whatsapp\'', 'settings-whatsapp.js'].forEach((s) => assert.ok(src.includes(s), s));
 });
 
+// ---------- Phase A.2: common answers ----------
+test('common answers that need the institute facts', () => {
+  const rows = [{ key: 'who', check: [], filled: true }, { key: 'location', check: ['Add your address.'], filled: false },
+    { key: 'discount', check: ['Add discounts.'], filled: true }];
+  assert.deepStrictEqual(T.answersToFill(rows).map((r) => r.key), ['location', 'discount']);
+  assert.strictEqual(T.fillSummary(rows), '1 of 2 filled in');
+  assert.deepStrictEqual(T.answersToFill(null), []);
+});
+
 console.log('admin-settings.test: ' + passed + ' passed, ' + failed + ' failed');
 if (failed) process.exit(1);

@@ -31,7 +31,7 @@ test('an admin starts a campaign from a lead sheet, then pauses and resumes it',
   await page.locator('#camp-new').click();
   await expect(page).toHaveURL(/#campaigns\?new=1$/);
   await expect(page.locator('#camp-w-step1 > legend')).toHaveText('1 · Details');
-  await expect(page.locator('#camp-w-step4 > legend')).toHaveText('4 · Callers');
+  await expect(page.locator('#camp-w-step4 > legend')).toHaveText('4 · Who can call');
 
   // Starting needs a name, leads and a caller; the page says what is missing.
   await page.locator('#camp-w-start').click();
@@ -52,10 +52,13 @@ test('an admin starts a campaign from a lead sheet, then pauses and resumes it',
   await expect(page.locator('#camp-w-leads-skip')).toHaveText('4 leads ready. 1 bad number and 1 repeat will be skipped.');
   await expect(page.locator('#camp-w-leads-extra')).toContainText('Student name');
 
+  // 4 · Who can call: "Only these callers" needs at least one caller (Phase A.2: "All callers" is the default).
+  await expect(page.locator('#camp-w-who-all')).toBeChecked();
+  await page.locator('#camp-w-who-some').check();
   await page.locator('#camp-w-start').click();
   await expect(page.locator('#camp-w-msg')).toHaveText('Pick at least one caller before you start.');
 
-  // 4 · Callers: equal parts shows how many each.
+  // Equal parts shows how many each.
   await page.locator('#camp-w-seats label', { hasText: 'Rep 1' }).locator('input').check();
   await page.locator('#camp-w-seats label', { hasText: 'Rep 2' }).locator('input').check();
   await expect(page.locator('#camp-w-share option').first()).toHaveText('Equal parts (2 each)');
@@ -113,7 +116,7 @@ test('New campaign fits a phone screen and a draft can be saved without leads', 
   // Starting a draft without leads is refused by the server, and the message says why.
   await page.locator('#camp-d-start').click();
   await page.locator('#confirm-go').click();
-  await expect(page.locator('#confirm-msg')).toContainText('caller');
+  await expect(page.locator('#confirm-msg')).toContainText('lead');
 });
 
 test('an Excel lead sheet is read with the same reader as the caller app', async ({ page }) => {

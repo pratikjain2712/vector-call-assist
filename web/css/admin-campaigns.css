@@ -96,3 +96,17 @@
   .tab-campaigns .row.end > button { width: 100%; }
   .tab-campaigns .row.two > label { min-width: 0; }
 }
+
+/* Phase A.2: class and board chips, "Who can call", tags in the list */
+.tab-campaigns .chips { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.tab-campaigns .chips legend { font-size: 13px; font-weight: 600; padding: 0; margin-bottom: 6px; }
+.tab-campaigns label.chip { position: relative; display: inline-flex; flex-direction: row; align-items: center; margin: 0; font-weight: 500; }
+.tab-campaigns label.chip input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+.tab-campaigns label.chip span { display: inline-block; padding: 6px 12px; min-height: 32px; border: 1px solid var(--input-line);
+  border-radius: var(--radius-pill); background: var(--panel); color: var(--text); font-size: 14px; cursor: pointer; }
+.tab-campaigns label.chip input:checked + span { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.tab-campaigns label.chip input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tab-campaigns .who { display: flex; flex-direction: column; gap: 8px; }
+.tab-campaigns .who label.check { align-items: flex-start; }
+.tab-campaigns .who label.check input { margin-top: 3px; }
+.tab-campaigns .camp-name .tag { display: block; margin-top: 2px; font-size: 12px; font-weight: 600; color: var(--muted); }
