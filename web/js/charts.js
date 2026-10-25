@@ -280,7 +280,7 @@
   function heatmap(opts) {
     const f = frame({ className: 'chart-heat', table: opts.table });
     const grid = h('div', { className: 'heat', role: 'grid', 'aria-label': opts.label });
-    grid.style.gridTemplateColumns = '44px repeat(' + opts.cols.length + ', minmax(34px, 1fr))';
+    grid.style.gridTemplateColumns = '40px repeat(' + opts.cols.length + ', minmax(30px, 1fr))';
     const headRow = h('div', { className: 'heat-row', role: 'row' }, [h('span', { className: 'heat-corner', role: 'columnheader' })]
       .concat(opts.cols.map((c) => h('span', { className: 'heat-col', role: 'columnheader', text: c }))));
     grid.appendChild(headRow);

@@ -93,7 +93,8 @@
     body.appendChild(el('section', { className: 'panel', id: 'ins-compare-panel', 'aria-labelledby': 'ins-compare-title' }, [
       el('h2', { id: 'ins-compare-title', text: 'Compare' }), el('div', { id: 'ins-compare-out' }), msg('ins-compare-msg'),
     ]));
-    body.appendChild(el('div', { className: 'ins-grid' }, [
+    // The heatmap gets the wider column: 14 hours of cells need about 560px before they scroll.
+    body.appendChild(el('div', { className: 'ins-grid ins-grid-wide' }, [
       el('section', { className: 'panel', id: 'ins-besttime', 'aria-labelledby': 'ins-besttime-title' }, [
         el('div', { className: 'row between' }, [
           el('h2', { id: 'ins-besttime-title', text: 'Best time to call: pickup rate' }),
