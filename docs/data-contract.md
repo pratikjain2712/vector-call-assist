@@ -449,7 +449,7 @@ Changed functions (browser contract):
 | Function | Change |
 |---|---|
 | `admin_create_campaign(p_name text, p_call_type uuid, p_script uuid default null, p_start date default null, p_end date default null, p_daily_target int default null, p_share_mode text default null, p_open_to_all boolean default true, p_class_label text default null, p_board text default null)` | Three new trailing arguments. `p_share_mode` null = `next_free` when open, `equal` when restricted. The old 7-argument function was dropped (no overload); old calls by name or position keep working. |
-| `admin_update_campaign(p_campaign uuid, p_name, p_call_type, p_script, p_clear_script, p_start, p_end, p_clear_dates, p_daily_target, p_share_mode, p_status, p_open_to_all boolean default null, p_class_label text default null, p_board text default null)` | Three new trailing arguments; null keeps a value, `''` clears a tag. Draft → running needs a member only when restricted. New audit actions `campaign.opened` / `campaign.restricted`. The old 11-argument function was dropped. |
+| `admin_update_campaign(p_campaign uuid, p_name, p_call_type, p_script, p_clear_script, p_start, p_end, p_clear_dates, p_daily_target, p_share_mode, p_status, p_open_to_all boolean default null, p_class_label text default null, p_board text default null, p_release_after_hours int default null)` | Four new trailing arguments; null keeps a value, `''` clears a tag. Draft → running needs a member only when restricted. New audit actions `campaign.opened` / `campaign.restricted`. The old 11-argument function was dropped. |
 | `admin_campaign_list()` | New columns at the end: `open_to_all boolean, class_label text, board text`. |
 | `admin_campaign_detail(p_campaign)` | New keys `open_to_all`, `class_label`, `board`, `fees_due_by`; `callers` = members plus every seat holding leads of the campaign, each with `member boolean`. |
 | `my_campaigns()` | Now returns `(campaign_id, name, status, call_type_id, call_type_key, call_type_label, script_id, start_date, end_date, daily_target, call_hours, share_mode, open_to_all, class_label, board, is_member, my_leads, my_leads_due, pool_leads_due, results)`. Includes campaigns the seat is a member of and open campaigns of the institute, running or paused, ordered by status, call type order, class, board and name. `pool_leads_due` = unassigned leads that `next_free_lead` can hand out now. For the campaign picker: group by `call_type_key`, filter by `class_label` / `board`. |
@@ -458,7 +458,19 @@ Changed functions (browser contract):
 | `campaign_script_version(p_campaign, p_lead)` | Same access rule (the pushbacks column and script tests are unchanged). |
 | `save_call_result(...)` | Same signature. Allowed: the lead's seat; a member of its campaign (a lead moved while the phone was offline, as before); or, in an open campaign, a seat that already saved a call on that lead (an offline retry). Anyone else gets "lead not found". Also returns `student_id`, set when the result creates a student. |
 
-Internal (granted to nobody): `campaign_seat_can_work(p_campaign, p_seat)`, `campaign_check_tags(p_class_label, p_board)`. Unchanged: Home, Insights and `admin_callers` still count a campaign's callers from `campaign_members` (plus "anyone who called" where they did before).
+**Back to the pool (open campaigns).** A call back or promise stays with the caller who spoke to the parent. It goes back to the pool (`assigned_seat_id` null) when both of these are true:
+- it is due (`next_call_at <= now()`);
+- its caller has not saved a call in that campaign for `campaigns.release_after_hours` working hours (int, default 24, 1–720). Sundays in the institute's time zone are not counted, and a caller who never called in the campaign counts as idle.
+
+Its status, `promised_date`, `promised_amount`, `amount_due` and call history stay as they are, and audit gets `lead.released` with target `<lead>:<seat>:idle`. The rule is in one function, `seat_idle_in_campaign(p_campaign, p_seat, p_now default now())`, which uses `working_hours_between(p_from, p_to, p_tz)`. `release_stale_leads(p_campaign uuid default null)` applies it to running and paused open campaigns. It also releases any open lead held by a seat that is no longer active (`:inactive`). It returns the count and is granted to `service_role` only. `next_free_lead` runs it for its campaign first, so no cron is needed, then hands out due follow-ups first (oldest `next_call_at`), then new leads. Revoking a seat (trigger on `seats.status`) puts its open leads in open campaigns that are not closed back in the pool at once (`lead.released` `<lead>:<seat>:revoked`).
+
+| Function | Returns | Who | What |
+|---|---|---|---|
+| `admin_release_leads(p_seat uuid, p_campaign uuid default null)` | int (leads released) | owner, manager | "Back to pool": the seat's open leads (new, callback, promised; not do-not-call), in one campaign or in every campaign that is not closed (open or restricted). State and history stay. Audit `lead.released` `<lead>:<seat>:admin` per lead. |
+
+`admin_update_campaign` also takes `p_release_after_hours int default null` (1–720), as its last argument. `admin_campaign_detail` returns `release_after_hours`.
+
+Internal (granted to nobody): `campaign_seat_can_work(p_campaign, p_seat)`, `campaign_check_tags(p_class_label, p_board)`, `seat_idle_in_campaign`, `working_hours_between`, trigger `seats_release_on_revoke`. Unchanged: Home, Insights and `admin_callers` still count a campaign's callers from `campaign_members` (plus "anyone who called" where they did before).
 
 ### Ledger tables
 

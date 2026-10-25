@@ -183,7 +183,10 @@ alter table public.campaigns
   add column if not exists class_label text check (class_label is null or length(class_label) between 1 and 20),
   add column if not exists board text check (board is null or board in ('CBSE', 'ICSE', 'State', 'IB', 'IGCSE', 'Other')),
   -- Fees campaigns made from the ledger: leads carry the balance due by max(today, fees_due_by).
-  add column if not exists fees_due_by date;
+  add column if not exists fees_due_by date,
+  -- Open campaigns: a due call back or promise goes back to the pool when its caller has not worked the
+  -- campaign for this many working hours (Sundays not counted). See release_stale_leads().
+  add column if not exists release_after_hours int not null default 24 check (release_after_hours between 1 and 720);
 
 -- True when the seat may work the campaign: an active seat of the campaign's institute that is a member,
 -- or any active seat of the institute when the campaign is open to all. Does not look at the status.
@@ -428,7 +431,8 @@ begin
   return cid;
 end $$;
 
--- admin_update_campaign: new optional p_open_to_all, p_class_label, p_board ('' clears a tag). A draft that is
+-- admin_update_campaign: new optional p_open_to_all, p_class_label, p_board ('' clears a tag) and
+-- p_release_after_hours (1-720, see release_stale_leads). A draft that is
 -- open to all can start without members. Restricting a campaign (open_to_all true -> false) puts the open
 -- leads of seats that are not members back in the pool (equal mode then shares them). Audit
 -- campaign.changed (+ campaign.<status>, + campaign.restricted / campaign.opened).
@@ -438,7 +442,7 @@ create or replace function public.admin_update_campaign(
   p_clear_script boolean default false, p_start date default null, p_end date default null,
   p_clear_dates boolean default false, p_daily_target int default null, p_share_mode text default null,
   p_status text default null, p_open_to_all boolean default null, p_class_label text default null,
-  p_board text default null)
+  p_board text default null, p_release_after_hours int default null)
 returns void
 language plpgsql security definer set search_path = public
 as $$
@@ -492,6 +496,9 @@ begin
   cls := case when p_class_label is null then c.class_label else nullif(trim(p_class_label), '') end;
   brd := case when p_board is null then c.board else public.campaign_check_tags(null, p_board) end;
   perform public.campaign_check_tags(cls, null);
+  if p_release_after_hours is not null and p_release_after_hours not between 1 and 720 then
+    raise exception 'back to pool after must be 1 to 720 hours' using errcode = '22023';
+  end if;
   if st <> '' and st <> c.status then
     if st not in ('running', 'paused', 'closed') then
       raise exception 'status must be running, paused or closed' using errcode = '22023';
@@ -521,7 +528,8 @@ begin
     status = case when st = '' then status else st end,
     open_to_all = open_,
     class_label = cls,
-    board = brd
+    board = brd,
+    release_after_hours = coalesce(p_release_after_hours, release_after_hours)
   where id = c.id;
 
   if c.open_to_all and not open_ then
@@ -605,6 +613,7 @@ begin
     'start_date', c.start_date, 'end_date', c.end_date, 'daily_target', c.daily_target,
     'share_mode', c.share_mode, 'created_at', c.created_at,
     'open_to_all', c.open_to_all, 'class_label', c.class_label, 'board', c.board, 'fees_due_by', c.fees_due_by,
+    'release_after_hours', c.release_after_hours,
     'leads', (select jsonb_build_object(
                 'total', count(*),
                 'called', count(*) filter (where l.status <> 'new'
@@ -723,6 +732,8 @@ begin
   if c.status <> 'running' then
     raise exception 'this campaign is not running' using errcode = '22023';
   end if;
+  -- Open campaigns: due follow-ups of callers who stopped working the campaign go back to the pool first.
+  if c.open_to_all then perform public.release_stale_leads(c.id); end if;
 
   select l.id into lid from public.leads l
   where l.campaign_id = c.id and l.assigned_seat_id = seat.id and l.status = 'new' and not l.do_not_call
@@ -865,6 +876,149 @@ begin
     from public.script_versions sv join public.scripts s on s.id = sv.script_id
     where sv.script_id = c.script_id and sv.published;
 end $$;
+
+-- =====================================================================================================
+-- 2b. Open campaigns: follow-ups go back to the pool
+-- =====================================================================================================
+-- A call back or promise stays with the caller who spoke to the parent. In an open campaign, once it is due
+-- (next_call_at <= now) and that caller has not saved a call in that campaign for release_after_hours
+-- working hours (default 24; Sundays in the institute's time zone are not counted), it goes back to the
+-- pool (assigned_seat_id null) with its status, promise and call history unchanged, so next_free_lead hands
+-- it to the next free caller (due follow-ups before new leads). Leads of a revoked seat in open campaigns go
+-- back at once. No cron: next_free_lead runs release_stale_leads for its campaign first.
+
+-- Hours between two moments that do not fall on a Sunday in p_tz.
+create or replace function public.working_hours_between(p_from timestamptz, p_to timestamptz, p_tz text)
+returns numeric
+language sql stable set search_path = public
+as $$
+  select coalesce(sum(extract(epoch from
+           least(p_to at time zone p_tz, (d + 1)::timestamp) - greatest(p_from at time zone p_tz, d::timestamp)) / 3600), 0)::numeric
+  from generate_series((p_from at time zone p_tz)::date, (p_to at time zone p_tz)::date, interval '1 day') g(dd)
+  cross join lateral (select g.dd::date as d) x
+  where p_to > p_from and extract(isodow from d) <> 7;
+$$;
+
+-- THE rule: true when the seat has not worked the campaign (saved a call in it) for the campaign's
+-- release_after_hours working hours before p_now. A seat that never called in the campaign counts as idle.
+create or replace function public.seat_idle_in_campaign(p_campaign uuid, p_seat uuid, p_now timestamptz default now())
+returns boolean
+language sql stable security definer set search_path = public
+as $$
+  select case when x.last is null then true
+              else public.working_hours_between(x.last, p_now, public.institute_tz(c.institute_id)) >= c.release_after_hours end
+  from public.campaigns c
+  cross join lateral (select max(coalesce(o.dialled_at, o.uploaded_at)) as last from public.call_outcomes o
+                      where o.campaign_id = c.id and o.seat_id = p_seat) x
+  where c.id = p_campaign;
+$$;
+
+create index if not exists leads_follow_up_held on public.leads (campaign_id, next_call_at)
+  where assigned_seat_id is not null and status in ('callback', 'promised');
+create index if not exists call_outcomes_campaign_seat_time
+  on public.call_outcomes (campaign_id, seat_id, (coalesce(dialled_at, uploaded_at))) where campaign_id is not null;
+
+-- Puts back in the pool the due follow-ups of idle callers (and any open lead of a seat that is no longer
+-- active) in running or paused open campaigns: one campaign, or all when p_campaign is null. Each release
+-- is written to audit_log as lead.released, target <lead>:<seat>:idle|inactive. Returns how many.
+-- Internal: next_free_lead calls it; the service role may run it for all campaigns.
+create or replace function public.release_stale_leads(p_campaign uuid default null)
+returns int
+language plpgsql security definer set search_path = public
+as $$
+declare n int;
+begin
+  with stale as (
+    select l.id, l.institute_id, l.assigned_seat_id as seat_id,
+           case when s.status <> 'active' then 'inactive' else 'idle' end as why
+    from public.leads l
+    join public.campaigns c on c.id = l.campaign_id
+    join public.seats s on s.id = l.assigned_seat_id
+    where (p_campaign is null or l.campaign_id = p_campaign)
+      and c.open_to_all and c.status in ('running', 'paused')
+      and l.assigned_seat_id is not null and not l.do_not_call
+      and ((s.status <> 'active' and l.status in ('new', 'callback', 'promised'))
+           or (l.status in ('callback', 'promised') and l.next_call_at <= now()
+               and public.seat_idle_in_campaign(c.id, s.id)))
+    for update of l skip locked
+  ), upd as (
+    update public.leads l set assigned_seat_id = null from stale where l.id = stale.id returning stale.*
+  ), logged as (
+    insert into public.audit_log (institute_id, actor_id, action, target)
+      select u.institute_id, auth.uid(), 'lead.released', u.id::text || ':' || u.seat_id::text || ':' || u.why from upd u
+    returning 1
+  )
+  select count(*) into n from logged;
+  return n;
+end $$;
+
+-- A seat that is revoked gives its open leads in open campaigns (not closed) back to the pool at once.
+create or replace function public.seats_release_on_revoke()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+begin
+  with upd as (
+    update public.leads l set assigned_seat_id = null
+    from public.campaigns c
+    where c.id = l.campaign_id and c.open_to_all and c.status <> 'closed'
+      and l.assigned_seat_id = new.id and public.lead_is_open(l.status, l.do_not_call)
+    returning l.id, l.institute_id
+  )
+  insert into public.audit_log (institute_id, actor_id, action, target)
+    select u.institute_id, auth.uid(), 'lead.released', u.id::text || ':' || new.id::text || ':revoked' from upd u;
+  return new;
+end $$;
+create trigger seats_release_on_revoke after update of status on public.seats
+  for each row when (new.status = 'revoked' and old.status is distinct from 'revoked')
+  execute function public.seats_release_on_revoke();
+
+-- "Back to pool": the open leads (new, callback, promised; not do-not-call) of one seat go back to the pool,
+-- in one campaign or in every campaign that is not closed, open or restricted. Status, promise and history
+-- stay. Owner or manager of the seat's institute. Audit lead.released <lead>:<seat>:admin per lead.
+-- Returns how many.
+create or replace function public.admin_release_leads(p_seat uuid, p_campaign uuid default null)
+returns int
+language plpgsql security definer set search_path = public
+as $$
+declare
+  inst uuid;
+  n    int;
+begin
+  perform public.campaign_admin_seat();
+  select s.institute_id into inst from public.seats s where s.id = p_seat;
+  if inst is null or not public.is_admin_of(inst) then
+    raise exception 'caller not found' using errcode = '42501';
+  end if;
+  if p_campaign is not null then
+    perform public.campaign_for_admin(p_campaign);
+    if exists (select 1 from public.campaigns k where k.id = p_campaign and k.institute_id <> inst) then
+      raise exception 'campaign not found' using errcode = '42501';
+    end if;
+  end if;
+  with upd as (
+    update public.leads l set assigned_seat_id = null
+    from public.campaigns k
+    where k.id = l.campaign_id and l.institute_id = inst and l.assigned_seat_id = p_seat and k.status <> 'closed'
+      and (p_campaign is null or l.campaign_id = p_campaign)
+      and public.lead_is_open(l.status, l.do_not_call)
+    returning l.id
+  ), logged as (
+    insert into public.audit_log (institute_id, actor_id, action, target)
+      select inst, auth.uid(), 'lead.released', u.id::text || ':' || p_seat::text || ':admin' from upd u
+    returning 1
+  )
+  select count(*) into n from logged;
+  return n;
+end $$;
+
+revoke all on function public.working_hours_between(timestamptz, timestamptz, text) from public, anon, authenticated;
+revoke all on function public.seat_idle_in_campaign(uuid, uuid, timestamptz) from public, anon, authenticated;
+revoke all on function public.release_stale_leads(uuid) from public, anon, authenticated;
+revoke all on function public.seats_release_on_revoke() from public, anon, authenticated;
+grant execute on function public.release_stale_leads(uuid) to service_role;
+revoke all on function public.admin_release_leads(uuid, uuid) from public, anon;
+grant execute on function public.admin_release_leads(uuid, uuid) to authenticated;
 
 -- =====================================================================================================
 -- 3. The fee ledger: tables
@@ -2149,7 +2303,7 @@ revoke all on function public.invite_seat(uuid, text, text, text) from public, a
 revoke all on function public.ledger_board(text) from public, anon;
 revoke all on function public.admin_set_campaign_members(uuid, uuid[]) from public, anon;
 revoke all on function public.admin_create_campaign(text, uuid, uuid, date, date, int, text, boolean, text, text) from public, anon;
-revoke all on function public.admin_update_campaign(uuid, text, uuid, uuid, boolean, date, date, boolean, int, text, text, boolean, text, text) from public, anon;
+revoke all on function public.admin_update_campaign(uuid, text, uuid, uuid, boolean, date, date, boolean, int, text, text, boolean, text, text, int) from public, anon;
 revoke all on function public.admin_campaign_list() from public, anon;
 revoke all on function public.admin_campaign_detail(uuid) from public, anon;
 revoke all on function public.my_campaigns() from public, anon;
@@ -2181,7 +2335,7 @@ grant execute on function public.invite_seat(uuid, text, text, text) to authenti
 grant execute on function public.ledger_board(text) to authenticated;
 grant execute on function public.admin_set_campaign_members(uuid, uuid[]) to authenticated;
 grant execute on function public.admin_create_campaign(text, uuid, uuid, date, date, int, text, boolean, text, text) to authenticated;
-grant execute on function public.admin_update_campaign(uuid, text, uuid, uuid, boolean, date, date, boolean, int, text, text, boolean, text, text) to authenticated;
+grant execute on function public.admin_update_campaign(uuid, text, uuid, uuid, boolean, date, date, boolean, int, text, text, boolean, text, text, int) to authenticated;
 grant execute on function public.admin_campaign_list() to authenticated;
 grant execute on function public.admin_campaign_detail(uuid) to authenticated;
 grant execute on function public.my_campaigns() to authenticated;

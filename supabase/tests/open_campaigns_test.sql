@@ -162,6 +162,80 @@ select pg_temp.val_is('a paused open campaign is listed', $q$select status from 
 select pg_temp.fails_with('but hands out no leads', $q$select * from next_free_lead((select campaign_id from my_campaigns()))$q$, 'not running');
 reset role;
 
+-- ---------- back to the pool: idle callers' due follow-ups, revoked seats, admin ----------
+-- "Follow-ups" (open, running): F1 promised to Asha, due an hour ago, Asha's last call in the campaign 4 days
+-- ago; F2 call back of Bina, due, Bina called an hour ago; F3 call back of Chetan, due tomorrow, Chetan's
+-- last call 4 days ago; F4 new, in the pool.
+insert into campaigns (id, institute_id, name, call_type_id, status) values
+ ('f5000000-0000-0000-0000-000000000001', :'inst_i', 'Follow-ups', (select id from call_types where key='fees' and institute_id is null), 'running');
+insert into ids values ('fu', 'f5000000-0000-0000-0000-000000000001');
+insert into leads (id, institute_id, campaign_id, name, phone, assigned_seat_id, status, next_call_at, promised_date, promised_amount, amount_due, created_at) values
+ ('f6000000-0000-0000-0000-000000000001', :'inst_i', 'f5000000-0000-0000-0000-000000000001', 'F1', '9200000001', :'s_a', 'promised', now() - interval '1 hour', current_date - 1, 3000, 9000, now() - interval '10 days'),
+ ('f6000000-0000-0000-0000-000000000002', :'inst_i', 'f5000000-0000-0000-0000-000000000001', 'F2', '9200000002', :'s_b', 'callback', now() - interval '1 hour', null, null, null, now() - interval '10 days'),
+ ('f6000000-0000-0000-0000-000000000003', :'inst_i', 'f5000000-0000-0000-0000-000000000001', 'F3', '9200000003', :'s_c', 'callback', now() + interval '1 day', null, null, null, now() - interval '10 days'),
+ ('f6000000-0000-0000-0000-000000000004', :'inst_i', 'f5000000-0000-0000-0000-000000000001', 'F4', '9200000004', null, 'new', null, null, null, null, now() - interval '20 days');
+insert into call_outcomes (institute_id, seat_id, client_record_id, campaign_id, lead_id, result_key, promised_date, amount, dialled_at) values
+ (:'inst_i', :'s_a', 'fu-a', 'f5000000-0000-0000-0000-000000000001', 'f6000000-0000-0000-0000-000000000001', 'will_pay_on', current_date - 1, 3000, now() - interval '4 days'),
+ (:'inst_i', :'s_b', 'fu-b', 'f5000000-0000-0000-0000-000000000001', 'f6000000-0000-0000-0000-000000000002', 'busy', null, null, now() - interval '1 hour'),
+ (:'inst_i', :'s_c', 'fu-c', 'f5000000-0000-0000-0000-000000000001', 'f6000000-0000-0000-0000-000000000003', 'busy', null, null, now() - interval '4 days'),
+ -- The owner's only call in the campaign: Saturday 24 Oct 2026, 10:00 India (for the Sunday rule).
+ (:'inst_i', :'s_o', 'fu-o', 'f5000000-0000-0000-0000-000000000001', 'f6000000-0000-0000-0000-000000000004', 'busy', null, null, '2026-10-24 10:00+05:30');
+
+select pg_temp.val_is('working hours skip Sunday: Sat 10:00 to Mon 09:00 is 23 h', $q$select working_hours_between('2026-10-24 10:00+05:30', '2026-10-26 09:00+05:30', 'Asia/Kolkata')::int::text$q$, '23');
+select pg_temp.val_is('Sunday skipped: not idle on Monday 09:00 (23 working hours)', $q$select seat_idle_in_campaign((select id from ids where k='fu'), 'f4000000-0000-0000-0000-000000000001', '2026-10-26 09:00+05:30')::text$q$, 'false');
+select pg_temp.val_is('Sunday skipped: idle on Monday 11:00 (25 working hours)', $q$select seat_idle_in_campaign((select id from ids where k='fu'), 'f4000000-0000-0000-0000-000000000001', '2026-10-26 11:00+05:30')::text$q$, 'true');
+select pg_temp.val_is('idle by Wednesday 11:00', $q$select seat_idle_in_campaign((select id from ids where k='fu'), 'f4000000-0000-0000-0000-000000000001', '2026-10-28 11:00+05:30')::text$q$, 'true');
+select pg_temp.val_is('a seat with no call in the campaign is idle', $q$select seat_idle_in_campaign((select id from ids where k='fu'), 'f4000000-0000-0000-0000-000000000005', now())::text$q$, 'true');
+
+select pg_temp.as_user(:'u_o');
+set role authenticated;
+select pg_temp.ok('the period changes per campaign (48 h)', $q$select admin_update_campaign((select id from ids where k='fu'), p_release_after_hours => 48)$q$);
+select pg_temp.fails_with('the period must be 1 to 720 hours', $q$select admin_update_campaign((select id from ids where k='fu'), p_release_after_hours => 0)$q$, '720');
+reset role;
+select pg_temp.val_is('with 48 h, Monday 11:00 is not idle yet', $q$select seat_idle_in_campaign((select id from ids where k='fu'), 'f4000000-0000-0000-0000-000000000001', '2026-10-26 11:00+05:30')::text$q$, 'false');
+update campaigns set release_after_hours = 24 where id = 'f5000000-0000-0000-0000-000000000001';
+
+select pg_temp.as_user(:'u_b');
+set role authenticated;
+select pg_temp.val_is('next_free_lead releases Asha''s stale promise and hands it out before new leads', $q$select name from next_free_lead((select id from ids where k='fu'))$q$, 'F1');
+reset role;
+select pg_temp.val_is('the released promise keeps its status, date and amounts', $q$select status||':'||(promised_date = current_date - 1)||':'||promised_amount||':'||amount_due from leads where name='F1'$q$, 'promised:true:3000.00:9000.00');
+select pg_temp.val_is('and its call history', $q$select count(*)::text from call_outcomes where lead_id='f6000000-0000-0000-0000-000000000001' and seat_id='f4000000-0000-0000-0000-000000000002'$q$, '1');
+select pg_temp.val_is('audit: lead.released for F1 (idle)', $q$select count(*)::text from audit_log where action='lead.released' and target='f6000000-0000-0000-0000-000000000001:f4000000-0000-0000-0000-000000000002:idle'$q$, '1');
+select pg_temp.val_is('no release when the caller worked the campaign within the period (F2 stays with Bina)', $q$select (select label from seats where id=assigned_seat_id) from leads where name='F2'$q$, 'Bina');
+select pg_temp.val_is('a follow-up that is not due stays (F3 with Chetan)', $q$select (select label from seats where id=assigned_seat_id) from leads where name='F3'$q$, 'Chetan');
+select pg_temp.val_is('F4 is still in the pool', $q$select coalesce(assigned_seat_id::text, 'pool') from leads where name='F4'$q$, 'pool');
+select pg_temp.val_is('restricted campaigns are not touched', $q$select release_stale_leads((select id from ids where k='restr'))::text$q$, '0');
+select pg_temp.val_is('release_stale_leads is not for the browser', $q$select has_function_privilege('authenticated','public.release_stale_leads(uuid)','EXECUTE')::text$q$, 'false');
+
+-- Revoking a seat releases its open leads in open campaigns at once.
+insert into leads (institute_id, campaign_id, name, phone, assigned_seat_id, status) values
+ (:'inst_i', 'f5000000-0000-0000-0000-000000000001', 'F5', '9200000005', :'s_c', 'new');
+select pg_temp.as_user(:'u_o');
+set role authenticated;
+select pg_temp.ok('the owner revokes Chetan', format($q$select revoke_seat(%L)$q$, :'s_c'));
+reset role;
+select pg_temp.val_is('Chetan''s open leads in Follow-ups are back in the pool', $q$select string_agg(name||'='||coalesce(assigned_seat_id::text, 'pool'), ',' order by name) from leads where name in ('F3','F5')$q$, 'F3=pool,F5=pool');
+select pg_temp.val_is('the call back keeps its status', $q$select status from leads where name='F3'$q$, 'callback');
+select pg_temp.val_is('audit: lead.released (revoked) for both', $q$select count(*)::text from audit_log where action='lead.released' and target like '%:f4000000-0000-0000-0000-000000000004:revoked' and split_part(target, ':', 1) in (select id::text from leads where name in ('F3','F5'))$q$, '2');
+
+-- Admin "back to pool".
+select pg_temp.as_user(:'u_a');
+set role authenticated;
+select pg_temp.fails_with('a caller cannot send leads back to the pool', format($q$select admin_release_leads(%L)$q$, :'s_b'), 'only an admin');
+reset role;
+select pg_temp.as_user(:'u_y');
+set role authenticated;
+select pg_temp.fails('another institute cannot either', format($q$select admin_release_leads(%L)$q$, :'s_b'));
+reset role;
+select pg_temp.as_user(:'u_o');
+set role authenticated;
+select pg_temp.val_is('the owner sends Bina''s Follow-ups leads back (F1, F2)', format($q$select admin_release_leads(%L, (select id from ids where k='fu'))::text$q$, :'s_b'), '2');
+reset role;
+select pg_temp.val_is('Bina holds no Follow-ups lead', $q$select count(*)::text from leads where campaign_id='f5000000-0000-0000-0000-000000000001' and assigned_seat_id='f4000000-0000-0000-0000-000000000003'$q$, '0');
+select pg_temp.val_is('released leads keep their state', $q$select string_agg(name||'='||status, ',' order by name) from leads where name in ('F1','F2')$q$, 'F1=promised,F2=callback');
+select pg_temp.val_is('audit: lead.released (admin)', $q$select count(*)::text from audit_log where action='lead.released' and target like '%:admin'$q$, '2');
+
 -- ---------- grants ----------
 select pg_temp.val_is('nobody runs campaign_seat_can_work from the browser', $q$select has_function_privilege('authenticated','public.campaign_seat_can_work(uuid,uuid)','EXECUTE')::text$q$, 'false');
 select pg_temp.val_is('the old 7-argument admin_create_campaign is gone', $q$select count(*)::text from pg_proc where proname='admin_create_campaign'$q$, '1');
