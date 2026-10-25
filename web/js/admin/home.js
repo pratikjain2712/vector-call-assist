@@ -52,15 +52,38 @@
     return Math.abs(p) + '% ' + (p > 0 ? 'more' : 'fewer') + ' than ' + than;
   }
 
+  // A call's running time as 'm:ss' ('1:02:05' past an hour). '' when not known.
+  function clock(seconds) {
+    if (seconds === null || seconds === undefined || seconds === '' || !isFinite(Number(seconds))) return '';
+    const s = Math.max(0, Math.floor(Number(seconds)));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const ss = String(s % 60).padStart(2, '0');
+    return h ? h + ':' + String(m).padStart(2, '0') + ':' + ss : m + ':' + ss;
+  }
+
   // What a caller is doing now: { text, level } where level is ok | warn | danger | muted.
-  function statusInfo(now) {
+  // now: home_seat_status (20261025190000). on_call with call_state dialling / connected is confirmed by the
+  // paired phone; 'unconfirmed' means only the caller's page says so. wrapup: saving the result after hanging up.
+  // ticked: seconds since Home loaded now, added to now.seconds so the timer runs between refreshes.
+  function statusInfo(now, ticked) {
     const st = now && now.status;
-    if (st === 'on_call') return { text: 'On a call', level: 'ok' };
+    const secs = now && now.seconds !== null && now.seconds !== undefined ? clock(Number(now.seconds) + (Number(ticked) || 0)) : '';
+    const timed = (text) => (secs ? text + ' · ' + secs : text);
+    if (st === 'on_call' && (now.call_state === 'unconfirmed' || now.confirmed === false)) {
+      return { text: timed('On a call (unconfirmed)'), level: 'ok' };
+    }
+    if (st === 'on_call') return { text: timed('On a call'), level: 'ok' };
+    if (st === 'wrapup') return { text: timed('Wrap-up'), level: 'ok' };
     if (st === 'ready') return { text: 'Ready', level: 'ok' };
     if (st === 'idle') return { text: 'No calls for ' + minutes(now.idle_minutes), level: 'warn' };
     if (st === 'phone_offline') return { text: 'Phone offline', level: 'danger' };
     return { text: 'No calls today', level: 'muted' };
   }
+
+  // Whether a status shows a running timer (a call or a wrap-up with its seconds).
+  const ticks = (now) => !!now && (now.status === 'on_call' || now.status === 'wrapup') &&
+    now.seconds !== null && now.seconds !== undefined && isFinite(Number(now.seconds));
 
   // [{label: 'Paid', count: 5}, …] as '5 paid · 4 will pay on date'. '—' when empty.
   function resultsText(results) {
@@ -200,7 +223,7 @@
     };
   }
 
-  const helpers = { REFRESH_MS, IDLE_ALERT_MIN, DAYS, duration, minutes, percent, changeText, statusInfo, resultsText,
+  const helpers = { REFRESH_MS, IDLE_ALERT_MIN, DAYS, duration, minutes, percent, changeText, clock, ticks, statusInfo, resultsText,
     attentionItems, campaignProgress, feesTile, releasedDetail };
   if (typeof module !== 'undefined' && module.exports) { module.exports = helpers; return; }
 
@@ -217,6 +240,8 @@
   let lastLoad = 0;
   let summary = null;
   let ledger = null;    // admin_home_ledger (Phase A.2), null when the database does not have it
+  let clockTimer = null;  // ticks the "On a call · 3:12" timers every second between refreshes
+  let live = [];          // [{ span, now }] status cells with a running timer
 
   const cell = (text, cls, label) => el('td', { text: text === null || text === undefined ? '' : String(text), className: cls || '', 'data-label': label || null });
 
@@ -268,6 +293,7 @@
     $('home-filters').addEventListener('submit', (e) => { e.preventDefault(); load(); });
     document.addEventListener('visibilitychange', onVisibility);
     timer = setInterval(tick, REFRESH_MS);
+    clockTimer = setInterval(tickClocks, 1000);
   }
 
   const visible = () => !!box && !box.hidden && !document.hidden;
@@ -356,8 +382,11 @@
     body.textContent = '';
     const list = summary.callers || [];
     $('home-callers-empty').hidden = list.length > 0;
+    live = [];
     list.forEach((c) => {
       const st = statusInfo(c.now);
+      const span = el('span', { className: 'home-status ' + st.level, text: st.text });
+      if (ticks(c.now)) live.push({ span, now: c.now });
       body.appendChild(el('tr', null, [
         el('td', { 'data-label': 'Caller' }, [el('a', { href: S.buildHash('callers', { seat: c.seat_id }), text: c.label })]),
         cell((c.campaigns || []).join(', ') || '—', '', 'Campaign'),
@@ -365,9 +394,16 @@
         cell(c.target ? S.count(c.target) : '—', 'num', 'Target'),
         cell(duration(c.talk_seconds), 'num', 'Talk'),
         cell(resultsText(c.results), '', 'Results'),
-        el('td', { 'data-label': 'Status' }, [el('span', { className: 'home-status ' + st.level, text: st.text })]),
+        el('td', { 'data-label': 'Status' }, [span]),
       ]));
     });
+  }
+
+  // Every second: the call and wrap-up timers count on from the seconds the server sent at the last load.
+  function tickClocks() {
+    if (!live.length || !visible()) return;
+    const extra = (Date.now() - lastLoad) / 1000;
+    live.forEach((x) => { x.span.textContent = statusInfo(x.now, extra).text; });
   }
 
   function renderAttention() {
@@ -420,6 +456,9 @@
     unmount() {
       if (timer) clearInterval(timer);
       timer = null;
+      if (clockTimer) clearInterval(clockTimer);
+      clockTimer = null;
+      live = [];
       document.removeEventListener('visibilitychange', onVisibility);
       seq++;
       ctx = null;

@@ -79,10 +79,11 @@
     return { added: [...a].filter((id) => !b.has(id)), removed: [...b].filter((id) => !a.has(id)) };
   }
 
-  // What the seat is doing now, in a few words ('' when nothing is known).
+  // What the seat is doing now, in a few words ('' when nothing is known). See home_seat_status (20261025190000).
   function nowText(now) {
     const st = now && now.status;
-    if (st === 'on_call') return 'On a call';
+    if (st === 'on_call') return now.call_state === 'unconfirmed' || now.confirmed === false ? 'On a call (unconfirmed)' : 'On a call';
+    if (st === 'wrapup') return 'Wrap-up';
     if (st === 'ready') return 'Ready';
     if (st === 'phone_offline') return 'Phone offline';
     if (st === 'idle') return 'No calls for ' + Math.round(Number(now.idle_minutes) || 0) + ' min';

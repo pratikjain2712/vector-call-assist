@@ -1708,12 +1708,17 @@ declare
 begin
   -- "Callers right now": the caller screens report presence every minute. seen_at is set a few hours ahead so
   -- the statuses stay live for the whole demo (they are only read as "seen in the last 3 minutes").
-  insert into public.seat_presence (seat_id, institute_id, seen_at, online_since, on_call, phone_ok, phone_offline_since) values
-    (ravi,  inst, now() + interval '8 hours', pg_temp.ist(today, 9 * 3600 + 1500), true,  true,  null),
-    (priya, inst, now() + interval '8 hours', pg_temp.ist(today, 9 * 3600 + 1700), false, true,  null),
-    (neha,  inst, now() + interval '8 hours', pg_temp.ist(today, 9 * 3600 + 1600), true,  true,  null),
-    (amit,  inst, now() + interval '8 hours', now() - interval '45 minutes',        false, true,  null),
-    (sana,  inst, now() + interval '8 hours', pg_temp.ist(today, 9 * 3600 + 1800), false, false, sana_off);
+  -- Neha and Ravi are on calls their phones confirm (20261025190000): Home shows "On a call · m:ss" from
+  -- call_started_at, a few minutes before the seed ran.
+  insert into public.seat_presence (seat_id, institute_id, seen_at, online_since, on_call, phone_ok, phone_offline_since,
+                                    call_state, call_started_at, state_at) values
+    (ravi,  inst, now() + interval '8 hours', pg_temp.ist(today, 9 * 3600 + 1500), true,  true,  null,
+       'connected', now() - interval '1 minute 40 seconds', now() - interval '1 minute 30 seconds'),
+    (priya, inst, now() + interval '8 hours', pg_temp.ist(today, 9 * 3600 + 1700), false, true,  null, 'none', null, now()),
+    (neha,  inst, now() + interval '8 hours', pg_temp.ist(today, 9 * 3600 + 1600), true,  true,  null,
+       'connected', now() - interval '3 minutes 12 seconds', now() - interval '3 minutes'),
+    (amit,  inst, now() + interval '8 hours', now() - interval '45 minutes',        false, true,  null, 'none', null, now()),
+    (sana,  inst, now() + interval '8 hours', pg_temp.ist(today, 9 * 3600 + 1800), false, false, sana_off, 'none', null, now());
 
   -- Supervisor notes (Callers tab, coaching).
   insert into public.supervisor_notes (institute_id, target_seat_id, author_seat_id, note_day, note, created_at) values
