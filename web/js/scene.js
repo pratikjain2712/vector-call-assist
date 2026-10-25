@@ -99,7 +99,7 @@ function drawPhoneCall(g) {
   tx(g, 'Ananya Rao', PHONE_W / 2, 412, 'bold 30px sans-serif', INK, 'center');
   tx(g, '00:42', PHONE_W / 2, 486, 'bold 58px sans-serif', INK, 'center');
   rr(g, 110, 510, 166, 40, 20, MINT_HEX); tx(g, 'On your SIM', PHONE_W / 2, 537, 'bold 18px sans-serif', '#ffffff', 'center');
-  tx(g, 'The lead sees your number', PHONE_W / 2, 580, '17px sans-serif', MUTED, 'center');
+  tx(g, 'They see your own number', PHONE_W / 2, 580, '17px sans-serif', MUTED, 'center');
   rr(g, 40, 720, 306, 76, 38, '#d6453d'); tx(g, 'Hang up', PHONE_W / 2, 767, 'bold 22px sans-serif', '#ffffff', 'center');
 }
 
@@ -114,14 +114,14 @@ function lapFrame(g, active) {
     if (on) rr(g, 12, y - 22, 126, 34, 10, BLUE);
     tx(g, items[i], 26, y, '16px sans-serif', on ? '#ffffff' : '#9fb0cc');
   }
-  tx(g, 'Rep: Ravi', 22, LAP_H - 20, '14px sans-serif', '#9fb0cc');
+  tx(g, 'Caller: Ravi', 22, LAP_H - 20, '14px sans-serif', '#9fb0cc');
 }
 // The laptop when the lead raises an objection: what they said, then what to say.
 function drawLaptopAnswer(g, said, answer) {
   lapFrame(g, 'Today');
-  tx(g, 'STEP 3 OF 4 · OFFER', 176, 40, 'bold 13px monospace', MUTED);
+  tx(g, 'STEP 2 OF 4 · PAY DATE', 176, 40, 'bold 13px monospace', MUTED);
   rr(g, 176, 56, 84, 8, 4, BLUE); rr(g, 266, 56, 84, 8, 4, BLUE); rr(g, 356, 56, 84, 8, 4, BLUE); rr(g, 446, 56, 84, 8, 4, PALE);
-  tx(g, 'THE LEAD SAYS', 176, 102, 'bold 13px monospace', MUTED);
+  tx(g, 'THE PARENT SAYS', 176, 102, 'bold 13px monospace', MUTED);
   rr(g, 176, 114, 20 + Math.min(420, said.length * 15), 44, 22, INK);
   tx(g, said, 196, 143, 'bold 21px sans-serif', '#ffffff');
   rr(g, 176, 176, 440, 196, 18, '#fff4dc');
@@ -217,7 +217,7 @@ function initHero(canvas) {
   }
   const pressed = document.querySelector('#saidChips [aria-pressed="true"]');
   const answerEl = document.getElementById('answerText');
-  showObjection(pressed ? pressed.textContent : 'Too expensive', answerEl ? answerEl.textContent : '');
+  showObjection(pressed ? pressed.textContent : "Can't pay it all now", answerEl ? answerEl.textContent : '');
   document.addEventListener('vca:objection', function (e) {
     const d = e.detail || {};
     if (d.said && d.answer) showObjection(d.said, d.answer);
@@ -408,7 +408,7 @@ function drawDemo(g, d) {
       tx(g, mmss(d.secs), cx, 490, 'bold 60px sans-serif', INK, 'center');
     }
     rr(g, cx - 83, 518, 166, 40, 20, MINT_HEX); tx(g, 'On your SIM', cx, 545, 'bold 18px sans-serif', '#ffffff', 'center');
-    tx(g, 'The lead sees your number', cx, 590, '17px sans-serif', MUTED, 'center');
+    tx(g, 'They see your own number', cx, 590, '17px sans-serif', MUTED, 'center');
     rr(g, 40, 720, 306, 76, 38, '#d6453d'); tx(g, 'Hang up', cx, 767, 'bold 22px sans-serif', '#ffffff', 'center');
   } else if (d.state === 'ended') {
     phoneFrame(g, 'Call ended');

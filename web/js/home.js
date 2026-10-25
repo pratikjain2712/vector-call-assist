@@ -33,7 +33,7 @@
   (function splitTitle() {
     var h = $('heroTitle');
     if (!h || reduce) return;
-    var parts = [{ t: 'Close more calls.' }, { t: 'Know why the rest were lost.', hot: true }];
+    var parts = [{ t: 'Collect fees on time.' }, { t: 'Fill more seats.', hot: true }];
     h.textContent = '';
     var i = 0;
     parts.forEach(function (part) {
@@ -573,10 +573,11 @@
   var hero = document.getElementById('hero');
   if (!box || !text) return;
   var btns = Array.prototype.slice.call(box.querySelectorAll('button'));
+  // A fees call: what the parent says, and what the caller sees. The first answer is also in index.html.
   var ANSWERS = {
-    price: 'Ask what budget they had in mind. Then mention the fee can be paid in three instalments.',
-    later: 'Ask what time suits them, and set a callback for exactly then. The phone rings on time.',
-    joined: 'Ask what they are using to prepare, then offer a free mock test as the next step.'
+    part: 'Ask how much they can pay this week and a date for the rest. Tap "Paid part" and note the ₹ amount.',
+    later: 'Ask for the exact date. Tap "Will pay on date" with the date and ₹. If the date passes, the parent comes back first.',
+    paid: 'Thank them and ask when and how they paid. Tap "Says already paid" so the office checks before anyone calls again.'
   };
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var current = 0, timer = null, inView = true, AUTO_MS = 4600;
@@ -612,6 +613,83 @@
   }
   pick(0);
   startAuto();
+})();
+
+/* ---------- menu on narrow screens: the button opens the links under the pill ---------- */
+(function mobileMenu() {
+  var btn = document.getElementById('menuBtn');
+  var menu = document.getElementById('menu');
+  if (!btn || !menu) return;
+  function set(open) {
+    menu.classList.toggle('open', open);
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    btn.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+  }
+  btn.addEventListener('click', function () { set(!menu.classList.contains('open')); });
+  menu.addEventListener('click', function (e) { if (e.target.closest('a')) set(false); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && menu.classList.contains('open')) { set(false); btn.focus(); }
+  });
+  document.addEventListener('click', function (e) {
+    if (menu.classList.contains('open') && !menu.contains(e.target) && !btn.contains(e.target)) set(false);
+  });
+})();
+
+/* ---------- contact: WhatsApp, phone and email from VECTOR_CONFIG.contact ----------
+   Each is shown only when its value is set in config.js. Without a WhatsApp number the hero's second button
+   stays "See a live demo" and the floating button stays hidden. */
+(function contact() {
+  var c = (window.VECTOR_CONFIG && window.VECTOR_CONFIG.contact) || {};
+  var MESSAGE = "Hi, I'd like a demo of Vector";
+  var wa = String(c.whatsapp || '').replace(/\D/g, '');
+  var phone = String(c.phone || '').trim();
+  var email = String(c.email || '').trim();
+  function $(id) { return document.getElementById(id); }
+  var NS = 'http://www.w3.org/2000/svg';
+  function chatIcon() {
+    var svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('class', 'wa-icon');
+    var path = document.createElementNS(NS, 'path');
+    path.setAttribute('d', 'M12 3a8.6 8.6 0 0 0-7.4 13l-1.1 4 4.1-1.1A8.6 8.6 0 1 0 12 3zm4.4 11.9c-.2.5-1.1 1-1.5 1-.4.1-.9.1-1.4-.1-.3-.1-.8-.3-1.3-.5-2.3-1-3.8-3.3-3.9-3.5-.1-.1-.9-1.2-.9-2.3s.6-1.6.8-1.8c.2-.2.4-.3.6-.3h.4c.1 0 .3 0 .5.4l.7 1.6c.1.1.1.3 0 .4l-.3.5-.3.3c-.1.1-.2.3-.1.5.2.3.7 1.1 1.4 1.7.9.8 1.7 1.1 2 1.2.2.1.4.1.5-.1l.7-.8c.2-.2.3-.2.5-.1l1.5.7c.2.1.4.2.4.3.1.1.1.6-.1 1z');
+    path.setAttribute('fill', 'currentColor');
+    svg.appendChild(path);
+    return svg;
+  }
+  var any = false;
+  if (wa.length >= 8) {
+    var url = 'https://wa.me/' + wa + '?text=' + encodeURIComponent(MESSAGE);
+    var hero = $('heroContact');
+    if (hero) {
+      hero.textContent = '';
+      hero.appendChild(chatIcon());
+      hero.appendChild(document.createTextNode(' Book a demo on WhatsApp'));
+      var sr = document.createElement('span');
+      sr.className = 'sr';
+      sr.textContent = ' (opens WhatsApp in a new tab)';
+      hero.appendChild(sr);
+      hero.setAttribute('href', url);
+      hero.setAttribute('target', '_blank');
+      hero.setAttribute('rel', 'noopener');
+    }
+    var fl = $('waFloat');
+    if (fl) { fl.setAttribute('href', url); fl.hidden = false; document.documentElement.classList.add('has-wa'); }
+    if ($('footWaLink')) { $('footWaLink').setAttribute('href', url); $('footWa').hidden = false; any = true; }
+  }
+  if (phone && $('footPhoneLink')) {
+    $('footPhoneLink').setAttribute('href', 'tel:' + phone.replace(/[^\d+]/g, ''));
+    $('footPhoneLink').textContent = phone;
+    $('footPhone').hidden = false;
+    any = true;
+  }
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && $('footEmailLink')) {
+    $('footEmailLink').setAttribute('href', 'mailto:' + email);
+    $('footEmailLink').textContent = email;
+    $('footEmail').hidden = false;
+    any = true;
+  }
+  if ($('footContact')) $('footContact').hidden = !any;
 })();
 
 /* ---------- menu button: its text follows the section in view (each section has data-cta) ---------- */

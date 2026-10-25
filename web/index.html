@@ -1,17 +1,22 @@
 <!doctype html>
-<html lang="en">
+<html lang="en-IN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <!-- Content-Security-Policy: scripts come only from this site and the two CDNs below. The three.js module is pinned to an exact release. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.supabase.co; object-src 'none'; base-uri 'self'; form-action 'none'">
-<meta name="description" content="Vector Call Assist helps admissions and sales calling teams close more calls and see why the rest were lost. Reps call from their own Android SIM with the script on the laptop. Start a 5-day free trial.">
+<meta name="description" content="Vector helps schools, coaching institutes and sales teams collect fees on time and fill more seats. Callers follow your best script, log every result in one tap and call from their own SIM. 5-day free trial, no card.">
 <meta name="theme-color" content="#2456e6">
-<meta property="og:title" content="Vector Call Assist">
-<meta property="og:description" content="Close more calls. Know why the rest were lost. Human calling for admissions and sales teams.">
+<meta property="og:site_name" content="Vector Call Assist">
+<meta property="og:title" content="Vector Call Assist · Collect fees on time. Fill more seats.">
+<meta property="og:description" content="Guided calling for schools, coaching institutes and sales teams: the best script on every call, every result logged, and a clear view of what to change. Calls go out from your callers' own SIM.">
 <meta property="og:type" content="website">
+<meta property="og:locale" content="en_IN">
+<meta property="og:image" content="https://pratikjain2712.github.io/vector-call-assist/img/fees-report.webp">
+<meta property="og:image:alt" content="Vector fees collection report: total due, paid after a call, promised, and broken promises to call again first.">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%232456e6'/%3E%3Cpath d='M14 18l12 28 8-17 8 17 12-28h-7l-5 12-8-17-8 17-5-12z' fill='%23fff'/%3E%3C/svg%3E">
-<title>Vector Call Assist · Close more calls</title>
+<title>Vector Call Assist · Collect fees on time. Fill more seats.</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@1&family=Plus+Jakarta+Sans:wght@600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap">
@@ -27,79 +32,83 @@
       <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#2456e6"/><path d="M7 9l9 15 9-15h-4l-5 9-5-9z" fill="#fff"/></svg>
       <span>Vector<em> Call Assist</em></span>
     </a>
-    <nav class="menu" aria-label="Main">
+    <nav class="menu" id="menu" aria-label="Main">
+      <a href="#fees">Fees</a>
+      <a href="#sales">Admissions &amp; sales</a>
+      <a href="#insights">Insights</a>
       <a href="#demo">Live demo</a>
-      <a href="#who">Who it's for</a>
-      <a href="#how">How it works</a>
-      <a href="#insights">Analytics</a>
       <a href="#pricing">Pricing</a>
       <a href="#faq">FAQ</a>
+      <a class="menu-signin" href="#account">Sign in</a>
     </nav>
     <div class="nav-cta">
       <a class="link" href="#account">Sign in</a>
       <a class="btn btn-primary btn-sm" id="navCta" href="#account">Start free trial</a>
+      <button type="button" class="menu-btn" id="menuBtn" aria-controls="menu" aria-expanded="false" aria-label="Open menu">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
     </div>
   </div>
 </header>
 
 <main id="main">
 
-<!-- HERO: centred copy, then a stage card where the visitor picks what the lead said: the 3D laptop shows the
-     answer and the phone goes on call. Walls of sample Vector screens scroll beside it on wide screens. -->
-<section class="hero" id="hero" data-cta="Start free trial" aria-label="Vector Call Assist">
+<!-- HERO: the promise, then a stage card where the visitor picks what a parent said on a fees call: the 3D
+     laptop shows the answer and the phone is on the call. Sample Vector cards drift beside it on wide screens. -->
+<section class="hero" id="hero" data-cta="Start free trial" aria-labelledby="heroTitle">
   <div class="wall wall-l" aria-hidden="true">
       <div class="wall-track">
-        <div class="wcard"><span class="wk">Step 2 of 4 · Ask</span><p class="wq">"Which course were you looking at, and what would you like to know first?"</p></div>
-        <div class="wcard"><span class="wk">Outcome logged</span><p class="wrow"><b>Riya S.</b><span class="wpill won">Won</span></p><p class="wsub">Talk time 04:12</p></div>
-        <div class="wcard"><span class="wk">Callback</span><p class="wrow"><b>Arjun M.</b><span class="wsub">Today, 5:30 pm</span></p><p class="wsub">Rings on the rep's phone</p></div>
-        <div class="wcard"><span class="wk">Where calls are lost</span><p class="wbar"><span>Greeting</span><i class="w20"></i></p><p class="wbar hot"><span>Offer</span><i class="w75"></i></p><p class="wbar"><span>Close</span><i class="w25"></i></p></div>
-        <div class="wcard"><span class="wk">The lead says</span><p class="wchip">Too expensive</p><p class="wsub">Say: the fee can be paid in three instalments.</p></div>
-        <div class="wcard"><span class="wk">Connect rate today</span><p class="wbig">62%</p><p class="wbar"><span></span><i class="w60"></i></p></div>
-        <div class="wcard"><span class="wk">Step 2 of 4 · Ask</span><p class="wq">"Which course were you looking at, and what would you like to know first?"</p></div>
-        <div class="wcard"><span class="wk">Outcome logged</span><p class="wrow"><b>Riya S.</b><span class="wpill won">Won</span></p><p class="wsub">Talk time 04:12</p></div>
-        <div class="wcard"><span class="wk">Callback</span><p class="wrow"><b>Arjun M.</b><span class="wsub">Today, 5:30 pm</span></p><p class="wsub">Rings on the rep's phone</p></div>
-        <div class="wcard"><span class="wk">Where calls are lost</span><p class="wbar"><span>Greeting</span><i class="w20"></i></p><p class="wbar hot"><span>Offer</span><i class="w75"></i></p><p class="wbar"><span>Close</span><i class="w25"></i></p></div>
-        <div class="wcard"><span class="wk">The lead says</span><p class="wchip">Too expensive</p><p class="wsub">Say: the fee can be paid in three instalments.</p></div>
-        <div class="wcard"><span class="wk">Connect rate today</span><p class="wbig">62%</p><p class="wbar"><span></span><i class="w60"></i></p></div>
+        <div class="wcard"><span class="wk">Step 2 of 4 · Pay date</span><p class="wq">"Which date this week suits you to pay the second term fee?"</p></div>
+        <div class="wcard"><span class="wk">Result logged</span><p class="wrow"><b>Neeta R.</b><span class="wpill cb">Will pay on date</span></p><p class="wsub">₹18,000 · Fri 31 Oct</p></div>
+        <div class="wcard"><span class="wk">Promise due today</span><p class="wrow"><b>Om R. · 10-B</b><span class="wsub">₹18,000</span></p><p class="wsub">Top of Ravi's list</p></div>
+        <div class="wcard"><span class="wk">Where calls end</span><p class="wbar"><span>Opening</span><i class="w20"></i></p><p class="wbar hot"><span>Pay date</span><i class="w75"></i></p><p class="wbar"><span>Close</span><i class="w25"></i></p></div>
+        <div class="wcard"><span class="wk">The parent says</span><p class="wchip">Can't pay it all now</p><p class="wsub">Say: ask how much this week, and a date for the rest.</p></div>
+        <div class="wcard"><span class="wk">WhatsApp reminder</span><p class="wsub">Sent from your institute's number after the call.</p></div>
+        <div class="wcard"><span class="wk">Step 2 of 4 · Pay date</span><p class="wq">"Which date this week suits you to pay the second term fee?"</p></div>
+        <div class="wcard"><span class="wk">Result logged</span><p class="wrow"><b>Neeta R.</b><span class="wpill cb">Will pay on date</span></p><p class="wsub">₹18,000 · Fri 31 Oct</p></div>
+        <div class="wcard"><span class="wk">Promise due today</span><p class="wrow"><b>Om R. · 10-B</b><span class="wsub">₹18,000</span></p><p class="wsub">Top of Ravi's list</p></div>
+        <div class="wcard"><span class="wk">Where calls end</span><p class="wbar"><span>Opening</span><i class="w20"></i></p><p class="wbar hot"><span>Pay date</span><i class="w75"></i></p><p class="wbar"><span>Close</span><i class="w25"></i></p></div>
+        <div class="wcard"><span class="wk">The parent says</span><p class="wchip">Can't pay it all now</p><p class="wsub">Say: ask how much this week, and a date for the rest.</p></div>
+        <div class="wcard"><span class="wk">WhatsApp reminder</span><p class="wsub">Sent from your institute's number after the call.</p></div>
       </div>
   </div>
   <div class="wall wall-r" aria-hidden="true">
       <div class="wall-track">
-        <div class="wcard"><span class="wk">Team today</span><p class="wrow"><b>Ravi</b><span class="wsub">48 calls</span></p><p class="wrow"><b>Meera</b><span class="wsub">52 calls</span></p><p class="wrow"><b>Arjun</b><span class="wsub">44 calls</span></p></div>
+        <div class="wcard"><span class="wk">Callers right now</span><p class="wrow"><b>Ravi</b><span class="wpill won">On a call</span></p><p class="wrow"><b>Priya</b><span class="wsub">Ready</span></p><p class="wrow"><b>Sana</b><span class="wsub">Phone offline</span></p></div>
         <div class="wcard"><span class="wk">On call</span><p class="wbig">00:42</p><p class="wpill sim">On your SIM</p></div>
-        <div class="wcard"><span class="wk">Script v2 published</span><p class="wsub">Reps get it at their next sign-in. Each call records the version used.</p></div>
-        <div class="wcard"><span class="wk">Why it was lost</span><p class="wchip">Price</p><p class="wsub">One tap after the call</p></div>
-        <div class="wcard"><span class="wk">Outcome logged</span><p class="wrow"><b>Neha K.</b><span class="wpill cb">Callback</span></p><p class="wsub">Saturday, 11:00 am</p></div>
-        <div class="wcard"><span class="wk">This week</span><p class="wbig">312 <small>calls</small></p><p class="wsub">118 connected · 21 callbacks</p></div>
-        <div class="wcard"><span class="wk">Team today</span><p class="wrow"><b>Ravi</b><span class="wsub">48 calls</span></p><p class="wrow"><b>Meera</b><span class="wsub">52 calls</span></p><p class="wrow"><b>Arjun</b><span class="wsub">44 calls</span></p></div>
+        <div class="wcard"><span class="wk">Admission enquiry</span><p class="wrow"><b>Arjun M.</b><span class="wpill cb">Visit booked</span></p><p class="wsub">Saturday, 11:00 am</p></div>
+        <div class="wcard"><span class="wk">Script v7 published</span><p class="wsub">Callers get it at their next sign-in. Each call records the version used.</p></div>
+        <div class="wcard"><span class="wk">Course sales</span><p class="wrow"><b>Riya S.</b><span class="wpill won">Joined</span></p><p class="wsub">Talk time 04:12</p></div>
+        <div class="wcard"><span class="wk">Best time to call</span><p class="wsub">Most parents pick up between 7 and 9 pm.</p></div>
+        <div class="wcard"><span class="wk">Callers right now</span><p class="wrow"><b>Ravi</b><span class="wpill won">On a call</span></p><p class="wrow"><b>Priya</b><span class="wsub">Ready</span></p><p class="wrow"><b>Sana</b><span class="wsub">Phone offline</span></p></div>
         <div class="wcard"><span class="wk">On call</span><p class="wbig">00:42</p><p class="wpill sim">On your SIM</p></div>
-        <div class="wcard"><span class="wk">Script v2 published</span><p class="wsub">Reps get it at their next sign-in. Each call records the version used.</p></div>
-        <div class="wcard"><span class="wk">Why it was lost</span><p class="wchip">Price</p><p class="wsub">One tap after the call</p></div>
-        <div class="wcard"><span class="wk">Outcome logged</span><p class="wrow"><b>Neha K.</b><span class="wpill cb">Callback</span></p><p class="wsub">Saturday, 11:00 am</p></div>
-        <div class="wcard"><span class="wk">This week</span><p class="wbig">312 <small>calls</small></p><p class="wsub">118 connected · 21 callbacks</p></div>
+        <div class="wcard"><span class="wk">Admission enquiry</span><p class="wrow"><b>Arjun M.</b><span class="wpill cb">Visit booked</span></p><p class="wsub">Saturday, 11:00 am</p></div>
+        <div class="wcard"><span class="wk">Script v7 published</span><p class="wsub">Callers get it at their next sign-in. Each call records the version used.</p></div>
+        <div class="wcard"><span class="wk">Course sales</span><p class="wrow"><b>Riya S.</b><span class="wpill won">Joined</span></p><p class="wsub">Talk time 04:12</p></div>
+        <div class="wcard"><span class="wk">Best time to call</span><p class="wsub">Most parents pick up between 7 and 9 pm.</p></div>
       </div>
   </div>
   <div class="hero-core">
-    <span class="eyebrow">For admissions and sales calling teams</span>
-    <h1 id="heroTitle">Close more calls. <span class="hot">Know why the rest were lost.</span></h1>
-    <p class="lede">Your reps follow your best script on the laptop, with the answer to every objection one tap away. Calls go out on their own SIM, and you see the exact step where each lost call went wrong.</p>
+    <span class="eyebrow">For schools, coaching institutes and sales teams</span>
+    <h1 id="heroTitle">Collect fees on time. <span class="hot">Fill more seats.</span></h1>
+    <p class="lede">Every caller follows your best script, every result is logged in one tap, and you see exactly what to change. Calls go out from your callers' own SIM.</p>
     <div class="cta-row">
-      <a class="btn btn-primary btn-lg magnetic" href="#account">Start my team's free trial <span class="arrow" aria-hidden="true">→</span></a>
-      <a class="btn btn-lg btn-ghost magnetic" href="#demo">Show me a call</a>
+      <a class="btn btn-primary btn-lg magnetic" href="#account">Start free trial <span class="arrow" aria-hidden="true">→</span></a>
+      <a class="btn btn-lg btn-ghost magnetic" id="heroContact" href="#demo">See a live demo</a>
     </div>
-    <p class="micro"><span class="tick" aria-hidden="true">✓</span> 5 days · up to 5 seats · no card needed</p>
+    <p class="micro"><span class="tick" aria-hidden="true">✓</span> 5-day free trial · up to 5 seats · no card needed</p>
 
     <div class="stage-card" id="stage">
       <div class="said">
-        <p class="said-q">The lead says…</p>
-        <div class="said-chips" id="saidChips" role="group" aria-label="Pick what the lead said">
-          <button type="button" data-obj="price" aria-pressed="true">Too expensive</button>
-          <button type="button" data-obj="later" aria-pressed="false">Call me later</button>
-          <button type="button" data-obj="joined" aria-pressed="false">Already joined</button>
+        <p class="said-q">On a fees call, the parent says…</p>
+        <div class="said-chips" id="saidChips" role="group" aria-label="Pick what the parent said">
+          <button type="button" data-obj="part" aria-pressed="true">Can't pay it all now</button>
+          <button type="button" data-obj="later" aria-pressed="false">I'll pay next week</button>
+          <button type="button" data-obj="paid" aria-pressed="false">Already paid</button>
         </div>
         <div class="answer" aria-live="polite">
-          <span class="answer-tag">Your rep sees</span>
-          <p id="answerText">Ask what budget they had in mind. Then mention the fee can be paid in three instalments.</p>
+          <span class="answer-tag">Your caller sees</span>
+          <p id="answerText">Ask how much they can pay this week and a date for the rest. Tap "Paid part" and note the ₹ amount.</p>
         </div>
       </div>
       <div class="stage-visual">
@@ -110,31 +119,156 @@
   </div>
 </section>
 
-<div class="built" aria-label="Who Vector is built for">
-  <div class="wrap built-row">
-    <span class="built-k">Built for</span>
-    <span>Coaching institutes</span><span>Admissions teams</span><span>Ed-tech counselling</span><span>Inside sales</span>
+<!-- FACTS: plain statements about how Vector works. No customer names or results until they are real. -->
+<div class="facts" aria-label="How Vector handles calls and data">
+  <ul class="wrap facts-row">
+    <li><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 10.5l3.2 3L15 6.5"/></svg>No call recording</li>
+    <li><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 10.5l3.2 3L15 6.5"/></svg>Calls from your own SIM</li>
+    <li><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 10.5l3.2 3L15 6.5"/></svg>Money hidden from people who shouldn't see it</li>
+    <li><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 10.5l3.2 3L15 6.5"/></svg>Built for India's DPDP Act</li>
+    <li><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 10.5l3.2 3L15 6.5"/></svg>Setup in about 20 minutes per caller</li>
+  </ul>
+  <!-- CUSTOMER LOGOS AND PILOT RESULTS: add real ones here, only with the institute's written permission.
+       Remove the hidden attribute when there is something true to show. Use local images in img/ (the CSP allows only this site).
+  <div class="wrap logos" hidden>
+    <p class="logos-k">Used by</p>
+    <ul class="logos-row">
+      <li>(an img tag for the logo from img/, with alt = the institute name, width, height and loading=lazy)</li>
+    </ul>
+    <p class="logos-result">PILOT RESULT, e.g. "In the October fees campaign, X of Y parents paid or gave a date." Name the source.</p>
   </div>
+  -->
 </div>
 
-<!-- LIVE DEMO -->
-<section class="section band demo-sec" id="demo" data-cta="Start my team's trial">
+<!-- OUTCOME 1: FEES -->
+<section class="section outcome" id="fees" aria-labelledby="feesTitle" data-cta="Collect fees with Vector">
+  <div class="wrap">
+    <div class="outcome-head reveal">
+    <div class="outcome-copy">
+      <span class="eyebrow">Fees collection</span>
+      <h2 class="h2" id="feesTitle">Every parent called. <em>Every promise followed up.</em></h2>
+      <p class="lede">Load the list of parents with dues, and your callers work it one by one with a polite, tested script. You see what came in, what was promised, and who to call again first.</p>
+    </div>
+      <ul class="points">
+        <li><b>One tap per result.</b> Paid, Will pay on date with the ₹ amount, Paid part, Says already paid, Refused. No notes to type up later.</li>
+        <li><b>Broken promises come back first.</b> Promises due today or already late go to the top of the caller's list, so no promise is forgotten.</li>
+        <li><b>A fees report you can act on.</b> Total due, paid after a call, promised, and promises due this week. Download it to Excel.</li>
+        <li><b>Reminders on WhatsApp.</b> Send the payment reminder from your institute's own WhatsApp number, right after the call.</li>
+      </ul>
+    </div>
+    <figure class="shot shot-wide reveal">
+      <div class="shot-bar" aria-hidden="true"><i></i><i></i><i></i><span>Reports · Fees collection</span></div>
+      <a class="shot-link" href="img/fees-report.webp"><img src="img/fees-report.webp" width="1600" height="935" alt="Vector fees collection report for the October Class 10 campaign: ₹37,80,000 due from 240 parents, ₹3,33,000 paid after a call, ₹8,28,000 promised, and 14 promises whose date has passed, with a list of promises due this week by parent, student, amount, date and caller."></a>
+      <figcaption>Fees report from the demo institute. Amounts are what callers recorded.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- OUTCOME 2: ADMISSIONS AND SALES -->
+<section class="section band outcome" id="sales" aria-labelledby="salesTitle" data-cta="Fill seats with Vector">
+  <div class="wrap">
+    <div class="outcome-head reveal">
+    <div class="outcome-copy">
+      <span class="eyebrow">Admissions and sales</span>
+      <h2 class="h2" id="salesTitle">Turn enquiries into <em>visits and admissions.</em></h2>
+      <p class="lede">Every enquiry gets a call with your best script, and the answer to every pushback is one tap away. New callers sound like your best one from day one.</p>
+    </div>
+      <ul class="points">
+        <li><b>Campaigns with shared lead lists.</b> One script, one list and the callers on it. Leads are shared out between callers, and each lead belongs to one caller at a time.</li>
+        <li><b>Results that fit the call.</b> Visit booked, Form sent, Admission confirmed for admissions; Interested, Joined, Will think for sales.</li>
+        <li><b>See your team live.</b> Calls, pickups, talk time and who is on a call right now, with alerts when a phone is offline or a caller goes quiet.</li>
+        <li><b>Callbacks on time.</b> "Call me Saturday" becomes a callback that comes back to the caller at that time.</li>
+      </ul>
+    </div>
+    <div class="shot-pair reveal">
+      <figure class="shot shot-wide">
+        <div class="shot-bar" aria-hidden="true"><i></i><i></i><i></i><span>Home · Today</span></div>
+        <a class="shot-link" href="img/home-today.webp"><img src="img/home-today.webp" width="1600" height="634" loading="lazy" alt="Vector Home for today: 140 calls made, 60% picked up, 6 hours 46 minutes of talk time, 9 joined on sales, ₹54,000 fees collected, and a table of callers right now with their campaign, calls against target, results and status such as On a call or Phone offline."></a>
+      </figure>
+      <figure class="shot shot-narrow">
+        <div class="shot-bar" aria-hidden="true"><i></i><i></i><i></i><span>Campaigns</span></div>
+        <a class="shot-link" href="img/campaigns.webp"><img src="img/campaigns.webp" width="1600" height="489" loading="lazy" alt="Vector Campaigns list: course sales, admission follow-up, October fees, a PTM reminder draft and a closed September fees campaign, each with its type, script, leads called, callers, dates and status."></a>
+      </figure>
+      <p class="shot-cap">Home and Campaigns from the demo institute.</p>
+    </div>
+  </div>
+</section>
+
+<!-- OUTCOME 3: INSIGHTS -->
+<section class="section outcome" id="insights" aria-labelledby="insightsTitle" data-cta="See what to change">
+  <div class="wrap">
+    <div class="outcome-head reveal">
+      <div class="outcome-copy">
+        <span class="eyebrow">Insights</span>
+        <h2 class="h2" id="insightsTitle">Know what to change <em>before the month ends.</em></h2>
+        <p class="lede">Vector turns your calls into a few clear answers: where you will land, what closes the gap, and which line in the script loses people.</p>
+      </div>
+        <ul class="points">
+          <li><b>Forecast with a range.</b> Fees collected or seats filled by the end date, against your target. Move the what-if sliders: add a caller, call more in the evening.</li>
+          <li><b>Best time to call.</b> Pickup rate by day and hour, so callers ring when parents actually answer.</li>
+          <li><b>Promises kept and caller coaching.</b> Which promises turn into payments, and which caller skips which step, with practice mode to fix it.</li>
+          <li><b>Script tests and a weekly brief.</b> Run two versions side by side and keep the winner. Owners can get a four-line brief every Monday.</li>
+        </ul>
+    </div>
+      <figure class="shot shot-wide reveal">
+        <div class="shot-bar" aria-hidden="true"><i></i><i></i><i></i><span>Insights · Forecast</span></div>
+        <a class="shot-link" href="img/insights-forecast.webp"><img src="img/insights-forecast.webp" width="1600" height="1022" loading="lazy" alt="Vector fees forecast: ₹18.4 lakh likely by 1 November, range ₹17 lakh to ₹19.8 lakh, 54% of the target. A chart shows fees collected so far and the forecast. A box lists what closes the gap, such as adding a caller or calling more between 7 and 9 pm, next to what-if sliders for callers, calls per day and evening calls."></a>
+      </figure>
+
+    <figure class="shot shot-wide shot-gap reveal">
+      <div class="shot-bar" aria-hidden="true"><i></i><i></i><i></i><span>Insights · Best time to call · Where calls end</span></div>
+      <a class="shot-link" href="img/insights-time-ends.webp"><img src="img/insights-time-ends.webp" width="1600" height="757" loading="lazy" alt="Vector best time to call heatmap: pickup rate by weekday and hour from 7 am to 8 pm, darkest around 7 pm, with a tip that most people pick up on Monday and Thursday at 7 pm. Beside it, where calls end in the fees script: 24% at the opening, 7% at the reminder, 51% at the pay date step and 19% at a problem."></a>
+      <figcaption>Insights from the demo institute's October fees campaign.</figcaption>
+    </figure>
+    <p class="sec-cta reveal"><a class="btn btn-primary" href="#account">See what to change in my calls <span class="arrow" aria-hidden="true">→</span></a></p>
+  </div>
+</section>
+
+<!-- AI SCRIPT MAKER -->
+<section class="section band" id="ai" aria-labelledby="aiTitle" data-cta="Make my first script">
+  <div class="wrap outcome-grid flip">
+    <div class="outcome-copy reveal">
+      <span class="eyebrow">AI script maker</span>
+      <h2 class="h2" id="aiTitle">A ready script <em>in about a minute.</em></h2>
+      <p class="lede">No blank page. Fill a short form and get a draft in simple words, with steps, pushback answers and endings linked to results.</p>
+      <ol class="steps-list">
+        <li><b>Tell it about the call.</b> Call type, who you call, what the call is for, the facts the caller can use, and what never to say.</li>
+        <li><b>It checks itself.</b> The AI uses only your facts. Any other number or date gets a "Check this" mark, and the script cannot be published until you clear it.</li>
+        <li><b>You approve it.</b> Change any line, then publish. Callers only ever see scripts you have published.</li>
+      </ol>
+      <p class="fine">20 AI drafts a month with the Vector + Scripts plan. The AI writes scripts only; it never makes calls.</p>
+    </div>
+    <div class="shot-stack reveal">
+      <figure class="shot">
+        <div class="shot-bar" aria-hidden="true"><i></i><i></i><i></i><span>Scripts · Make with AI</span></div>
+        <a class="shot-link" href="img/ai-form.webp"><img src="img/ai-form.webp" width="1200" height="1149" loading="lazy" alt="Vector Make a script with AI form: call type Fees collection, who you call Parents, language Simple English, what the call is for, facts the caller can use such as a fee of ₹18,000 due 31 October, and a never say box. It shows 3 of 20 AI drafts used this month."></a>
+      </figure>
+      <figure class="shot shot-small">
+        <div class="shot-bar" aria-hidden="true"><i></i><i></i><i></i><span>Draft · Safety check</span></div>
+        <a class="shot-link" href="img/ai-check.webp"><img src="img/ai-check.webp" width="1600" height="570" loading="lazy" alt="A draft script step about a late fee with a Check this mark: confirm the late fee amount and the date it starts with the principal. The caller tip says: be polite, this is information, not a threat."></a>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- LIVE DEMO: the caller console, then the interactive loss report (example data, home.js). -->
+<section class="section demo-sec" id="demo" data-cta="Start my team's trial">
   <div class="wrap">
     <div class="demo-head">
       <div class="section-head reveal">
         <span class="eyebrow">Live demo</span>
         <h2 class="h2">Work a lead. <em>Watch the numbers move.</em></h2>
-        <p class="lede">A made-up lead list. Pick a lead, step through the script, answer an objection, press Dial, then log the outcome. Nothing here is saved.</p>
+        <p class="lede">This is the caller's screen with a made-up lead list. Pick a lead, step through the script, answer a pushback, press Dial, then log the result. Nothing here is saved.</p>
       </div>
       <figure class="demo-phone" id="demoPhone">
         <canvas id="demoScene" aria-hidden="true"></canvas>
-        <figcaption>The rep's phone rings when you press Dial. Drag to turn it.</figcaption>
+        <figcaption>The caller's phone rings when you press Dial. Drag to turn it.</figcaption>
       </figure>
     </div>
 
     <div class="console reveal" id="console">
       <div class="leads">
-        <h4>Today's leads</h4>
+        <h3>Today's leads</h3>
         <button type="button" class="lead" data-lead="0" aria-pressed="true"><b>Riya S.</b><small>List A · not called</small></button>
         <button type="button" class="lead" data-lead="1" aria-pressed="false"><b>Arjun M.</b><small>List B · not called</small></button>
         <button type="button" class="lead" data-lead="2" aria-pressed="false"><b>Neha K.</b><small>List A · not called</small></button>
@@ -184,49 +318,13 @@
         <ul class="log" id="log" aria-live="polite"></ul>
       </div>
     </div>
-    <p class="sec-cta reveal"><a class="btn btn-primary" href="#account">Start my team's trial <span class="arrow" aria-hidden="true">→</span></a></p>
-  </div>
-</section>
-
-<!-- WHO IT'S FOR -->
-<section class="section" id="who" data-cta="Try it with my team">
-  <div class="wrap">
-    <div class="section-head reveal">
-      <span class="eyebrow">Who it's for</span>
-      <h2 class="h2">Built for teams that <em>call leads all day.</em></h2>
-      <p class="lede">If your reps call enquiries from a list and you can't tell why most of them say no, Vector is for you.</p>
-    </div>
-    <div class="who-grid reveal">
-      <article class="insight-card">
-        <h3>Coaching and admissions</h3>
-        <p>Counsellors call enquiries about courses, demo classes and fees. See which line loses students, and which answer to "too expensive" gets the seat booked.</p>
-      </article>
-      <article class="insight-card">
-        <h3>Ed-tech counselling</h3>
-        <p>New counsellors follow the script from day one, with objection answers in front of them. You see connect rate and talk time per counsellor.</p>
-      </article>
-      <article class="insight-card">
-        <h3>Inside sales</h3>
-        <p>Reps call from their own number, callbacks ring on the phone on time, and every outcome lands on one admin page.</p>
-      </article>
-    </div>
-    <p class="sec-cta reveal"><a class="btn btn-primary" href="#account">Try it with my team <span class="arrow" aria-hidden="true">→</span></a></p>
-  </div>
-</section>
-
-
-
-<!-- ANALYTICS -->
-<section class="section" id="insights" aria-labelledby="insightsTitle" data-cta="Find my lost calls">
-  <div class="wrap">
-    <div class="section-head reveal">
-      <span class="eyebrow">Analytics</span>
-      <h2 class="h2" id="insightsTitle">A CRM records the result. Vector shows <em>where the call was lost.</em></h2>
-      <p class="lede">A traditional CRM tells you a lead said no. Vector shows where in the call it was lost, why, and what to change. The team sees it the same day, and the script improves with every version.</p>
-    </div>
-    <div class="insight-grid">
+    <div class="demo-after">
+      <div class="demo-after-copy reveal">
+        <h3>After the calls: what to change</h3>
+        <p>Vector shows the step where calls end and why, then suggests one change. Compare script versions to see if it worked. Tap a marker or a bar.</p>
+      </div>
       <figure class="chart-card reveal" id="lossExplorer">
-        <figcaption><span>Where calls are lost</span><span class="tag">Example data</span></figcaption>
+        <figcaption><span>Then see where calls end, step by step</span><span class="tag">Example data · try it</span></figcaption>
         <div class="loss-controls">
           <div class="seg" role="group" aria-label="Group lost calls by">
             <button type="button" data-view="step" aria-pressed="true">By step</button>
@@ -251,42 +349,57 @@
           <p class="hint">Calls lost at each step, out of every 100 calls. Tap a bar to see what to change.</p>
         </div>
       </figure>
-      <div class="insight-list reveal">
-        <article class="insight-card">
-          <h3>Which step loses the call</h3>
-          <p>Drop-off by script step, so you change the one line that costs the most, not the whole script.</p>
-        </article>
-        <article class="insight-card">
-          <h3>Why the call was lost</h3>
-          <p>A rep taps one reason on a lost call: price, timing, already enrolled, no need or wrong person. It takes a second and it sharpens the next call.</p>
-        </article>
-        <article class="insight-card">
-          <h3>The script gets better with each version</h3>
-          <p>Each version is compared with the one before. The system suggests what to change, the admin approves it, and the team sees what changed.</p>
-        </article>
-      </div>
     </div>
-    <p class="sec-cta reveal"><a class="btn btn-primary" href="#account">Find where my calls are lost <span class="arrow" aria-hidden="true">→</span></a> <a class="btn btn-ghost" href="#demo">Try the live demo</a></p>
+    <p class="sec-cta reveal"><a class="btn btn-primary" href="#account">Start my team's trial <span class="arrow" aria-hidden="true">→</span></a></p>
   </div>
 </section>
 
 <!-- HOW IT WORKS -->
-<section class="section" id="how" data-cta="Start in 20 minutes">
+<section class="section band" id="how" aria-labelledby="howTitle" data-cta="Start in 20 minutes">
   <div class="wrap">
     <div class="section-head reveal">
       <span class="eyebrow">How it works</span>
-      <h2 class="h2">From invite to <em>first call</em> in four steps.</h2>
+      <h2 class="h2" id="howTitle">From sign-up to <em>first call</em> in four steps.</h2>
     </div>
     <ol class="timeline" id="timeline">
-      <li class="tstep reveal"><span class="num">1</span><h3>Invite</h3><p>Add each rep by email. Every invite takes one seat, and the rep signs in with an emailed link.</p></li>
-      <li class="tstep reveal"><span class="num">2</span><h3>Pair</h3><p>Scan the code on the laptop from the Android app. The phone and laptop pair to that seat over local Wi-Fi.</p></li>
-      <li class="tstep reveal"><span class="num">3</span><h3>Work the list</h3><p>The laptop shows the next lead and the script. Each Dial starts the call on the rep's SIM through the paired phone.</p></li>
-      <li class="tstep reveal"><span class="num">4</span><h3>Results</h3><p>Each outcome is saved on the laptop first, then synced per seat. Admins see the team's progress live.</p></li>
+      <li class="tstep reveal"><span class="num">1</span><h3>Start and invite</h3><p>Start the free trial and add each caller by email. Every invite takes one seat.</p></li>
+      <li class="tstep reveal"><span class="num">2</span><h3>Pair phone and laptop</h3><p>The caller installs the Vector Android app and scans the code on their laptop once.</p></li>
+      <li class="tstep reveal"><span class="num">3</span><h3>Make a campaign</h3><p>Pick a script (template, your own or AI), upload the lead list from Excel and choose the callers.</p></li>
+      <li class="tstep reveal"><span class="num">4</span><h3>Call and watch</h3><p>Dial from the laptop; the call goes out on the caller's SIM. Results show up on your Home as they happen.</p></li>
     </ol>
-    <p class="sec-cta reveal"><a class="btn btn-primary" href="#account">Start my team's free trial <span class="arrow" aria-hidden="true">→</span></a></p>
+    <div class="needs reveal">
+      <h3>What each caller needs</h3>
+      <ul>
+        <li>An Android phone with a working SIM and calling credit</li>
+        <li>A laptop with Chrome or Edge</li>
+        <li>Both on the same Wi-Fi</li>
+      </ul>
+      <p>No iPhone app yet. Setup takes about 20 minutes per caller, and we help you with the first phone.</p>
+    </div>
   </div>
 </section>
 
+<!-- TRUST AND PRIVACY -->
+<section class="section" id="privacy" aria-labelledby="privacyTitle" data-cta="Start free trial">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">Trust and privacy</span>
+      <h2 class="h2" id="privacyTitle">Parents' numbers and your fee data <em>stay yours.</em></h2>
+      <p class="lede">You are trusting us with parents' phone numbers and money owed to you. Here is exactly how we look after it.</p>
+    </div>
+    <ul class="trust-grid reveal">
+      <li><h3>No call recording</h3><p>Vector never records call audio. It saves the result, the time and the script step, nothing more.</p></li>
+      <li><h3>Your data, walled off</h3><p>Each institute's data is kept apart inside the database itself, so one institute can never read another's.</p></li>
+      <li><h3>Callers see only their leads</h3><p>A caller sees the leads given to them, and the amount due for the lead on the call. Never totals, never other lists.</p></li>
+      <li><h3>Money only for the right people</h3><p>Owner, manager and caller roles. Turn "can see money" on per person, or hide money everywhere so reports show counts only.</p></li>
+      <li><h3>Every sensitive step logged</h3><p>An activity log shows who changed roles, campaigns, leads and scripts, and every export that included money.</p></li>
+      <li><h3>Never sold, no ads</h3><p>We do not sell your data, show ads, or use it to train AI models. We store amounts and dates, never bank, card or UPI details.</p></li>
+    </ul>
+    <p class="trust-foot reveal">Built for India's Digital Personal Data Protection Act, 2023. Read the <a href="privacy.html">privacy notice</a> and the <a href="terms.html">terms of service</a>.</p>
+  </div>
+</section>
+
+<!-- PRICING (unchanged) -->
 <section class="section band" id="pricing" data-cta="Start my 5-day trial">
   <div class="wrap">
     <div class="section-head reveal">
@@ -358,17 +471,81 @@
   </div>
 </section>
 
+<!-- FAQ -->
+<section class="section" id="faq" aria-labelledby="faqTitle" data-cta="Start free trial">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">Questions</span>
+      <h2 class="h2" id="faqTitle"><em>Straight</em> answers.</h2>
+    </div>
+    <div class="faq reveal">
+      <details>
+        <summary>Is this AI calling?</summary>
+        <p>No. Vector is for human callers. A person dials, talks and chooses the result. Vector puts the script, the pushback answers and the callbacks in front of them. AI only helps you write scripts.</p>
+      </details>
+      <details>
+        <summary>Do you record calls?</summary>
+        <p>No. Vector does not record call audio.</p>
+      </details>
+      <details>
+        <summary>Does it work for fees collection and admissions?</summary>
+        <p>Yes, those are what Vector is built for. Each call type has its own one-tap results: fees (Paid, Will pay on date with the amount, Paid part, Says already paid), admissions (Visit booked, Form sent, Admission confirmed), sales (Interested, Joined, Will think), and more, such as PTM reminders and renewals.</p>
+      </details>
+      <details>
+        <summary>What does each caller need?</summary>
+        <p>An Android phone with a working SIM and calling credit, a laptop with Chrome or Edge, and the same Wi-Fi for both. Setup takes about 20 minutes per caller.</p>
+      </details>
+      <details>
+        <summary>Can callers use an iPhone?</summary>
+        <p>Not yet. The phone app runs on Android. On the laptop, use Chrome or Edge.</p>
+      </details>
+      <details>
+        <summary>How do my callers get the phone app?</summary>
+        <p>After you start the trial, the Vector team sends you the Android app and helps you set up the first phone. Each caller then installs it, scans the code on their laptop once, and is ready to call.</p>
+      </details>
+      <details>
+        <summary>What about TRAI rules and DND?</summary>
+        <p>Calls go out from your callers' own numbers, so your institute and your callers must follow TRAI's rules for calling, including the Do Not Disturb register and calling hours. Vector helps: when a person asks not to be called, the caller taps "Do not call again", Vector records it and stops offering that lead. You can also set the hours when calls may be made.</p>
+      </details>
+      <details>
+        <summary>What leaves the laptop?</summary>
+        <p>Call outcomes, timings and seat details, so the admin can see results. Leads you upload to a campaign are stored in your Vector account so they can be shared between callers; each caller sees only the leads given to them. A lead sheet you open on the laptop without a campaign stays on that laptop.</p>
+      </details>
+      <details>
+        <summary>Where is my data stored?</summary>
+        <p>In a managed cloud database, with each institute's data kept apart. The <a href="privacy.html">privacy notice</a> says exactly where it is stored today and what changes before launch.</p>
+      </details>
+      <details>
+        <summary>How much do WhatsApp messages cost?</summary>
+        <p>WhatsApp follow-ups and payment reminders go from your institute's own business number. Meta charges for these messages at its own rates, and Settings shows this month's count and estimated cost.</p>
+      </details>
+      <details>
+        <summary>Is GST extra?</summary>
+        <p>Yes. All prices are in rupees and GST at 18% is added to your invoice.</p>
+      </details>
+      <details>
+        <summary>Can I cancel anytime?</summary>
+        <p>Yes. Cancel at any time and your plan runs until the end of the period you have paid for. The free trial ends on its own after 5 days and nothing is charged.</p>
+      </details>
+      <details>
+        <summary>Do I need a card for the trial?</summary>
+        <p>No. The trial is 5 days with up to 5 seats and needs no payment.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
 <!-- ACCOUNT -->
-<section class="section" id="account" data-cta="">
+<section class="section band" id="account" data-cta="">
   <div class="wrap account">
     <div class="account-copy reveal">
       <span class="eyebrow">Get started</span>
       <h2 class="h2">Start a <em>5-day trial.</em></h2>
-      <p class="lede lede-top">No payment and no card. You become the admin of your company and get up to 5 seats. We email you a sign-in link; you can set a password later.</p>
+      <p class="lede lede-top">No payment and no card. You become the admin of your institute or company and get up to 5 seats. We email you a sign-in link; you can set a password later.</p>
       <ul class="ticks">
-        <li>Invite your reps by email when you are ready.</li>
+        <li>Invite your callers by email when you are ready.</li>
         <li>We send the Android app and help you pair the first phone.</li>
-        <li>Publish your script and watch results per seat.</li>
+        <li>Publish your script, start a campaign and watch results live.</li>
       </ul>
     </div>
 
@@ -447,65 +624,44 @@
   </div>
 </section>
 
-<!-- FAQ -->
-<section class="section band" id="faq" data-cta="Start free trial">
-  <div class="wrap">
-    <div class="section-head reveal">
-      <span class="eyebrow">Questions</span>
-      <h2 class="h2"><em>Straight</em> answers.</h2>
-    </div>
-    <div class="faq reveal">
-      <details>
-        <summary>Is this AI calling?</summary>
-        <p>No. Vector is for human callers. A person dials, talks and chooses the outcome. Vector puts the script, the objection answers and the callbacks in front of them.</p>
-      </details>
-      <details>
-        <summary>Can reps use an iPhone?</summary>
-        <p>Not yet. The phone app runs on Android. On the laptop, use Chrome or Edge.</p>
-      </details>
-      <details>
-        <summary>How do my reps get the phone app?</summary>
-        <p>After you start the trial, the Vector team sends you the Android app and helps you set up the first phone. Each rep then installs it, scans the code on their laptop once, and is ready to call.</p>
-      </details>
-      <details>
-        <summary>What does each rep need?</summary>
-        <p>An Android phone with a working SIM and calling credit, a laptop with Chrome or Edge, and the same Wi-Fi for both. Setup takes about 20 minutes per rep.</p>
-      </details>
-      <details>
-        <summary>Do you record calls?</summary>
-        <p>No. Vector does not record call audio.</p>
-      </details>
-      <details>
-        <summary>What leaves the laptop?</summary>
-        <p>Call outcomes, timings and seat details, so the admin can see results. Leads you upload to a campaign are stored in your Vector account so they can be shared between callers; each caller sees only the leads given to them. A lead sheet you open on the laptop without a campaign stays on that laptop.</p>
-      </details>
-      <details>
-        <summary>Do I need a card for the trial?</summary>
-        <p>No. The trial is 5 days with up to 5 seats and needs no payment.</p>
-      </details>
-    </div>
-  </div>
-</section>
-
 </main>
 
 <footer class="foot">
   <div class="wrap foot-row">
     <div>
       <span class="brand-foot">Vector Call Assist</span>
-      <p>Human calling for admissions and sales teams.</p>
+      <p>Guided calling for fees, admissions and sales. For schools, coaching institutes and sales teams in India.</p>
     </div>
-    <div class="foot-links">
+    <nav class="foot-links" aria-label="Footer">
+      <a href="#fees">Fees</a>
+      <a href="#sales">Admissions &amp; sales</a>
+      <a href="#insights">Insights</a>
       <a href="#demo">Live demo</a>
       <a href="#pricing">Pricing</a>
       <a href="#faq">FAQ</a>
       <a href="#account">Sign in</a>
       <a href="terms.html">Terms</a>
       <a href="privacy.html">Privacy</a>
+    </nav>
+    <div class="foot-contact" id="footContact" hidden>
+      <h2 class="foot-h">Talk to us</h2>
+      <ul>
+        <li id="footWa" hidden><a id="footWaLink" href="#" target="_blank" rel="noopener">WhatsApp <span class="sr">(opens in a new tab)</span></a></li>
+        <li id="footPhone" hidden><a id="footPhoneLink" href="#"></a></li>
+        <li id="footEmail" hidden><a id="footEmailLink" href="#"></a></li>
+      </ul>
     </div>
+  </div>
+  <div class="wrap foot-base">
     <p class="foot-note">Terms and privacy notice are drafts in legal review. Call audio is never recorded.</p>
   </div>
 </footer>
+
+<a class="wa-float" id="waFloat" href="#" target="_blank" rel="noopener" hidden>
+  <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 4.5C9.6 4.5 4.5 9.5 4.5 15.8c0 2.2.6 4.2 1.7 6L4.6 27.5l5.9-1.5c1.7.9 3.6 1.4 5.5 1.4 6.4 0 11.5-5 11.5-11.3S22.4 4.5 16 4.5z" fill="#fff"/><path d="M12.3 10.6c-.3-.6-.5-.6-.8-.6h-.7c-.2 0-.6.1-.9.4-.3.4-1.2 1.2-1.2 2.8s1.2 3.3 1.4 3.5c.2.2 2.4 3.8 5.9 5.2 2.9 1.1 3.5.9 4.1.9.6-.1 2-.8 2.3-1.6.3-.8.3-1.5.2-1.6-.1-.1-.3-.2-.7-.4l-2.3-1.1c-.3-.1-.6-.2-.8.2-.2.4-.9 1.1-1.1 1.3-.2.2-.4.3-.8.1-.4-.2-1.5-.5-2.8-1.7-1-.9-1.7-2-1.9-2.4-.2-.4 0-.5.2-.7l.5-.6c.2-.2.2-.4.4-.6.1-.2 0-.5 0-.6l-1-2.5z" fill="#0b7a4b"/></svg>
+  <span class="wa-label">Chat on WhatsApp</span>
+  <span class="sr"> (opens in a new tab)</span>
+</a>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
 <script src="js/config.js"></script>

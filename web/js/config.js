@@ -4,4 +4,9 @@
 window.VECTOR_CONFIG = {
   supabaseUrl: "https://ehkjtowrcsplidjjjjca.supabase.co",       // e.g. "https://abcdefgh.supabase.co"
   supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVoa2p0b3dyY3NwbGlkampqamNhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE3MzcwNjEsImV4cCI6MjEwNzMxMzA2MX0.5aJ67oa0dX7zsPoFEmcSnrSR1X7hGnlQlEO1eNVMkvc",   // Project settings > API > anon public key
+  // Contact details for the public home page. Each one shows on the page only when it is filled in:
+  // whatsapp: country code and number, digits only, e.g. "919876543210" (shows the floating WhatsApp button,
+  // "Book a demo on WhatsApp" in the hero and a footer link); phone: as people should read it, e.g. "+91 98765 43210";
+  // email: e.g. "hello@example.in".
+  contact: { whatsapp: "", phone: "", email: "" },
 };
