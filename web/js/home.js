@@ -251,8 +251,9 @@
 
   /* ---------- pricing calculator (rupees per seat per month) ---------- */
   (function pricing() {
-    var PRICE = { seat: { monthly: 499, yearly: 399 }, addon: { monthly: 249, yearly: 199 } };
-    var MAX_VOLUME = 40;
+    /* Two plans per seat: Vector, and Vector + Scripts (scripts, AI script maker, coaching). 10+ seats: team price. */
+    var PRICE = { basic: { monthly: 499, yearly: 399 }, scripts: { monthly: 799, yearly: 649 } };
+    var TEAM_FROM = 10;
     var billing = 'yearly';
     var range = $('seatRange'), num = $('seatNum'), addon = $('addon'), total = $('total');
     var shown = 0, anim = null;
@@ -265,13 +266,8 @@
       if (v > 200) v = 200;
       return v;
     }
-    /* Bundles by seat count. Volume: 3 seats 15% off, 5 seats 25% off, then 5% more for each seat after 5, up to 40%. */
-    function bundleName(n) { return n >= 5 ? 'Business' : n >= 3 ? 'Team' : 'Starter'; }
-    function volumePct(n) {
-      var base = n >= 5 ? 25 : n >= 3 ? 15 : 0;
-      var extra = n > 5 ? (n - 5) * 5 : 0;
-      return Math.min(MAX_VOLUME, base + extra);
-    }
+    function planKey() { return addon.checked ? 'scripts' : 'basic'; }
+    function planName(k) { return k === 'scripts' ? 'Vector + Scripts' : 'Vector'; }
     function tween(to) {
       if (anim) cancelAnimationFrame(anim);
       if (reduce) { shown = to; total.textContent = inr(to); return; }
@@ -286,33 +282,27 @@
       }
       anim = requestAnimationFrame(tick);
     }
-    function nudgeText(n, vol, yearly) {
-      var s;
-      if (n < 3) s = 'Add ' + (3 - n) + (3 - n === 1 ? ' more seat' : ' more seats') + ' to unlock 15% off every seat.';
-      else if (n < 5) s = 'Add ' + (5 - n) + ' more to unlock 25% off every seat.';
-      else if (vol < MAX_VOLUME) s = 'Each seat after 5 adds 5% off. You are at ' + vol + '% off.';
-      else s = 'You are at the 40% maximum on every seat.';
-      if (!yearly) s += ' Yearly billing saves 20% on every seat.';
-      return s;
+    function nudgeText(n, k, yearly) {
+      if (n >= TEAM_FROM) return 'With ' + n + ' seats you get a team price. Start the trial and tell us your team size.';
+      var s = k === 'basic' ? 'Add Scripts and AI to give every caller the guided script and objection answers.' : '';
+      if (!yearly) s += (s ? ' ' : '') + 'Yearly billing saves about 20% on every seat.';
+      return s || 'Yearly billing is on: about 20% off every seat.';
     }
     function render() {
       var n = seatCount();
       var yearly = billing === 'yearly';
-      var vol = volumePct(n);
-      var seatBase = yearly ? PRICE.seat.yearly : PRICE.seat.monthly;
-      var addBase = addon.checked ? (yearly ? PRICE.addon.yearly : PRICE.addon.monthly) : 0;
-      var unit = (seatBase + addBase) * (1 - vol / 100);
+      var k = planKey();
+      var unit = yearly ? PRICE[k].yearly : PRICE[k].monthly;
       var perMonth = n * unit;
 
       tween(perMonth);
-      $('nudge').textContent = nudgeText(n, vol, yearly);
-      $('rowBundle').textContent = bundleName(n) + ' bundle';
-      // The seat box beside the calculator: the team size and its bundle, with that bundle's plan highlighted.
-      $('seatLabel').textContent = plural(n) + ' · ' + bundleName(n);
-      all('.plan[data-bundle]').forEach(function (p) { p.classList.toggle('featured', p.getAttribute('data-bundle') === bundleName(n)); });
-      $('rowSeat').textContent = inr(seatBase) + ' × ' + plural(n);
-      $('rowVol').textContent = vol ? '−' + vol + '%' : 'None yet';
-      $('rowAddon').textContent = addon.checked ? inr(addBase) + ' × ' + plural(n) : 'Not included';
+      $('nudge').textContent = nudgeText(n, k, yearly);
+      // The seat box beside the calculator: the team size and its plan, with that plan highlighted.
+      var shownPlan = n >= TEAM_FROM ? 'team' : k;
+      $('seatLabel').textContent = plural(n) + ' · ' + (n >= TEAM_FROM ? 'Team price' : planName(k));
+      all('.plan[data-plan]').forEach(function (p) { p.classList.toggle('featured', p.getAttribute('data-plan') === shownPlan); });
+      $('rowPlan').textContent = planName(k) + (n >= TEAM_FROM ? ' (team price on request)' : '');
+      $('rowSeat').textContent = inr(unit) + ' × ' + plural(n);
       $('rowYearLabel').textContent = yearly ? 'Billed yearly' : 'Billed monthly';
       $('rowYear').textContent = yearly ? inr(perMonth * 12) + ' a year' : inr(perMonth) + ' a month';
       // The chai line follows the real number: a cup of chai is about ₹10 to ₹15, so it is only claimed when true.
@@ -321,9 +311,8 @@
         (perDay <= 10 ? ', less than a cup of chai ☕' : perDay <= 15 ? ', about a cup of chai ☕' : '');
 
       /* Anchor: the same seats on monthly billing for a year, against yearly billing. */
-      var addM = addon.checked ? PRICE.addon.monthly : 0, addY = addon.checked ? PRICE.addon.yearly : 0;
-      var monthlyYear = n * (PRICE.seat.monthly + addM) * (1 - vol / 100) * 12;
-      var yearlyYear = n * (PRICE.seat.yearly + addY) * (1 - vol / 100) * 12;
+      var monthlyYear = n * PRICE[k].monthly * 12;
+      var yearlyYear = n * PRICE[k].yearly * 12;
       $('anchorLine').textContent = 'Monthly billing for a year would be ' + inr(monthlyYear) + '. Yearly saves you ' + inr(monthlyYear - yearlyYear) + ' a year.';
 
       document.dispatchEvent(new CustomEvent('vca:seats', { detail: { count: n, addon: addon.checked } }));

@@ -67,8 +67,8 @@ test('home page: the calculator owns the seat label, so it updates without 3D', 
   // The label once lived in scene.js only, which phones never load, so it stayed at its placeholder.
   assert.match(js, /\$\('seatLabel'\)\.textContent = plural\(n\)/, 'home.js must write the seat label');
   assert.doesNotMatch(scene, /seatLabel/, 'scene.js must not write the seat label');
-  assert.match(html, /id="seatLabel"[^>]*>5 seats · Business</, 'placeholder matches the default of 5 seats');
-  for (const b of ['Starter', 'Team', 'Business']) assert.match(html, new RegExp('data-bundle="' + b + '"'), 'plan ' + b);
+  assert.match(html, /id="seatLabel"[^>]*>5 seats · Vector \+ Scripts</, 'placeholder matches the default of 5 seats');
+  for (const p of ['basic', 'scripts', 'team']) assert.match(html, new RegExp('data-plan="' + p + '"'), 'plan ' + p);
 });
 
 test('home page: the seat grid shows only when 3D runs', () => {

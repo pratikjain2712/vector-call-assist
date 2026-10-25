@@ -291,8 +291,8 @@
   <div class="wrap">
     <div class="section-head reveal">
       <span class="eyebrow">Pricing</span>
-      <h2 class="h2">About ₹13 a day per rep. That's about <em>a cup of chai.</em></h2>
-      <p class="lede">₹499 a seat a month. The more seats you add, the less each one costs, down to 40% off, and yearly billing saves another 20%. Move the slider to see your price.</p>
+      <h2 class="h2">From about ₹13 a day per caller. That's about <em>a cup of chai.</em></h2>
+      <p class="lede">Two plans, priced per seat. Most teams take Vector + Scripts: the guided script, the AI script maker and coaching. Yearly billing saves about 20%. Move the slider to see your price.</p>
     </div>
 
     <div class="price-grid">
@@ -312,9 +312,9 @@
             <input type="number" id="seatNum" min="1" max="200" value="5" aria-label="Seats, number">
           </div>
           <label class="switch">
-            <input type="checkbox" id="addon">
+            <input type="checkbox" id="addon" checked>
             <span class="track" aria-hidden="true"></span>
-            <span class="switch-text">Script add-on<small>The script editor, published versions and script reports.</small></span>
+            <span class="switch-text">Scripts and AI<small>Guided scripts, the AI script maker, script tests and coaching.</small></span>
           </label>
         </fieldset>
 
@@ -322,43 +322,37 @@
           <p class="total"><span id="total">₹0</span> <small>a month</small></p>
           <p class="anchor" id="anchorLine"></p>
           <ul class="breakdown">
+            <li><span>Plan</span><b id="rowPlan"></b></li>
             <li><span>Seat rate</span><b id="rowSeat"></b></li>
-            <li><span>Bundle</span><b id="rowBundle"></b></li>
-            <li><span>Volume discount</span><b id="rowVol"></b></li>
-            <li><span>Script add-on</span><b id="rowAddon"></b></li>
             <li><span id="rowYearLabel">Billed yearly</span><b id="rowYear"></b></li>
-            <li><span>Per rep</span><b id="rowDay"></b></li>
+            <li><span>Per caller</span><b id="rowDay"></b></li>
           </ul>
           <a class="btn btn-primary btn-block magnetic" href="#account">Start free trial <span class="arrow" aria-hidden="true">→</span></a>
-          <p class="micro">5 days free, up to 5 seats. Yearly billing is for a full year.</p>
+          <p class="micro">5 days free with everything included, up to 5 seats. Yearly billing is for a full year.</p>
         </div>
       </div>
 
       <div class="seatbox reveal">
-        <div class="seatbox-head"><span class="cap">Your team</span><b id="seatLabel" aria-live="polite">5 seats · Business</b></div>
+        <div class="seatbox-head"><span class="cap">Your team</span><b id="seatLabel" aria-live="polite">5 seats · Vector + Scripts</b></div>
         <canvas id="seatScene" aria-hidden="true"></canvas>
         <div class="plans">
-          <div class="plan" data-bundle="Starter">
-            <b>Starter</b>
+          <div class="plan" data-plan="basic">
+            <b>Vector</b>
             <p class="price">₹499 <small>per seat / month</small></p>
-            <p>1 to 2 seats. Yearly: ₹399 a seat.</p>
+            <p>Yearly: ₹399 a seat. Calls on each caller's own SIM, campaigns and lead lists, one-tap results, live team view, fees and sales reports, Excel export, and Insights: forecast, best time to call and promises kept.</p>
           </div>
-          <div class="plan" data-bundle="Team">
-            <b>Team</b>
-            <p class="price">15% off <small>every seat</small></p>
-            <p>3 to 4 seats. ₹424 a month, or ₹339 a seat on yearly.</p>
+          <div class="plan featured" data-plan="scripts">
+            <b>Vector + Scripts <small>· recommended</small></b>
+            <p class="price">₹799 <small>per seat / month</small></p>
+            <p>Yearly: ₹649 a seat. Everything in Vector, plus the guided script with objection answers, the AI script maker (20 drafts a month), script tests, where calls end and caller coaching.</p>
           </div>
-          <div class="plan featured" data-bundle="Business">
-            <b>Business</b>
-            <p class="price">25% off <small>every seat</small></p>
-            <p>5 seats or more: ₹374 a seat a month, ₹299 on yearly. 5% more for each seat after 5, up to 40%.</p>
-          </div>
-          <div class="plan">
-            <b>Script add-on</b>
-            <p class="price">₹249 <small>per seat / month</small></p>
-            <p>Script editor and version history. Yearly: ₹199. Same bundle discounts apply.</p>
+          <div class="plan" data-plan="team">
+            <b>10 seats or more</b>
+            <p class="price">Team price <small>on request</small></p>
+            <p>Start the trial and tell us your team size. We set up the first phones with you.</p>
           </div>
         </div>
+        <p class="plans-note">WhatsApp messages, once you connect your business number, are billed at Meta's rates.</p>
       </div>
     </div>
   </div>
@@ -483,7 +477,7 @@
       </details>
       <details>
         <summary>What leaves the laptop?</summary>
-        <p>Call outcomes, timings and seat details, so the admin can see results. Lead names and phone numbers stay on the laptop.</p>
+        <p>Call outcomes, timings and seat details, so the admin can see results. Leads you upload to a campaign are stored in your Vector account so they can be shared between callers; each caller sees only the leads given to them. A lead sheet you open on the laptop without a campaign stays on that laptop.</p>
       </details>
       <details>
         <summary>Do I need a card for the trial?</summary>

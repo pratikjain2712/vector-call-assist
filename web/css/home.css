@@ -336,6 +336,8 @@ legend { font-family: var(--mono); font-size: .8rem; font-weight: 600; letter-sp
 .plan .price { font-family: var(--display); font-weight: 800; font-size: 1.4rem; letter-spacing: -.02em; }
 .plan .price small { font-family: var(--body); font-size: .8rem; font-weight: 500; opacity: .75; }
 .plan p { color: #c9d2e6; font-size: .92rem; }
+.plan b small { font-family: var(--body); font-size: .78rem; font-weight: 600; opacity: .7; }
+.plans-note { color: #c9d2e6; font-size: .85rem; padding: 0 1.2rem 1.2rem; margin: 0; }
 @media (max-width: 960px) { .price-grid { grid-template-columns: minmax(0, 1fr); } }
 
 /* Account */
