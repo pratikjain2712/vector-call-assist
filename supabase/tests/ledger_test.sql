@@ -4,6 +4,8 @@
 -- payments closing leads, admissions becoming students, and the two reports. Run with supabase/tests/run.sh.
 -- Expect failed = 0 on the last line.
 \set ON_ERROR_STOP 0
+-- Dates in this test are the institute's (India) dates: payments default to its today, so current_date must be too.
+set timezone = 'Asia/Kolkata';
 create or replace function pg_temp.as_user(u uuid, mail text default null) returns void language sql as $$
   select set_config('request.jwt.claim.sub', coalesce(u::text,''), false),
          set_config('request.jwt.claims', json_build_object('sub', coalesce(u::text,''), 'email', mail)::text, false);
