@@ -1,0 +1,140 @@
+[
+  {
+    "key": "where_number",
+    "label": "Where did you get my number?",
+    "answer": "We got your number from {source}, on {source_date}. If you do not want calls from us, tell me and I will stop them right away.",
+    "fallback": "I am sorry, I do not have that detail in front of me. If you do not want calls from us, tell me and I will stop them right away.",
+    "tags": ["all", "privacy", "source", "number"]
+  },
+  {
+    "key": "never_gave_number",
+    "label": "I never gave you my number",
+    "answer": "I am sorry about that. It may have been entered by mistake. Shall I take your number off our list, so we do not call again?",
+    "tags": ["all", "privacy", "source", "number"]
+  },
+  {
+    "key": "who_are_you",
+    "label": "Who are you? Which institute?",
+    "answer": "I am {me}, calling from {institute}. You can call our office or visit us any time to check.",
+    "tags": ["all", "identity"]
+  },
+  {
+    "key": "sales_call",
+    "label": "Is this a sales call?",
+    "answer": "Yes, it is. I am calling to tell you about {institute}. If it is not useful for you, just tell me and I will not call again.",
+    "tags": ["sales", "admission", "renewal", "identity"]
+  },
+  {
+    "key": "busy_call_later",
+    "label": "I am busy, call later",
+    "answer": "Sorry to call at a busy time. When is a good time to call you back? I will call you then.",
+    "result": "call_back_later",
+    "tags": ["all", "time"]
+  },
+  {
+    "key": "how_long",
+    "label": "How long will this take?",
+    "answer": "Just two minutes. If now is not a good time, I can call you later.",
+    "tags": ["all", "time"]
+  },
+  {
+    "key": "send_whatsapp",
+    "label": "Send the details on WhatsApp",
+    "answer": "Sure. Shall I send them on WhatsApp to this number? I will send them right after this call.",
+    "tags": ["all", "whatsapp", "details"]
+  },
+  {
+    "key": "do_not_call",
+    "label": "Do not call me again",
+    "answer": "I am sorry for the trouble. I will mark your number as do not call, and we will not call you again. Have a good day.",
+    "result": "do_not_call",
+    "tags": ["all", "privacy", "stop"]
+  },
+  {
+    "key": "dnd",
+    "label": "I am on the DND list",
+    "answer": "I am sorry. I will mark your number as do not call right now, and we will not call you again. Have a good day.",
+    "result": "do_not_call",
+    "tags": ["all", "privacy", "stop", "dnd"]
+  },
+  {
+    "key": "fee_amount",
+    "label": "How much is the fee?",
+    "answer": "Let me tell you the exact fee, so there is no confusion. I can also send the fee details on WhatsApp.",
+    "check": ["Point callers to the fee facts of this campaign (the fee list the admin adds to the script), or say the fee is sent on WhatsApp."],
+    "tags": ["all", "fee", "money"]
+  },
+  {
+    "key": "discount",
+    "label": "Is there a discount?",
+    "answer": "I cannot promise a discount on the call. Let me tell you exactly what {institute} offers right now.",
+    "check": [
+      "Add the discounts or scholarships your institute really offers, with who can get them and the end date, or write: \"There is no discount right now.\""
+    ],
+    "tags": ["all", "fee", "money", "discount"]
+  },
+  {
+    "key": "fraud_check",
+    "label": "Is this a fraud or spam call?",
+    "answer": "You are right to be careful. We will never ask for an OTP or bank details. You can check us by calling the {institute} office number on our website, or by visiting us.",
+    "check": ["Add your office landline and website, if callers should say them."],
+    "tags": ["all", "identity", "trust", "spam"]
+  },
+  {
+    "key": "otp_bank",
+    "label": "Do you need my OTP or bank details?",
+    "answer": "No. We will never ask for an OTP, PIN, password or bank details on a call. Please do not share them with anyone.",
+    "tags": ["all", "trust", "money"]
+  },
+  {
+    "key": "speak_hindi",
+    "label": "Can you speak in Hindi?",
+    "answer": "Ji, bilkul. Hindi mein baat karte hain. (If you cannot speak Hindi well: Sorry, I will ask a colleague to call you back in Hindi. When is a good time?)",
+    "tags": ["all", "language", "hindi"]
+  },
+  {
+    "key": "ask_family",
+    "label": "I will ask my husband, wife or parents",
+    "answer": "Of course, please talk to them. When can I call back? I can also speak to them directly, if you like.",
+    "tags": ["all", "family", "time"]
+  },
+  {
+    "key": "other_parent",
+    "label": "Can you call the other parent?",
+    "answer": "Sure. Which number should I call, and when is a good time? I will note it.",
+    "tags": ["all", "family"]
+  },
+  {
+    "key": "joined_elsewhere",
+    "label": "Already joined somewhere else",
+    "answer": "Thank you for telling me. All the best! If you ever need us, you can call {institute}.",
+    "tags": ["admission", "sales", "renewal"]
+  },
+  {
+    "key": "wrong_number",
+    "label": "You have the wrong number",
+    "answer": "Sorry to trouble you. I will correct our records. Have a good day.",
+    "result": "wrong_number",
+    "tags": ["all", "wrong number"]
+  },
+  {
+    "key": "location",
+    "label": "Where is the institute?",
+    "answer": "Let me tell you the address. I can also send the location on WhatsApp.",
+    "check": ["Add your address with a well-known landmark nearby."],
+    "tags": ["all", "address", "location"]
+  },
+  {
+    "key": "speak_senior",
+    "label": "Can I speak to someone senior?",
+    "answer": "Sure. I will pass your request to the office, and someone senior will call you. When is a good time?",
+    "tags": ["all", "escalation"]
+  },
+  {
+    "key": "call_back_number",
+    "label": "Which number can I call you back on?",
+    "answer": "You can call the {institute} office number. I can send it to you on WhatsApp.",
+    "check": ["Add the office number callers should give, and its hours."],
+    "tags": ["all", "identity", "number"]
+  }
+]

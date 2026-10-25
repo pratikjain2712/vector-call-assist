@@ -43,7 +43,7 @@ test('a fees call: queue order, lead card, script step times, result fields, Wha
   await intoWorkspace(page, 'rep2');
 
   await expect(page.locator('#camp-bar')).toBeVisible();
-  await expect(page.locator('#camp-pick option:checked')).toContainText('Oct fees – Class 10');
+  await expect(page.locator('#camp-pick')).toContainText('Oct fees – Class 10');
   await expect(page.locator('#camp-today')).toContainText('of 40');
   // The lead sheet is put away; the waiting list is beside the card: the call back first, then new leads oldest first.
   await expect(page.locator('#sheet-section')).toBeHidden();
@@ -153,7 +153,8 @@ test('without the Scripts add-on there are no script steps; the lead sheet is st
   await expect(page.locator('#res-wa-send')).toBeHidden();
 
   // My lead sheet: the old page is back.
-  await page.locator('#camp-pick').selectOption('');
+  await page.locator('#camp-pick').click();   // Phase A.2: the campaign picker
+  await page.locator('#camp-sheet').click();
   await expect(page.locator('#sheet-section')).toBeVisible();
   await expect(page.locator('#queue-panel')).toBeHidden();
   await expect(page.locator('#lead-name')).toBeVisible();

@@ -540,6 +540,78 @@ function createFakeBackend(world) {
     return full;
   }
   // ---- end Phase A: caller ----
+  // Phase A.2: caller. Open campaigns (20261025130000_ledger_open_campaigns.sql): every active seat of the
+  // institute may work a running or paused campaign with open_to_all; my_campaigns has the new columns
+  // (call_type_id, share_mode, open_to_all, class_label, board, is_member, pool_leads_due); next_free_lead hands out
+  // unassigned leads, due follow-ups first (oldest next_call_at), then new leads (oldest first); lead_ledger reads
+  // db.ledger[student_id] = { balance_due_now, balance_total, last_payment_amount, last_payment_on, last_payment_mode }
+  // for the caller of the lead only; my_common_answers answers db.commonAnswers, or is missing (PGRST202) when null.
+  db.ledger = {}; db.commonAnswers = null;
+  const a2Seat = (u, c) => {
+    const s = u && seatOf(u.id);
+    if (!s || !c || !['running', 'paused'].includes(c.status)) return null;
+    if (membersOf(c).includes(s.id)) return s;
+    return c.open_to_all === true && (!c.institute_id || c.institute_id === s.institute_id) ? s : null;
+  };
+  // The 0021 stand-ins check membership; for an open campaign the seat is counted as a member for that one call.
+  const a2AsMember = (fn) => (u, a) => {
+    const c = db.campaigns.find((x) => x.id === a.p_campaign);
+    const s = a2Seat(u, c);
+    if (!s || !Array.isArray(c.members) || c.members.includes(s.id)) return fn(u, a);
+    c.members.push(s.id);
+    try { return fn(u, a); } finally { c.members = c.members.filter((id) => id !== s.id); }
+  };
+  const a2Free = (c) => {
+    const now = Date.now();
+    const pool = db.leads.filter((l) => l.campaign_id === c.id && !l.assigned_seat_id && CampaignQueue.isDueNow(l, now));
+    const t = (v) => (v ? Date.parse(v) : 0);
+    const due = pool.filter((l) => l.next_call_at).sort((x, y) => t(x.next_call_at) - t(y.next_call_at));
+    const fresh = pool.filter((l) => !l.next_call_at).sort((x, y) => t(x.created_at) - t(y.created_at));
+    return due.concat(fresh);
+  };
+  const a2Base = { my_call_queue: RPC.my_call_queue, campaign_script_version: RPC.campaign_script_version };
+  Object.assign(RPC, {
+    my_campaigns: (u) => json(200, db.campaigns.filter((c) => a2Seat(u, c)).map((c) => {
+      const s = seatOf(u.id);
+      const mine = db.leads.filter((l) => l.campaign_id === c.id && l.assigned_seat_id === s.id);
+      return { campaign_id: c.id, name: c.name, status: c.status, call_type_id: c.type_id || null, call_type_key: c.type_key, call_type_label: c.type_label,
+        script_id: c.script_id || null, start_date: null, end_date: null, daily_target: c.daily_target || null, call_hours: null,
+        share_mode: c.share_mode || 'equal', open_to_all: c.open_to_all === true, class_label: c.class_label || null, board: c.board || null,
+        is_member: membersOf(c).includes(s.id), my_leads: mine.length, my_leads_due: mine.filter((l) => CampaignQueue.isDueNow(l, Date.now())).length,
+        pool_leads_due: c.open_to_all === true || c.share_mode === 'next_free' ? a2Free(c).length : 0, results: c.results || [] };
+    })),
+    my_call_queue: a2AsMember((u, a) => {
+      const res = a2Base.my_call_queue(u, a);
+      const c = db.campaigns.find((x) => x.id === a.p_campaign);
+      if (res.status !== 200 || !c) return res;
+      const body = JSON.parse(res.body);
+      return json(200, Object.assign(body, { open_to_all: c.open_to_all === true, class_label: c.class_label || null, board: c.board || null,
+        leads: body.leads.map((l) => Object.assign({ student_id: null }, l)) }));
+    }),
+    campaign_script_version: a2AsMember((u, a) => a2Base.campaign_script_version(u, a)),
+    next_free_lead: (u, a) => {
+      const c = db.campaigns.find((x) => x.id === a.p_campaign);
+      const s = a2Seat(u, c);
+      if (!s) return pgFail('42501', 'campaign not found');
+      const l = a2Free(c)[0];
+      if (!l) return json(200, []);
+      l.assigned_seat_id = s.id;
+      return json(200, [{ lead_id: l.id, campaign_id: c.id, name: l.name, phone: l.phone, extra: l.extra, status: l.status, next_call_at: l.next_call_at, promised_date: l.promised_date || null }]);
+    },
+    lead_ledger: (u, a) => {
+      const l = db.leads.find((x) => x.id === a.p_lead);
+      const s = u && seatOf(u.id);
+      if (!l || !s || l.assigned_seat_id !== s.id) return pgFail('42501', 'lead not found');
+      const g = l.student_id ? db.ledger[l.student_id] || {} : null;
+      return json(200, [{ lead_id: l.id, student_id: l.student_id || null, balance_due_now: g ? g.balance_due_now ?? null : null, balance_total: g ? g.balance_total ?? null : null,
+        last_payment_amount: g ? g.last_payment_amount ?? null : null, last_payment_on: g ? g.last_payment_on || null : null, last_payment_mode: g ? g.last_payment_mode || null : null, money_hidden: false }]);
+    },
+    my_common_answers: (u) => {
+      if (!db.commonAnswers) return pgErr(404, 'PGRST202', 'fake backend has no function my_common_answers');
+      return u && seatOf(u.id) ? json(200, db.commonAnswers) : pgFail('42501', 'no active seat for this login');
+    },
+  });
+  // ---- end Phase A.2: caller ----
   // Phase A: admin. Home, Callers and Settings (20261024100023_admin_home_settings.sql and the 0012/0013 call type,
   // role and money functions): the same inputs, answer shapes, admin and owner checks. No money is kept, so
   // amounts are always null (money hidden). Functions another block already defines are left as they are.
