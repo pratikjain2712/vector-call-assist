@@ -140,6 +140,7 @@ begin
 end $$;
 
 -- ---------- 4. the institute, people, devices, terms ----------
+-- seat_limit 7 = the 7 demo seats: the institute is full, so nobody can send invite emails from the demo.
 
 create temp table demo_ctx (k text primary key, v text) on commit drop;
 
@@ -154,7 +155,7 @@ begin
 
   insert into public.institutes (id, name, status, seat_limit, features, time_zone, hide_money, trial_ends_at,
                                  created_by, created_at)
-    values (inst, 'Sunrise Coaching Academy (Demo)', 'active', 8, array['scripts', 'ai_drafts'], 'Asia/Kolkata',
+    values (inst, 'Sunrise Coaching Academy (Demo)', 'active', 7, array['scripts', 'ai_drafts'], 'Asia/Kolkata',
             false, null, owner, pg_temp.ist(today - 75, 11 * 3600));
 
   for p in select * from demo_people order by seat loop
