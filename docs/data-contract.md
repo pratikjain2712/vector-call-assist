@@ -562,7 +562,7 @@ _No migration: callers read the ledger with `lead_ledger(p_lead)` (above)._
 | Call | When | Notes |
 |---|---|---|
 | `my_campaigns()` | sign-in, reload | The campaign picker groups by `call_type_key` (fees, admission, sales, others), filters by `class_label` and `board`, shows `my_leads_due + pool_leads_due` as "N waiting" (`web/js/campaign-picker.js`). |
-| `my_call_queue(p_campaign)` | as before | Reads `open_to_all`, `class_label`, `board` (and `fees_due_by` if ever added) and each lead's `student_id`. |
+| `my_call_queue(p_campaign)` | as before | Reads `open_to_all`, `class_label`, `board`, `fees_due_by` and each lead's `student_id` and `due_date` (`{due_date}`: the lead's own extra field first, then `due_date`, then `fees_due_by`). |
 | `next_free_lead(p_campaign)` | nothing callable in the caller's own queue, and the campaign is open or `next_free` | Rows or a lead id. |
 | `lead_ledger(p_lead)` | a lead with `student_id` on the card | Balance due now and last payment (amount, date, mode); memory only. |
 | `my_trial_status()` | sign-in | `institute_name` fills `{institute}`; kept on the device with the campaigns. |
@@ -614,3 +614,16 @@ Internal (granted to nobody): `platform_require()`, `template_problem(p_call_typ
 
 **Who uses what.** Scripts tab: "Start from a template" calls `list_script_templates` (filters: purpose, class, board, language) and "Use this template" starts a new institute script (saved with `admin_save_script`) with the template's call type and its check marks; a changed template changes only scripts made later. Library view (platform admins): `list_script_templates(p_include_inactive => true)`, the `common_answers` table, `platform_upsert_template`, `platform_upsert_common_answer`, and the `ai-script-draft` Edge Function, which now answers 403 `code: "not_platform_admin"` for anyone else (`is_platform_admin`; the person still needs an admin seat with AI drafts for the monthly limit and cost log). Settings: "Common answers" card (`my_common_answers`, `admin_fill_common_answer`). Callers tab: "Back to pool" (`admin_release_leads`), role "Accounts" (`admin_set_seat_role`), and the invite form (Caller / Manager / Accounts) through the `seat-admin` Edge Function, which now takes `role` `rep` / `admin` / `accounts` (also `caller` / `manager`) and passes it to `invite_seat` (seat limit; Accounts by owners only).
 <!-- end Phase A.2: template library -->
+
+## Phase A.2: integration (migration 20261025180000_phase_a2_integration.sql)
+
+| Function | Change |
+|---|---|
+| `my_call_queue(p_campaign)` | Same access and keys, plus `fees_due_by` (the campaign's) and, per lead, `due_date`: the campaign's `fees_due_by` when set, else for a lead with a student the due date of the student's oldest fee item not covered by payments (reversals counted), else null. |
+| `admin_callers(p_institute)` | Same columns. An Accounts seat (`role = 'accounts'`) has `campaigns = []`, `calls_target` null and `now_status` null: it is listed as a seat with the role Accounts, never as a caller. |
+| `admin_home_summary(p_day, p_campaign)` | Same answer. `callers` never holds an Accounts seat; with `p_campaign` set it lists the campaign's members and the callers holding its open leads (open campaigns have no members). |
+| `my_common_answers()` | Same columns, in the library's order (`common_answers.sort_order`, new column, default 1000 = last; then label): "Where did you get my number?" first. |
+| `institute_tz(p_institute)`, `student_balance_rows(...)` | Same answers, faster: the zone is checked without `pg_timezone_names`, and "today" is worked out once per call (before, `accounts_students` timed out on 570 students). |
+| internal `student_next_due_date(p_student)` | Granted to nobody. The due date of the student's oldest unpaid fee item, or null. |
+
+Web: the Callers tab hides campaigns, "Move leads" and "Back to pool" for an Accounts seat, and "Back to pool" counts only leads in campaigns that are not closed (what `admin_release_leads` sends back). Campaign member checks and the Reports caller filter leave Accounts seats out; Reports for an Accounts seat shows no campaign or caller filter. The Settings "AI drafts used" line shows for platform admins only.

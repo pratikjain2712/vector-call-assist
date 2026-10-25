@@ -171,6 +171,8 @@ test('Callers: "Back to pool" says how many leads go back, and the role select h
   const row = page.locator('#seat-body tr[data-seat="' + rep1.id + '"]');
   await expect(row).toContainText('Accounts');
   await expect(row.locator('td').nth(4)).toHaveText('');
+  await expect(row).toContainText('No phone needed');
+  await expect(row).not.toContainText('No calls yet');
   await expect(row.getByRole('button', { name: 'Back to pool: leads of Rep 1' })).toHaveCount(0);
   await expect(page.locator('#edit-campaigns')).toBeHidden();
   await expect(page.locator('#edit-move')).toBeHidden();

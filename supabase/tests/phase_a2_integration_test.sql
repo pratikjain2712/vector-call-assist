@@ -132,7 +132,13 @@ select pg_temp.val_is('admin_callers lists every seat',
   format($q$select count(*)::text from admin_callers(%L)$q$, :'inst_i'), '4');
 select pg_temp.val_is('Home lists the callers only, never the accounts seat',
   $q$select string_agg(c->>'label', ',' order by c->>'label') from jsonb_array_elements(admin_home_summary('today')->'callers') c$q$, 'Asha,Bina');
-select pg_temp.val_is('Home with an open campaign lists every caller',
+select pg_temp.val_is('Home with an open campaign lists the callers holding its leads',
+  format($q$select string_agg(c->>'label', ',' order by c->>'label') from jsonb_array_elements(admin_home_summary('today', %L)->'callers') c$q$, :'k_led'), 'Asha');
+reset role;
+insert into leads (institute_id, campaign_id, name, phone, assigned_seat_id) values (:'inst_i', :'k_led', 'Bina lead', '9800000009', :'s_b');
+select pg_temp.as_user(:'u_o');
+set role authenticated;
+select pg_temp.val_is('a caller who takes a lead from the pool is listed too',
   format($q$select string_agg(c->>'label', ',' order by c->>'label') from jsonb_array_elements(admin_home_summary('today', %L)->'callers') c$q$, :'k_led'), 'Asha,Bina');
 select pg_temp.val_is('Home with a restricted campaign lists its members',
   format($q$select string_agg(c->>'label', ',' order by c->>'label') from jsonb_array_elements(admin_home_summary('today', %L)->'callers') c$q$, :'k_rst'), 'Asha');
@@ -160,6 +166,34 @@ select pg_temp.ok('the Vector team adds an answer', $q$insert into common_answer
 select pg_temp.as_user(:'u_a');
 set role authenticated;
 select pg_temp.val_is('a new answer goes last', $q$select key from my_common_answers() offset 21 limit 1$q$, 'zz_new');
+reset role;
+
+-- ---------- 4. Speed ----------
+select pg_temp.val_is('institute_tz: India by default', format($q$select institute_tz(%L)$q$, :'inst_i'), 'Asia/Kolkata');
+update institutes set time_zone = 'Europe/London' where id = :'inst_i';
+select pg_temp.val_is('institute_tz: a zone the database knows', format($q$select institute_tz(%L)$q$, :'inst_i'), 'Europe/London');
+update institutes set time_zone = 'Mars/Olympus_Mons' where id = :'inst_i';
+select pg_temp.val_is('institute_tz: an unknown zone falls back to India', format($q$select institute_tz(%L)$q$, :'inst_i'), 'Asia/Kolkata');
+update institutes set time_zone = 'x''; select 1; --' where id = :'inst_i';
+select pg_temp.val_is('institute_tz: a strange value falls back to India', format($q$select institute_tz(%L)$q$, :'inst_i'), 'Asia/Kolkata');
+select pg_temp.val_is('institute_tz: no institute gives India', $q$select institute_tz(gen_random_uuid())$q$, 'Asia/Kolkata');
+update institutes set time_zone = 'Asia/Kolkata' where id = :'inst_i';
+select pg_temp.val_is('the browser cannot call institute_tz',
+  $q$select has_function_privilege('authenticated', 'public.institute_tz(uuid)', 'execute')::text$q$, 'false');
+-- 600 students with 3 fee items each: the balances come back in well under a second (they took ~40 ms per
+-- student before, so accounts_students timed out on a real institute).
+insert into students (institute_id, name, class_label, board)
+  select :'inst_i', 'Bulk ' || g, '9th', 'ICSE' from generate_series(1, 600) g;
+insert into fee_items (institute_id, student_id, head, amount, due_date)
+  select :'inst_i', s.id, h, 1000, current_date - 10 from students s, unnest(array['A', 'B', 'C']) h where s.name like 'Bulk %';
+select pg_temp.val_is('student_balance_rows for 602 students in under 2 seconds',
+  format($q$with t as (select clock_timestamp() as t0), n as (select count(*) as c from student_balance_rows(%L))
+           select (n.c = 602 and clock_timestamp() - t.t0 < interval '2 seconds')::text from t, n$q$, :'inst_i'), 'true');
+select pg_temp.val_is('balances still right: Aarav owes Term 2 (8,000) now',
+  format($q$select balance_due_now::text from student_balance_rows(%L, %L)$q$, :'inst_i', :'st_1'), '8000.00');
+select pg_temp.as_user(:'u_ac');
+set role authenticated;
+select pg_temp.val_is('accounts_students lists every student', $q$select count(*)::text from accounts_students('{"limit": 5000}')$q$, '602');
 reset role;
 
 select test, case when passed then 'PASS' else 'FAIL' end as result, detail from results order by test;

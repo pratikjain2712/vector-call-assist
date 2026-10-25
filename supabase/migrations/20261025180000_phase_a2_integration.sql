@@ -7,10 +7,15 @@
 -- 2. Accounts seats are not callers. admin_callers (same columns as 20261024100023) gives accounts seats no
 --    "now" status, no call target and no campaigns, so the Callers tab shows them as seats with the role
 --    Accounts only. admin_home_summary (same answer as 20261024100023) never lists an accounts seat under
---    callers, and with a campaign filter on an open campaign lists every active caller (not only members).
+--    callers, and with a campaign filter also lists the callers holding open leads of that campaign (open
+--    campaigns have no members: their callers take leads from the pool).
 -- 3. Common answers keep the library's order (the most asked first: "Where did you get my number?" before
 --    "I never gave you my number"): common_answers.sort_order, set for the 21 seeded answers; new answers go
 --    last. my_common_answers (same columns as 20261025140000) orders by sort_order, then label.
+-- 4. Speed (found on the demo data, 570 students): institute_tz looked the zone up in pg_timezone_names
+--    (~20 ms a call), and student_balance_rows called it once per fee item, so accounts_students timed out.
+--    institute_tz now checks the zone without that view (same answer: the zone when the database knows it,
+--    else India), and student_balance_rows works out "today" once.
 
 -- ---------- 1. {due_date} ----------
 
@@ -129,7 +134,8 @@ revoke all on function public.admin_callers(uuid) from public, anon;
 grant execute on function public.admin_callers(uuid) to authenticated;
 
 -- admin_home_summary: same as 20261024100023, except who is listed under callers: never an accounts seat;
--- with a campaign filter on an open campaign, every active caller (open campaigns have no members).
+-- with a campaign filter, members and the callers holding open leads of that campaign (open campaigns have
+-- no members).
 create or replace function public.admin_home_summary(p_day text default 'today', p_campaign uuid default null)
 returns jsonb
 language plpgsql stable security definer set search_path = public
@@ -218,7 +224,9 @@ begin
       and (
         (s.role = 'rep' and (p_campaign is null
            or exists (select 1 from public.campaign_members m where m.seat_id = s.id and m.campaign_id = p_campaign)
-           or exists (select 1 from public.campaigns oc where oc.id = p_campaign and oc.open_to_all)))
+           or exists (select 1 from public.leads ol
+                      where ol.campaign_id = p_campaign and ol.assigned_seat_id = s.id
+                        and ol.status in ('new', 'callback', 'promised'))))
         or exists (select 1 from calls k where k.seat_id = s.id))
   )
   select jsonb_build_object(
@@ -356,3 +364,55 @@ begin
 end $$;
 revoke all on function public.my_common_answers() from public, anon;
 grant execute on function public.my_common_answers() to authenticated;
+
+-- ---------- 4. Speed ----------
+
+-- The institute's time zone, or India when it is missing or unknown to the database. Same answer as
+-- 20261024100023 without reading pg_timezone_names (slow): a zone name is checked by using it.
+create or replace function public.institute_tz(p_institute uuid)
+returns text
+language plpgsql stable security definer set search_path = public
+as $$
+declare
+  tz text;
+begin
+  select i.time_zone into tz from public.institutes i where i.id = p_institute;
+  if tz is null or tz = 'Asia/Kolkata' then return 'Asia/Kolkata'; end if;
+  if tz !~ '^[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+)*$' then return 'Asia/Kolkata'; end if;
+  begin
+    perform now() at time zone tz;
+  exception when others then
+    return 'Asia/Kolkata';
+  end;
+  return tz;
+end $$;
+revoke all on function public.institute_tz(uuid) from public, anon, authenticated;
+
+-- student_balance_rows: same as 20261025130000; "today" is worked out once, not once per fee item.
+create or replace function public.student_balance_rows(p_institute uuid, p_student uuid default null, p_as_of date default null)
+returns table (student_id uuid, total_fees numeric, total_due_to_date numeric, paid numeric,
+               balance_due_now numeric, balance_total numeric,
+               last_payment_amount numeric, last_payment_on date, last_payment_mode text)
+language sql stable security definer set search_path = public
+as $$
+  with d as materialized (select coalesce(p_as_of, public.ledger_today(p_institute)) as as_of)
+  select s.id, f.total::numeric(12, 2), f.due::numeric(12, 2), p.paid::numeric(12, 2), (f.due - p.paid)::numeric(12, 2),
+         (f.total - p.paid)::numeric(12, 2), lp.amount, lp.paid_on, lp.mode
+  from public.students s
+  cross join d
+  cross join lateral (
+    select coalesce(sum(fi.amount), 0) as total,
+           coalesce(sum(fi.amount) filter (where fi.due_date <= d.as_of), 0) as due
+    from public.fee_items fi where fi.student_id = s.id and not fi.is_void) f
+  cross join lateral (
+    select coalesce(sum(case when py.reverses_id is null then py.amount else -py.amount end), 0) as paid
+    from public.payments py where py.student_id = s.id) p
+  left join lateral (
+    select py.amount, py.paid_on, py.mode from public.payments py
+    where py.student_id = s.id and py.reverses_id is null
+      and not exists (select 1 from public.payments r where r.reverses_id = py.id)
+    order by py.paid_on desc, py.created_at desc limit 1) lp on true
+  where s.institute_id = p_institute and (p_student is null or s.id = p_student);
+$$;
+
+revoke all on function public.student_balance_rows(uuid, uuid, date) from public, anon, authenticated;

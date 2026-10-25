@@ -160,23 +160,26 @@ Feedback from the first institute demo: admins have no time to attach callers to
 
 Decisions (25 Oct): payments are recorded by a new Accounts role (and owners), callers record promises only; UPI and cash are entered by hand with the reference (payment links and automatic matching later); every running campaign is open to every caller unless the admin restricts it; students come from an Excel import and from admissions confirmed in Vector.
 
-- [ ] S · Answer search (/) and the helper column work for every script, not only the built-in one
-- [ ] M · Open campaigns: campaigns open to all callers by default, optional restriction to chosen callers; tags for class (e.g. 8th) and board (CBSE, ICSE, State); open campaigns hand out the next free lead
-- [ ] M · Caller: campaign picker grouped and filtered by type, class and board; the campaign's script loads on pick
+- [x] S · Answer search (/) and the helper column work for every script, not only the built-in one
+- [x] M · Open campaigns: campaigns open to all callers by default, optional restriction to chosen callers; tags for class (e.g. 8th) and board (CBSE, ICSE, State); open campaigns hand out the next free lead
+- [x] M · Caller: campaign picker grouped and filtered by type, class and board; the campaign's script loads on pick
 - [x] S · Admin: adding a caller is the only step; no campaign membership needed
-- [ ] L · Ledger: students (class, section, board, admission no, parents and phones), fee items (head, amount, due date, academic year), payments (amount, date, mode UPI/cash/cheque/card/bank, reference, recorded by; corrections by reversal, never deleted), balance per student
-- [ ] S · Accounts role: records payments, sees money and the ledger; cannot change callers or campaigns
-- [ ] M · Admin Fees tab: students list with filters and balance, student page (fees, payments, calls), record payment, receipt, Excel import of students and fees
-- [ ] M · Fees campaign from the ledger: pick class, board and due date; leads carry the student and the live balance; a recorded payment updates the lead and stops calls when nothing is due
-- [ ] S · Admission confirmed on a call becomes a student (fee plan added by Accounts)
+- [x] L · Ledger: students (class, section, board, admission no, parents and phones), fee items (head, amount, due date, academic year), payments (amount, date, mode UPI/cash/cheque/card/bank, reference, recorded by; corrections by reversal, never deleted), balance per student
+- [x] S · Accounts role: records payments, sees money and the ledger; cannot change callers or campaigns
+- [x] M · Admin Fees tab: students list with filters and balance, student page (fees, payments, calls), record payment, receipt, Excel import of students and fees
+- [x] M · Fees campaign from the ledger: pick class, board and due date; leads carry the student and the live balance; a recorded payment updates the lead and stops calls when nothing is due
+- [x] S · Admission confirmed on a call becomes a student (fee plan added by Accounts)
 - [x] M · Reports, Home and Insights: collected = ledger payments; promised vs actually paid; promises kept measured against the ledger (migration `20261025150000_ledger_reports.sql`)
-- [ ] S · Caller lead card shows the ledger: balance, last payment (amount, date, mode)
-- [ ] M · Demo data: students, fee plans and payments; campaigns tagged by class and board and open to all callers
+- [x] S · Caller lead card shows the ledger: balance, last payment (amount, date, mode)
+- [x] M · Demo data: students, fee plans and payments; campaigns tagged by class and board and open to all callers
 - [x] L · Central template library: the Vector team writes and updates templates (AI on our side); every institute picks from the shared library (by purpose, class, board, language); new or changed templates reach all institutes without a release
 - [x] S · AI script maker moves to the Vector team's own page; institutes get the library and the editor instead (pricing copy updated)
-- [ ] S · Placeholders filled on the call: {name}, {me}, {institute}, {student}, {class}, {board}, {amount_due}, {due_date}, {course}, {source}, {source_date}
-- [ ] M · Common answers in every script's search and helper column, e.g. "Where did you get my number?" (answered from the lead's source and date), "Is this a sales call?", "I'm on DND", "Don't call again"; the lead card shows where the lead came from
-- [ ] S · Cold-calling templates: permission first, honest source, easy exit
+- [x] S · Placeholders filled on the call: {name}, {me}, {institute}, {student}, {class}, {board}, {amount_due}, {due_date}, {course}, {source}, {source_date}
+- [x] M · Common answers in every script's search and helper column, e.g. "Where did you get my number?" (answered from the lead's source and date), "Is this a sales call?", "I'm on DND", "Don't call again"; the lead card shows where the lead came from
+- [x] S · Cold-calling templates: permission first, honest source, easy exit
+- [x] Integration (25 Oct, migration `20261025180000_phase_a2_integration.sql`): {due_date} on ledger leads (the campaign's due-by date, else the student's oldest unpaid fee), Accounts seats never listed as callers, common answers in the library's order, faster balances (`institute_tz`, `student_balance_rows`); homepage "Ready script library" replaces the AI script maker; walkthrough on the local stack with the demo data.
+
+Migrations of Phase A.2, to apply in this order after `20261025035110`: `20261025120000_campaign_script_pushbacks.sql`, `20261025130000_ledger_open_campaigns.sql`, `20261025140000_template_library.sql`, `20261025150000_ledger_reports.sql`, `20261025180000_phase_a2_integration.sql`.
 
 
 ## Before release

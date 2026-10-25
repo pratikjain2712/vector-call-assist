@@ -411,7 +411,9 @@
     $('seat-empty').hidden = seats.length > 0;
     seats.forEach((row) => {
       const s = fullSeat(row);
-      const health = A.pairingHealth(s);
+      // An Accounts seat makes no calls, so it needs no phone and has no calls to show.
+      const acc = roleOf(s) === 'accounts';
+      const health = acc && s.status === 'active' ? { text: 'No phone needed', level: 'none' } : A.pairingHealth(s);
       const kinds = (s.device_kinds || []).join(', ') || 'none';
       const role = roleLabel(s) + (roleOf(s) === 'manager' && s.can_see_money ? ' · sees money' : '');
       const camps = (s.campaigns || []).map((c) => c.name).join(', ');
@@ -423,7 +425,7 @@
         cell(nowText(s.now_status)),
         cell(kinds),
         cell(health.text, 'health ' + health.level),
-        cell(s.last_call_at ? new Date(s.last_call_at).toLocaleString() : 'No calls yet'),
+        cell(acc ? '—' : s.last_call_at ? new Date(s.last_call_at).toLocaleString() : 'No calls yet'),
         el('td', null, [seatActions(s)]),
       ]));
     });

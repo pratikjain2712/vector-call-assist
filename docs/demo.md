@@ -111,7 +111,10 @@ Good to know:
   published with the institute's facts filled in: Overdue fees – Class 10 (*Overdue fee reminder*), Term 2
   reminder – Class 8 (*Fee reminder before the due date*), Class 9 admission enquiry (*School admission enquiry
   follow-up*). Also Fees reminder v3 (used by the closed Sept campaign), Course sales v7, Admission check v2 and
-  Late fee warning (a draft with a "Check this" mark). 3 of 20 AI drafts used this month.
+  Late fee warning (a draft with a "Check this" mark). **Start from a template** opens the ready script
+  library: 26 scripts for fees, admissions, sales and cold calling, in English and Hinglish, filtered by
+  purpose, class, board and language. (The AI script maker is the Vector team's own tool; institutes do not
+  see it or an AI drafts count.)
 - Fees (the ledger, also what Kavita sees): 570 students (Class 8 CBSE 180 in sections A–C, Class 9 ICSE 150,
   Class 10 CBSE 240, plus about 10 new students from "Admission confirmed" calls with no fee plan yet), each
   with an admission number, parent and phone. Fee items for 2026-27: Term 1 and Term 2 tuition, and a bus fee
@@ -121,7 +124,10 @@ Good to know:
   typed twice).
 - Callers: team activity, daily targets, supervisor notes (one about Priya skipping the questions), seats,
   phones paired. Settings: call types (with two added results: "Asked for concession", "Admission
-  confirmed"), money switch, plan, WhatsApp **not connected** (so you can show how to connect), activity log.
+  confirmed"), **common answers** (5 answers that need the institute's facts, e.g. "Where is the institute?",
+  "How much is the fee?": callers see them only once the owner fills them in), money switch, plan, WhatsApp
+  **not connected** (so you can show how to connect), activity log. Callers: Kavita (Accounts) is in the seats
+  list with the role Accounts, but never as a caller (not on Home, not in campaign or move lists).
 
 **Manager (Rahul)**: the same screens with no ₹ anywhere: the fees forecast counts payments, Home shows
 "Fees: paid N calls", reports show counts, Excel has no ₹ columns. In Fees he sees who owes, not how much, and
@@ -146,33 +152,45 @@ the owner calls him live. Reset the demo afterwards to put him back.
 **Caller (Ravi)**: his Oct fees list with broken promises first, the lead card (parent, student, class, amount
 due, last call), the script step by step, pushback answers, result buttons with date and ₹ fields.
 
-## A 12-minute walkthrough
+## A 15-minute walkthrough
 
-1. **Owner → Home** (2 min). "This is today, live." The five tiles, callers right now (point at Sana's phone
-   and Amit idle), then *Needs your attention*: click **See list** on the promises due today, and the 4
-   follow-ups back in the pool ("nobody waits on a caller who stopped").
-2. **Campaigns** (1 min). One script, one lead list, open to every caller, tagged by class and board. Open
-   *Oct fees – Class 10*: progress, results, amount due. *Term 2 fees – Class 8* was made from the ledger this
-   morning. Show **+ New campaign** steps without saving.
-3. **Insights** (3 min). Read the 4-line brief. Pick **Oct fees – Class 10**: the forecast in ₹ against the
-   90% target, "What closes the gap", move the What-if sliders (add a caller, more evening calls). Show best
-   time to call (evenings), promises kept (dates within 7 days are kept far more), coaching (Amit's long
-   opening → *Send Amit to practice mode*). Switch to **Course sales**: the script test, v7 winning.
-4. **Reports** (1.5 min). Campaign **Oct fees – Class 10**, *Fees collection*: due, paid, promised, the 14
-   broken promises, "Send these back to callers". Then *Sales funnel*: called → picked up → heard the pitch →
-   interested → joined.
-5. **Scripts** (1 min). Open Course sales (steps, pushback answers, endings linked to results). **Make with
-   AI**: fill the form to show it (a real draft needs the AI key on the server; the counter shows 3 of 20).
-6. **Manager** (30 s). Sign out, sign in as Rahul: same Home and Reports, no ₹.
-7. **Caller** (1 min). On the paired laptop as Ravi: the waiting list, the lead card (balance and last payment
-   from the ledger), the script, result buttons with date and amount, "Send on WhatsApp". Point at **Sunita
-   Bhosale** (Riya Bhosale, 10-A): she promised ₹18,000 for today. The campaign picker shows every open
-   campaign: "8th · CBSE · Fees", "9th · ICSE · Admission" … with leads waiting in the pool.
-8. **Accounts** (1.5 min). In another browser (or after signing out), sign in as Kavita at `admin.html`:
-   only the Fees tab. Search "Bhosale": Riya Bhosale, balance ₹18,000, Term 1 paid in the opening import.
-   **Record payment**: ₹18,000, mode UPI, reference `512345678901` (any 12 digits not used yet), today. The
-   balance is 0 and the lead closes (paid). Back on Ravi's screen, refresh: Sunita Bhosale has left his list.
-   Then show "only due" for Class 10 and a "Says already paid" parent with no payment.
+Eight logins: owner, manager, five callers and Accounts. Every running campaign is open to every caller and
+tagged by class and board; callers pick the campaign, the script follows it.
+
+1. **Owner → Home** (2 min). "This is today, live." The five tiles (collected today comes from the fee ledger),
+   callers right now (point at Sana's phone and Amit idle; Kavita is not listed, she is Accounts), then
+   *Needs your attention*: **See list** on the promises due today, and the 4 follow-ups back in the pool
+   ("nobody waits on a caller who stopped").
+2. **Campaigns** (1 min). Every campaign says *All callers* and carries its tags (8th · CBSE, 9th · ICSE,
+   10th · CBSE). *Term 2 fees – Class 8* was made from the ledger by Kavita this morning. Show **+ New
+   campaign** without saving: open to all callers by default, class and board, or restricted to chosen callers.
+3. **Fees** (1.5 min). 570 students with balances. Search "Bhosale": Riya Bhosale (10-A, CBSE), parent Sunita,
+   ₹18,000 due now (Term 2), Term 1 paid in the opening import; fee items, payments with **Receipt**, and the
+   calls to the parent (Ravi, "Will pay on date" today).
+4. **Insights** (2.5 min). Read the 4-line brief. Pick **Oct fees – Class 10**: the forecast in ₹, "What closes
+   the gap", the What-if sliders, best time to call, promises kept (measured against the fee ledger),
+   coaching (Amit's long opening). Switch to **Course sales**: the script test, v7 winning.
+5. **Reports** (1 min). Campaign **Oct fees – Class 10**, *Fees collection*: total due now and collected from the
+   ledger (by mode: UPI, cash, cheque, bank), promised not yet paid, the 14 broken promises, "Send these back
+   to callers". Then *Sales funnel*.
+6. **Scripts and Settings** (1.5 min). **Start from a template**: the ready script library (filter Fees +
+   Hinglish, Preview one, "Use this template"). Placeholders such as {name}, {student}, {amount_due} and
+   {due_date} are filled from each lead on the call. Settings → **Common answers**: fill in "Where is the
+   institute?"; callers get it at once. New scripts on request: our team adds them to the library.
+7. **Manager** (30 s). Sign out, sign in as Rahul: same Home and Reports, no ₹.
+8. **Caller Neha** (2 min). On the paired laptop as Neha (`app.html`): the **campaign picker** lists every open
+   campaign by purpose with "N waiting"; tap class **8th**: *Term 2 fees – Class 8* stays, and the untagged
+   campaigns stay too, marked "All classes". Pick **Course sales – Data Analytics**: **Shronit** is at the top
+   (call back now), the card says *Source: a call to our office*. Type "number" in the answer search (or press
+   `/`): **Where did you get my number?** answers "We got your number from a call to our office, on …".
+   For the live call, the owner calls Shronit now (see "Live call").
+9. **Caller Ravi and Accounts** (2 min). As Ravi: *Oct fees – Class 10*, broken promises first; the lead card
+   shows the balance and last payment from the ledger and the due date; **Sunita Bhosale** promised ₹18,000
+   for today. Then, in another browser, sign in as **Kavita** at `admin.html`: only Fees and Reports. Search
+   "Bhosale", **Record a payment**: ₹18,000, mode UPI, reference `512345678901` (any 12 digits not used yet),
+   today. The balance is 0, a receipt number shows, and the lead closes (paid). Back on Ravi's screen,
+   refresh: Sunita Bhosale has left his list. In Reports Kavita sees Fees collection only (no campaign or
+   caller filters).
 
 Tip: in Reports pick the *Oct fees* campaign. Every fees lead's amount due is its student's balance, so
 "Total due" is what is still owed (the closed Sept campaign adds only what Class 9 parents still owe).
