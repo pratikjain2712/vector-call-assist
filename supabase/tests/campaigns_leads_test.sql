@@ -69,11 +69,11 @@ insert into seats (id, institute_id, user_id, label, role, admin_kind, status) v
  (:'s_x', :'inst_j', :'u_x', 'Owner J', 'admin', 'owner', 'active'),
  (:'s_c', :'inst_j', :'u_c', 'Caller C', 'rep', null, 'active');
 insert into scripts (id, institute_id, name) values (:'sc_j', :'inst_j', 'J script');
-insert into campaigns (id, institute_id, name, call_type_id, status) values
- (:'k_fees', :'inst_i', 'Fees Oct', (select id from call_types where key='fees' and institute_id is null), 'running'),
- (:'k_sales', :'inst_i', 'Sales Oct', (select id from call_types where key='sales' and institute_id is null), 'running'),
- (:'k_draft', :'inst_i', 'Draft', (select id from call_types where key='fees' and institute_id is null), 'draft'),
- (:'k_j', :'inst_j', 'J Fees', (select id from call_types where key='fees' and institute_id is null), 'running');
+insert into campaigns (id, institute_id, name, call_type_id, status, open_to_all) values
+ (:'k_fees', :'inst_i', 'Fees Oct', (select id from call_types where key='fees' and institute_id is null), 'running', false),
+ (:'k_sales', :'inst_i', 'Sales Oct', (select id from call_types where key='sales' and institute_id is null), 'running', false),
+ (:'k_draft', :'inst_i', 'Draft', (select id from call_types where key='fees' and institute_id is null), 'draft', false),
+ (:'k_j', :'inst_j', 'J Fees', (select id from call_types where key='fees' and institute_id is null), 'running', false);
 insert into campaign_members (campaign_id, seat_id, institute_id) values
  (:'k_fees', :'s_a', :'inst_i'), (:'k_fees', :'s_b', :'inst_i'), (:'k_sales', :'s_a', :'inst_i'),
  (:'k_draft', :'s_a', :'inst_i'), (:'k_j', :'s_c', :'inst_j');

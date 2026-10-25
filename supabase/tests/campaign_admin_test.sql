@@ -85,7 +85,7 @@ reset role;
 -- ---------- create ----------
 select pg_temp.as_user(:'u_o');
 set role authenticated;
-select pg_temp.ok('the owner creates "Nov fees"', $q$select admin_create_campaign('  Nov fees  ', (select id from call_types where key='fees'), null, '2026-11-01', '2026-11-20', 40, 'equal')$q$);
+select pg_temp.ok('the owner creates "Nov fees"', $q$select admin_create_campaign('  Nov fees  ', (select id from call_types where key='fees'), null, '2026-11-01', '2026-11-20', 40, 'equal', false)$q$);
 select pg_temp.val_is('a new campaign is a draft with a trimmed name', $q$select status || ' ' || name || ' ' || daily_target from campaigns where name='Nov fees'$q$, 'draft Nov fees 40');
 select pg_temp.fails_with('a blank name is refused', $q$select admin_create_campaign('  ', (select id from call_types where key='fees'))$q$, 'campaign name');
 select pg_temp.fails_with('an unknown call type is refused', $q$select admin_create_campaign('X', gen_random_uuid())$q$, 'pick a call type');
@@ -97,7 +97,7 @@ reset role;
 update institutes set features = array['scripts'] where id = :'inst_i';
 select pg_temp.as_user(:'u_o');
 set role authenticated;
-select pg_temp.ok('with Scripts, a live script can be used', format($q$select admin_create_campaign('Sales Nov', (select id from call_types where key='sales'), %L, null, null, null, 'next_free')$q$, :'sc_live'));
+select pg_temp.ok('with Scripts, a live script can be used', format($q$select admin_create_campaign('Sales Nov', (select id from call_types where key='sales'), %L, null, null, null, 'next_free', false)$q$, :'sc_live'));
 select pg_temp.fails_with('a script without a live version is refused', format($q$select admin_create_campaign('X', (select id from call_types where key='fees'), %L)$q$, :'sc_draft'), 'no live version');
 select pg_temp.fails_with('a script of another institute is refused', format($q$select admin_create_campaign('X', (select id from call_types where key='fees'), %L)$q$, :'sc_j'), 'script not found');
 reset role;

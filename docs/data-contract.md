@@ -9,7 +9,7 @@ This is what every Phase A feature builds on (campaigns, lead upload, caller scr
 1. **Money only through checked functions.** The browser role has no SELECT on `leads.amount_due`, `leads.promised_amount` or `call_outcomes.amount`, for anyone, owners included. A query that names these columns (or uses `select *` / `select('*')` on `leads` or `call_outcomes`) fails with "permission denied". Read money only through a `security definer` function.
 2. **Every function that returns an amount, a total of amounts or anything computed from amounts calls `public.can_see_money(institute)` first.** If it is false, return the row with the money fields `null` (and say so, for example a `money_hidden boolean` column), or return counts only. Never raise just because money is hidden: a manager without money access still gets the counts.
 3. **A caller sees money for one lead at a time**, through `lead_money(lead_id)`, and only for a lead assigned to their active seat. Never return amounts of other leads, totals or averages to a caller.
-4. **`hide_money` hides money for everyone**, owners and callers included. `can_see_money()` and `lead_money()` already apply it; do not re-implement the check.
+4. **`hide_money` hides money for everyone**, owners and callers included (exceptions: the caller of the lead on the call, see "Caller screen", and Accounts seats, see "Phase A.2"). `can_see_money()` and `lead_money()` already apply it; do not re-implement the check.
 5. **Every export that contains money calls `log_money_export(institute, what, rows)` first** and stops if it raises. Exports for people who cannot see money have no ₹ columns.
 6. **Paid amounts are labelled "reported by caller"** in the UI (decision 3).
 7. **Store amounts and dates only.** No bank, card or UPI details anywhere, including `leads.extra` and notes.
@@ -29,6 +29,7 @@ This is what every Phase A feature builds on (campaigns, lead upload, caller scr
 | Owner | `admin` | `owner` | `owner` | yes, unless `hide_money` |
 | Manager | `admin` | `manager` | `manager` | only when `seats.can_see_money` and not `hide_money` |
 | Caller | `rep` | null | `caller` | only `lead_money()` of a lead assigned to them, not when `hide_money` |
+| Accounts (A.2) | `accounts` | `accounts` | `accounts` | yes, always (`hide_money` does not apply); not an admin: see "Phase A.2" below |
 
 - `is_admin_of(inst)` is true for owners **and** managers. Use it for everything an admin did before.
 - `is_owner_of(inst)` is true for owners only. Use it for owner-only actions (money switches, roles).
@@ -403,4 +404,140 @@ _Migration `20261024100030_phase_a_integration.sql`. All eight feature branches 
 
 **Browser RPC names checked**: every `rpc('…')` and `Cloud` call in `web/` and `supabase/functions/` names a function in `supabase/migrations/` with matching argument names.
 <!-- end Phase A: integration -->
+
+<!-- Phase A.2 -->
+## Phase A.2: open campaigns and the fee ledger
+
+_25 Oct 2026. Migration `20261025130000_ledger_open_campaigns.sql` (after `20261025120000_campaign_script_pushbacks.sql`). Tests: `supabase/tests/ledger_test.sql`, `supabase/tests/open_campaigns_test.sql`; the fixture campaigns of `caller_screen_test.sql`, `campaign_admin_test.sql` and `campaigns_leads_test.sql` are now `open_to_all = false`, because those tests check the member rule._
+
+### Accounts role
+
+- **`seats.role = 'accounts'`, `admin_kind = 'accounts'`, `access_role = 'accounts'`.** Not `role = 'admin'`: `is_admin_of()` is false and every old check of `role = 'admin'` refuses it, so an accounts seat cannot invite or revoke seats, change roles, manage campaigns, call types or scripts, or read admin reports, Home or the audit log. Constraint `seats_admin_kind_matches_role`: `rep` ⇔ `admin_kind` null; `accounts` ⇔ `admin_kind = 'accounts'`. The `can_see_money` column stays false on accounts seats.
+- **Always sees money:** `can_see_money(inst)` is true for an active accounts seat even when `hide_money` is on (the fees office cannot work without amounts). Owners and managers still follow `hide_money`.
+- Accounts can read the ledger, record and reverse payments, add and void fee items, import students and fees, add and edit students, create fees campaigns from the ledger, and read `ledger_collected` and `promises_vs_payments`. Owners can do all of this too. Managers can read the ledger (amounts only with money access) and, with money access, create fees campaigns from the ledger. Managers cannot record payments.
+- **Creating an accounts seat:** use `invite_seat(p_institute, p_email, p_label, 'accounts')` (owner only) or `admin_set_seat_role(p_seat, 'accounts')` (owner). The `seat-admin` Edge Function still accepts only `admin` / `rep`, so the UI agents must add `accounts` there. `my_trial_status()` returns `role 'accounts'`, `access_role 'accounts'`, `can_see_money true`. The admin page (`shell.js` `isAdminRole`, `home.js` routing) must let `access_role = 'accounts'` in and show only the Fees tab.
+
+| Helper | Returns | What |
+|---|---|---|
+| `is_accounts_of(inst uuid)` | boolean | Active accounts seat of `inst`. |
+| `can_read_ledger(inst uuid)` | boolean | `is_admin_of(inst) or is_accounts_of(inst)`. |
+| `can_manage_ledger(inst uuid)` | boolean | `is_owner_of(inst) or is_accounts_of(inst)`. |
+| `can_see_money(inst uuid)` | boolean | Changed: also true for accounts, ignoring `hide_money`. |
+| `admin_set_seat_role(p_seat, p_role)` | void | Changed: `p_role` may also be `'accounts'`. |
+| `invite_seat(p_institute, p_email, p_label, p_role default 'rep')` | uuid | Changed: `p_role` may also be `'accounts'` (owner only). |
+
+### Open campaigns
+
+New `campaigns` columns (browser SELECT through the table grant):
+
+| Column | Type | Notes |
+|---|---|---|
+| `open_to_all` | boolean not null default true | Every existing campaign became open. An open campaign can be seen and worked by every active seat of the institute while it is running or paused, without membership. False: members only (as before). |
+| `class_label` | text null, 1–20 | Tag, e.g. `8th`. |
+| `board` | text null: `CBSE` / `ICSE` / `State` / `IB` / `IGCSE` / `Other` | Tag. Functions accept any case and "State board". |
+| `fees_due_by` | date null | Fees campaigns from the ledger: lead amounts are the balance due by max(today, `fees_due_by`). |
+
+Rules:
+- Callers read the running and paused open campaigns of their institute (RLS `campaigns_read`).
+- Leads of an open campaign come from the pool through `next_free_lead()`. A lead already assigned stays with its caller: sharing, changes to members and `admin_share_leads` never take an open campaign's leads away from an active seat of the institute. In `next_free` sharing, only uncalled leads go back to the pool.
+- Restricting a campaign (`open_to_all` true → false) puts the open leads of non-members back in the pool.
+- An open draft can start without members.
+- Callers still read and update only the leads assigned to them (`leads` RLS is unchanged).
+
+Changed functions (browser contract):
+
+| Function | Change |
+|---|---|
+| `admin_create_campaign(p_name text, p_call_type uuid, p_script uuid default null, p_start date default null, p_end date default null, p_daily_target int default null, p_share_mode text default null, p_open_to_all boolean default true, p_class_label text default null, p_board text default null)` | Three new trailing arguments. `p_share_mode` null = `next_free` when open, `equal` when restricted. The old 7-argument function was dropped (no overload); old calls by name or position keep working. |
+| `admin_update_campaign(p_campaign uuid, p_name, p_call_type, p_script, p_clear_script, p_start, p_end, p_clear_dates, p_daily_target, p_share_mode, p_status, p_open_to_all boolean default null, p_class_label text default null, p_board text default null)` | Three new trailing arguments; null keeps a value, `''` clears a tag. Draft → running needs a member only when restricted. New audit actions `campaign.opened` / `campaign.restricted`. The old 11-argument function was dropped. |
+| `admin_campaign_list()` | New columns at the end: `open_to_all boolean, class_label text, board text`. |
+| `admin_campaign_detail(p_campaign)` | New keys `open_to_all`, `class_label`, `board`, `fees_due_by`; `callers` = members plus every seat holding leads of the campaign, each with `member boolean`. |
+| `my_campaigns()` | Now returns `(campaign_id, name, status, call_type_id, call_type_key, call_type_label, script_id, start_date, end_date, daily_target, call_hours, share_mode, open_to_all, class_label, board, is_member, my_leads, my_leads_due, pool_leads_due, results)`. Includes campaigns the seat is a member of and open campaigns of the institute, running or paused, ordered by status, call type order, class, board and name. `pool_leads_due` = unassigned leads that `next_free_lead` can hand out now. For the campaign picker: group by `call_type_key`, filter by `class_label` / `board`. |
+| `next_free_lead(p_campaign)` | Members, or any active seat of the institute for an open campaign. |
+| `my_call_queue(p_campaign)` | Same access rule. New keys `open_to_all`, `class_label`, `board`; each lead has `student_id`. |
+| `campaign_script_version(p_campaign, p_lead)` | Same access rule (the pushbacks column and script tests are unchanged). |
+| `save_call_result(...)` | Same signature. Allowed: the lead's seat; a member of its campaign (a lead moved while the phone was offline, as before); or, in an open campaign, a seat that already saved a call on that lead (an offline retry). Anyone else gets "lead not found". Also returns `student_id`, set when the result creates a student. |
+
+Internal (granted to nobody): `campaign_seat_can_work(p_campaign, p_seat)`, `campaign_check_tags(p_class_label, p_board)`. Unchanged: Home, Insights and `admin_callers` still count a campaign's callers from `campaign_members` (plus "anyone who called" where they did before).
+
+### Ledger tables
+
+RLS is on. The browser has no INSERT, UPDATE or DELETE. Owners, managers and accounts of the institute (`can_read_ledger`) can read all columns of `students`, and the columns of `fee_items` and `payments` other than `amount`. Callers read nothing. Read amounts through the functions below.
+
+**`students`**:
+- `id`, `institute_id`
+- `admission_no`: text ≤ 40, unique per institute ignoring case, null allowed
+- `name` (1–120), `class_label` (≤ 20), `section` (≤ 20), `board` (same values as campaigns), `academic_year` (`2026-27`), `parent_name`
+- `phone`, `alt_phone`: normalised like leads (`+91` and 10 digits), null allowed
+- `status`: `active` / `left`
+- `source`: `import` / `admission` / `manual`
+- `admission_lead_id`: unique; the admission lead that became this student
+- `created_by` (seat), `created_at`, `updated_at`
+
+**`fee_items`**:
+- `id`, `institute_id`, `student_id`
+- `head`: 1–80 characters, e.g. "Term 2 tuition"
+- `amount`: numeric(12,2) > 0 (**not granted**)
+- `due_date`, `academic_year`
+- `is_void`, `void_reason`, `voided_at`, `voided_by`
+- `created_by`, `created_at`
+
+A trigger allows only one change to a row: voiding it, once. Nothing is deleted.
+
+**`payments`**:
+- `id`, `institute_id`, `student_id`
+- `amount`: numeric(12,2) > 0 (**not granted**)
+- `paid_on`: date
+- `mode`: `upi` / `cash` / `cheque` / `card` / `bank` / `other`
+- `reference`: ≤ 60 characters (UTR, cheque no.). Never account, card or UPI ids.
+- `note`: ≤ 300 characters
+- `recorded_by` (seat), `created_at`
+- `reverses_id`: unique. A reversal is a new row with the same amount, date and mode that points at the payment; the reason is its note.
+- `opening`: true for an import's "paid so far"
+
+A payment is never updated (trigger) or deleted.
+
+**Double entry:** a `upi`, `bank` or `card` payment needs a reference. The same `(institute, mode, reference)` (any case) is refused while the first payment stands. `accounts_record_payment` checks this under an advisory lock, not with a unique index, so a reversed payment frees its reference and the payment can be recorded again on the right student.
+
+**`leads.student_id`**: uuid null → `students` (same institute; deleting a student clears it). Browser SELECT is granted.
+
+**`call_type_results.creates_student`**: boolean, default false (browser SELECT). When `save_call_result` saves such a result, it makes a student from the lead (once per lead). There is no built-in "admission confirmed" result. When an institute adds a result on the built-in `admission` type with key `admission_done` or `admission_confirmed` (for example the demo's "Admission confirmed"), it gets `creates_student = true`; existing results with those keys were also set. Admins change it with `admin_set_result_creates_student`.
+
+**Balances** (internal function `student_balance_rows`):
+- `total_fees` = all non-void fee items
+- `total_due_to_date` = non-void items with `due_date` ≤ today in the institute's time zone
+- `paid` = payments minus reversals
+- `balance_due_now` = due to date − paid (negative = paid in advance)
+- `balance_total` = total fees − paid
+- last payment = the latest payment that is not reversed (amount, date, mode)
+
+**Payments update fees leads.** After a payment, a reversal, a new fee item or a void, the open leads of the student are updated. Open leads are those with status `new`, `callback` or `promised`, not do-not-call, in a fees campaign that is not closed. Each gets `amount_due` = the balance due by max(today, `campaigns.fees_due_by`). When that balance is 0 or less, the lead becomes `done` with `next_call_at` null and `amount_due` 0, and `audit_log` gets `lead.closed_paid` (target: the lead id). A reversal does not reopen a lead that is already done. `lead_money()` reads the new amount.
+
+### Ledger RPCs
+
+"Accounts" = an owner or accounts seat (`can_manage_ledger`); "readers" = owners, managers and accounts (`can_read_ledger`). Money fields are null and `money_hidden` is true unless `can_see_money()`. Errors: 42501 not allowed / not found, 22023 bad input, 23505 duplicate.
+
+| Function | Returns | Who | What |
+|---|---|---|---|
+| `accounts_import_students(p_rows jsonb)` | jsonb `{added, updated, skipped, fee_items_added, payments_added, skipped_rows: [{row, reason}]}` | accounts | Up to 5000 rows `{admission_no, name, class_label (or class), section, board, academic_year, parent_name, phone, alt_phone, status, fees: [{head, amount, due_date 'YYYY-MM-DD', academic_year}], paid_so_far, paid_on}`. A known admission no updates that student (given fields only). A fee with the same head, amount and due date is not added twice. `paid_so_far` > 0 becomes one payment per student (`mode 'other'`, note "Opening balance import", `opening true`, dated `paid_on` or today). Skip reasons: no name, admission number twice in the file, unknown board, academic year, bad phone number, bad alternate phone number, status, bad paid so far amount, paid on, fees must be a list, bad fee item, fee due date. Amounts accept `12,500` and `₹12500.50`. Audit `students.imported` `<added>:<updated>:<skipped>`. |
+| `accounts_save_student(p_student uuid, p_data jsonb)` | uuid | accounts | `p_student` null adds a student (`source 'manual'`). `p_data` takes the import keys (no fees); a missing key keeps its value, `''` clears it. Audit `student.added` / `student.changed`. |
+| `accounts_add_fee_item(p_student uuid, p_head text, p_amount numeric, p_due_date date, p_academic_year text default null)` | uuid | accounts | Audit `fee_item.added`. Updates the student's leads. |
+| `accounts_void_fee_item(p_fee_item uuid, p_reason text)` | void | accounts | Reason 1–300 characters. Audit `fee_item.voided`. Updates the student's leads. |
+| `accounts_record_payment(p_student uuid, p_amount numeric, p_paid_on date, p_mode text, p_reference text default null, p_note text default null)` | uuid | accounts | `p_paid_on` null = today; not in the future, not before 2000. Double-entry rule above. Audit `payment.recorded` `<payment>:<student>`. Updates and closes the student's leads. |
+| `accounts_reverse_payment(p_payment uuid, p_reason text)` | uuid (the reversal) | accounts | Not for a reversal; once per payment. Audit `payment.reversed` `<reversal>:<payment>`. Updates the student's leads. |
+| `accounts_students(p_filters jsonb default '{}')` | table `(student_id, admission_no, name, class_label, section, board, academic_year, parent_name, phone, alt_phone, status, source, total_fees, total_due_to_date, paid, balance_due_now, balance_total, last_payment_amount, last_payment_on, last_payment_mode, money_hidden, total_rows)` | readers | Filters: `class_label` (any case), `board`, `search` (name, start of the admission no, parent, 4+ phone digits), `only_due` (balance due now > 0; works without money access), `academic_year`, `status` (`active` by default, `left` or `all`), `limit` 1–5000 (default 500), `offset`. Ordered by class, section, name. |
+| `accounts_student_detail(p_student uuid)` | jsonb `{student, money_hidden, balance {…as above}, fee_items [{id, head, amount, due_date, academic_year, is_void, void_reason, voided_at, created_at}], payments [{id, amount, paid_on, mode, reference, note, recorded_by, recorded_by_label, created_at, reverses_id, reversed_by}], calls [{outcome_id, at, campaign_id, campaign_name, lead_id, result_key, result_label, promised_date, promised_amount, caller, corrects_id, note}]}` | readers | Calls of the student's leads and of its admission lead, newest first, 200 at most. |
+| `accounts_create_fees_campaign(p_name text, p_class_label text default null, p_board text default null, p_due_by date default null, p_min_due numeric default 0, p_script uuid default null, p_open_to_all boolean default true, p_start boolean default true)` | uuid (campaign) | accounts, or a manager who can see money | **Students:** active, with a phone, of that class and board (null = all), whose balance due by max(today, `p_due_by`) is more than `p_min_due`. **Leads:** one per student: name = the parent (or the student), the student's phone, `amount_due` = that balance, `student_id`, `extra {student, class, section, board, admission_no}`. Siblings who share a phone get one lead, for the student with the highest balance. **Campaign:** built-in `fees` type, the tags, `fees_due_by = p_due_by`, script checked as in `admin_create_campaign`, `next_free` sharing when open (`equal` when restricted). It runs at once when `p_start` is true, it is open and it has leads; otherwise it is a draft for an admin to start. Audit `campaign.created`, `leads.added`, `campaign.running`, and `fees_campaign.from_ledger` `<campaign>:<leads>:<no phone>:<same phone>`. |
+| `lead_ledger(p_lead uuid)` | table `(lead_id, student_id, balance_due_now, balance_total, last_payment_amount, last_payment_on, last_payment_mode, money_hidden)` | caller of the lead, readers | For the balance and last payment on the caller's lead card. Same rule as `lead_money`: the lead's caller sees amounts even with `hide_money`. One row; nulls when the lead has no student. |
+| `ledger_collected(p_institute uuid, p_from date, p_to date, p_campaign uuid default null)` | jsonb `{from, to, campaign_id, payments, reversed, total, by_mode [{mode, payments, amount}], by_day [{day, payments, amount}], money_hidden}` | readers | Payments dated in the range (at most 400 days), leaving out reversed payments and opening imports. With a campaign: only students with a lead in it. Counts always; amounts only when allowed. For "collected" in Reports, Home and Insights. |
+| `promises_vs_payments(p_campaign uuid)` | jsonb `{campaign_id, grace_days: 2, promises, kept, part_paid, broken, waiting, no_student, promised_amount, paid_amount, money_hidden, rows [{outcome_id, lead_id, lead_name, student_id, caller, promised_on, promised_date, promised_amount, paid_amount, state}]}` | readers | A promise = a call that was not corrected, with a promised date and amount. Paid = the student's payments that are not reversed, dated from the day of the call to the promised date + 2 days. States: kept (paid ≥ promised), part_paid (paid > 0), broken (nothing paid and the grace is over), waiting, no_student (not judged). `rows`: the newest 500. |
+| `admin_set_result_creates_student(p_result uuid, p_on boolean)` | void | admin | The institute's own results only. Audit `call_type_result.creates_student_on` / `_off`. |
+| `ledger_board(text)` | text or null | any signed-in | `'cbse'`, `'State board'` → `CBSE`, `State`. |
+
+**Admission → student:** when `save_call_result` saves a result with `creates_student`, it adds one student per lead, with `source 'admission'`, `admission_lead_id`, and the lead's phone. Name, class, section, board and academic year come from the lead's `extra` (keys like `student` / `student name` / `child`, `class` / `grade` / `std`, `section`, `board`, `academic year` / `session`). When a student name is found, the lead's name becomes `parent_name`; otherwise the lead's name is the student's name. The lead's `student_id` is set. Audit `student.added_from_admission` `<student>:<lead>`. Accounts then add the fee plan.
+
+Internal (granted to nobody): `student_balance_rows(p_institute, p_student default null, p_as_of default null)`, `ledger_sync_student(p_student)`, `ledger_student(p_student, p_write)`, `ledger_manager_seat(p_institute)`, `ledger_student_from_lead(p_lead, p_seat)`, `payment_is_live(p_payment)`, `ledger_today(p_institute)`, `ledger_amount(text)`, `ledger_date(text)`, and the triggers `ledger_guard`, `students_before_write`, `call_type_results_creates_student_default`.
+
+**For the demo data:** add students, fee items and payments with the functions above (or with direct inserts as the table owner). If the demo's "Admission confirmed" uses a key other than `admission_done` / `admission_confirmed`, set `call_type_results.creates_student = true` on it. Tag campaigns with `class_label` / `board`.
+<!-- end Phase A.2 -->
 
