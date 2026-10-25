@@ -98,11 +98,11 @@
         el('div', { className: 'grid2' }, [
           el('label', { className: 'field' }, [document.createTextNode('Script name'),
             el('input', { id: 'script-name', type: 'text', maxlength: '120', autocomplete: 'off' })]),
-          el('label', { className: 'field' }, [document.createTextNode('Call type (decides the result buttons)'),
+          el('label', { className: 'field' }, [document.createTextNode('Kind of call (decides the result options)'),
             el('select', { id: 'script-type' })]),
         ]),
         el('div', { id: 'problems', className: 'problems', role: 'status', hidden: true }, [
-          el('h3', { text: 'Fix these before publishing' }),
+          el('h3', { text: 'Fix these before it is ready for callers' }),
           el('ul', { id: 'problem-list' }),
         ]),
         el('div', { className: 'row between' }, [el('h3', { text: 'Steps' }), btn('add-step', 'Add step')]),
@@ -110,21 +110,21 @@
         el('datalist', { id: 'step-ids' }),
         el('div', { className: 'row between pb-head' }, [
           el('div', null, [
-            el('h3', { text: 'Pushback answers' }),
+            el('h3', { text: 'Answers to objections' }),
             el('p', { className: 'muted small', text: 'Buttons a caller taps when the person pushes back, with what to say.' }),
           ]),
-          btn('add-pushback', 'Add pushback answer'),
+          btn('add-pushback', 'Add an answer to an objection'),
         ]),
         el('div', { id: 'pushbacks' }),
         el('div', { className: 'row wrap' }, [
           btn('test-toggle', 'Test mode'),
-          btn('save-draft', 'Save as draft', 'primary'),
-          btn('publish-open', 'Publish'),
+          btn('save-draft', 'Save (not ready yet)', 'primary'),
+          btn('publish-open', 'Ready for callers'),
         ]),
         el('div', { id: 'publish-box', className: 'confirm', hidden: true }, [
           el('label', { className: 'field' }, [document.createTextNode('Change note (what changed, 500 characters at most)'),
             el('textarea', { id: 'publish-note', maxlength: '500', rows: '3' })]),
-          el('div', { className: 'row wrap' }, [btn('publish-go', 'Publish this version', 'primary'), btn('publish-cancel', 'Cancel')]),
+          el('div', { className: 'row wrap' }, [btn('publish-go', 'Make it ready for callers', 'primary'), btn('publish-cancel', 'Cancel')]),
         ]),
         msg('editor-msg'),
       ]),
@@ -270,8 +270,8 @@
     if (work.scriptId) {
       const pub = versions.find((v) => v.published);
       const latest = versions[0];
-      text = pub ? 'Live: v' + pub.version : 'Nothing published';
-      if (latest) text += ' · Latest: v' + latest.version + (latest.published ? '' : ' (draft)');
+      text = pub ? 'Ready for callers (version ' + pub.version + ')' : 'Not ready for callers yet';
+      if (latest && !latest.published) text += ' · Latest saved: version ' + latest.version + ', not ready';
     }
     if (dirty) text += (text ? ' · ' : '') + 'Unsaved changes';
     $('state-line').textContent = text;
@@ -449,13 +449,13 @@
     const box = $('pushbacks');
     box.textContent = '';
     work.pushbacks.forEach((p, i) => box.appendChild(el('fieldset', { className: 'pushback' + (p.check && p.check.length ? ' has-marks' : '') }, [
-      el('legend', { text: 'Pushback ' + (i + 1) }),
+      el('legend', { text: 'Objection ' + (i + 1) }),
       marksBox(p.check),
       labelled('What the person says', el('input', { type: 'text', 'data-field': 'pb-label', value: p.label || '', maxlength: String(M.PUSHBACK_LABEL_MAX) })),
       labelled('What the caller answers', el('textarea', { 'data-field': 'pb-answer', rows: '2', maxlength: String(M.PUSHBACK_ANSWER_MAX), value: p.answer || '' })),
-      el('button', { type: 'button', 'data-action': 'del-pb', className: 'danger', text: 'Remove pushback' }),
+      el('button', { type: 'button', 'data-action': 'del-pb', className: 'danger', text: 'Remove this answer' }),
     ])));
-    if (!work.pushbacks.length) box.appendChild(el('p', { className: 'muted', text: 'No pushback answers yet.' }));
+    if (!work.pushbacks.length) box.appendChild(el('p', { className: 'muted', text: 'No answers to objections yet.' }));
     $('add-pushback').disabled = work.pushbacks.length >= M.MAX_PUSHBACKS;
   }
 
@@ -556,7 +556,7 @@
   function openPublish() {
     const problems = runValidation();
     if (!$('script-name').value.trim()) { say('editor-msg', 'Enter a name for the script.', true); return; }
-    if (problems.length) { say('editor-msg', 'Fix the problems listed above before publishing.', true); return; }
+    if (problems.length) { say('editor-msg', 'Fix the problems listed above first. Then it can be ready for callers.', true); return; }
     $('publish-box').hidden = false;
     $('publish-note').focus();
   }
@@ -569,11 +569,11 @@
     if (!name) { say('editor-msg', 'Enter a name for the script.', true); return; }
     if (name.length > 120) { say('editor-msg', 'The name is longer than 120 characters.', true); return; }
     if (note.length > M.MAX_CHANGE_NOTE) { say('editor-msg', 'The change note is longer than 500 characters.', true); return; }
-    if (publish && problems.length) { say('editor-msg', 'Fix the problems listed above before publishing.', true); return; }
+    if (publish && problems.length) { say('editor-msg', 'Fix the problems listed above first. Then it can be ready for callers.', true); return; }
     if (publish && !note) { say('editor-msg', 'Write a change note for this version.', true); return; }
     // The database checks the pushback list on every save, so a broken one cannot be saved even as a draft.
     const pbProblems = M.validatePushbacks(work.pushbacks).filter((p) => !p.startsWith('Check this'));
-    if (pbProblems.length) { say('editor-msg', 'Fix the pushback answers first: ' + pbProblems[0], true); return; }
+    if (pbProblems.length) { say('editor-msg', 'Fix the answers to objections first: ' + pbProblems[0], true); return; }
 
     setBusy(true);
     try {
@@ -591,9 +591,9 @@
       renderHistory();
       fillSelects();
       $('history-panel').hidden = false;
-      let msg = publish ? 'Published. Callers on campaigns with this script use this version now.' : 'Draft saved.';
+      let msg = publish ? 'Ready for callers. Calling lists with this script use this version now.' : 'Saved. Not ready for callers yet.';
       if (problems.length && !publish) {
-        msg += ' It has ' + problems.length + ' thing' + (problems.length === 1 ? '' : 's') + ' to fix before it can be published.';
+        msg += ' It has ' + problems.length + ' thing' + (problems.length === 1 ? '' : 's') + ' to fix before it can be ready for callers.';
       }
       say('editor-msg', msg);
       if (hooks.onSaved) hooks.onSaved(work.scriptId);
@@ -655,13 +655,13 @@
     versions.forEach((v) => body.appendChild(el('tr', null, [
       cell('v' + v.version),
       el('td', null, [el('span', {
-        text: v.published ? 'Live' : 'Draft', className: v.published ? 'published-tag' : '',
+        text: v.published ? 'Ready for callers' : 'Not ready', className: v.published ? 'published-tag' : '',
       })]),
       cell(new Date(v.created_at).toLocaleString()),
       cell(v.change_note || ''),
       el('td', null, [el('div', { className: 'actions' }, [
         el('button', { type: 'button', text: 'Load into editor', onClick: () => guardDirty(() => loadVersion(v.version)) }),
-        el('button', { type: 'button', text: 'See results', onClick: () => ctx.navigate('reports', { script: work.scriptId, version: v.id }) }),
+        el('button', { type: 'button', text: 'See results', onClick: () => ctx.navigate('calling/reports', { script: work.scriptId, version: v.id }) }),
       ])]),
     ])));
   }
@@ -682,7 +682,7 @@
     const diffB = $('diff-b');
     [diffA, diffB].forEach((s) => { s.textContent = ''; });
     versions.forEach((v) => {
-      const label = 'v' + v.version + (v.published ? ' (live)' : ' (draft)');
+      const label = 'Version ' + v.version + (v.published ? ' (ready for callers)' : ' (not ready)');
       diffA.appendChild(el('option', { value: String(v.version), text: label }));
       diffB.appendChild(el('option', { value: String(v.version), text: label }));
     });

@@ -85,6 +85,23 @@
   .tab-fees tfoot td:empty { display: none; }
   .tab-fees .fees-r-line { grid-template-columns: 1fr; gap: 2px; }
   .tab-fees .fees-pager button { flex: 1 1 auto; }
+  /* The student list as small cards: name and class on the left, due now on the right, "Record payment" below.
+     Parent, total fees, paid and last payment are on the student's own page. */
+  .tab-fees .fees-table tbody tr { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 10px 0; }
+  .tab-fees .fees-table tbody td { padding: 0; }
+  .tab-fees .fees-table tbody td.fees-more { display: none; }
+  .tab-fees .fees-table tbody td::before { content: none; }
+  .tab-fees .fees-table tbody td.fees-class { grid-column: 1; grid-row: 2; color: var(--muted); font-size: 13px; }
+  .tab-fees .fees-table tbody td.fees-due { grid-column: 2; grid-row: 1 / span 2; align-self: center; text-align: right; font-weight: 700; }
+  .tab-fees .fees-table tbody td.fees-pay-col { grid-column: 1 / -1; }
+  .tab-fees .fees-table tbody td.fees-pay-col a { display: block; text-align: center; margin-top: 6px; }
+  .tab-fees .fees-table tbody td.fees-pay-col:empty { display: none; }
+  /* The payment form fits: one field per line, full width. */
+  .tab-fees #fs-pay .row > * { flex: 1 1 100%; }
+  .tab-fees #fs-pay input, .tab-fees #fs-pay select, .tab-fees #fs-pay textarea { width: 100%; }
+}
+@media (min-width: 700px) {
+  .tab-fees .fees-pay-col { display: none; }   /* on a wide screen the student's name opens the payment form */
 }
 
 /* Printing a receipt: fees.js puts fees-printing on <body> just for the print, so these two rules start at

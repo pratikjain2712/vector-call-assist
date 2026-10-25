@@ -199,6 +199,25 @@
     };
   }
 
+  // The four fee cards, the same on the Fees tab and in the fees collection report: [{ key, label, value, sub,
+  // level }]. nums: feeNumbers(); period: the words for its dates (periodText). ₹ only when nums.money.
+  function feeCards(nums, period) {
+    const x = nums || feeNumbers(null);
+    const show = (amount, n, one, many) => (x.money && amount !== null ? rupees(amount) : count(n) + ' ' + (Number(n) === 1 ? one : many));
+    const plural = (n, one, many) => count(n) + ' ' + (Number(n) === 1 ? one : many);
+    return [
+      { key: 'due', label: 'Due now', value: show(x.due.amount, x.due.students, 'student', 'students'),
+        sub: plural(x.due.students, 'student', 'students') + ' · fees due till today, minus ' + PAID_OFFICE.toLowerCase(), level: 'bad' },
+      { key: 'collected', label: 'Collected' + (period ? ' ' + period : ''), value: show(x.collected.amount, x.collected.payments, 'payment', 'payments'),
+        sub: plural(x.collected.payments, 'payment', 'payments') + ' · ' + PAID_OFFICE, level: 'good' },
+      { key: 'promised', label: 'Promised, not paid yet', value: show(x.promised.amount, x.promised.parents, 'parent', 'parents'),
+        sub: plural(x.promised.parents, 'parent', 'parents') + ' · ' + PARENT_SAID.toLowerCase(), level: '' },
+      { key: 'missed', label: MISSED, value: count(x.missed.parents),
+        sub: (x.money && x.missed.amount ? rupees(x.missed.amount) + ' still to pay · ' : '') + 'date passed, not paid' +
+          (x.missed.partPaid ? ' · ' + count(x.missed.partPaid) + ' partly paid' : ''), level: 'bad' },
+    ];
+  }
+
   // The words for a date range next to a number: 'today', 'this month', 'in these dates (1 Oct – 25 Oct)'.
   // today: the 'YYYY-MM-DD' of today.
   function periodText(from, to, today) {
@@ -356,7 +375,7 @@
   const helpers = {
     TAB_ORDER, DEFAULT_TAB, TAB_MODULE, createRegistry, parseHash, buildHash, routeHash, redirectRoute, resolveTab,
     ADMIN_ROLES, isAdminRole, seatKind, tabsFor, ADVANCED_KEY, advancedKey, readAdvanced, writeAdvanced,
-    PAID_OFFICE, PARENT_SAID, REPORTED_BY_CALLER, MISSED, rupees, rupeesShort, count, feeNumbers, periodText,
+    PAID_OFFICE, PARENT_SAID, REPORTED_BY_CALLER, MISSED, rupees, rupeesShort, count, feeNumbers, feeCards, periodText,
     MONTHS, ymd, parseYmd, toDate, formatDate, formatTime, formatDateTime, lastNDays, monthToDate, escapeHtml,
     // browser only
     el, say, placeholder, download, loadFeeNumbers, startAdvanced, isAdvanced, setAdvanced,

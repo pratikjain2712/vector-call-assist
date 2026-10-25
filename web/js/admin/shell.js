@@ -185,7 +185,7 @@
     await claimInvite(session.user.id);
     let data;
     try { data = await rpc('my_active_seat'); } catch (err) {
-      say('gate-msg', 'Could not check your seat: ' + err.message, true);
+      say('gate-msg', 'Could not check your access: ' + err.message, true);
       show('gate');
       return;
     }

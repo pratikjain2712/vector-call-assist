@@ -111,11 +111,11 @@
       const showMoney = money && col.amount !== null && col.amount !== undefined;
       const promisedMoney = money && tt.promised_amount !== null && tt.promised_amount !== undefined;
       return {
-        label: 'Collected ' + word + ' (ledger)',
+        label: 'Collected ' + word,
         value: showMoney ? S.rupees(col.amount) : plural(col.payments || 0, 'payment', 'payments'),
-        sub: 'Promised ' + word + ' (calls): ' + (promisedMoney ? S.rupees(tt.promised_amount)
+        sub: 'Promised ' + word + ': ' + (promisedMoney ? S.rupees(tt.promised_amount)
           : plural(tt.promised_calls || 0, 'promise', 'promises')),
-        note: 'Collected is from the fee ledger. Promised is ' + S.REPORTED_BY_CALLER + '.',
+        note: S.PAID_OFFICE,
       };
     }
     if (!tt.has_fees) return null;
@@ -135,7 +135,7 @@
       parts.push(plural((Number(r.revoked) || 0) + (Number(r.inactive) || 0), 'because the caller was removed', 'because their callers were removed'));
     }
     if (Number(r.admin) > 0) parts.push(plural(r.admin, 'by an admin', 'by an admin'));
-    return parts.length ? parts.join(', ') + '. Any caller can pick them up now.' : 'Any caller can pick them up now.';
+    return parts.length ? parts.join(', ') + '. Any caller can call them now.' : 'Any caller can call them now.';
   }
 
   // The "Needs your attention" list, in a fixed order: promises due today, follow-ups back in the pool today,
@@ -156,9 +156,9 @@
         const amount = o.canSeeMoney && un.amount !== null && un.amount !== undefined ? S.rupees(un.amount) : '';
         out.push({
           key: 'promises',
-          text: plural(un.count, 'promise due today is', 'promises due today are') + ' not yet paid in the ledger.',
+          text: plural(un.count, 'promise due today is', 'promises due today are') + ' not paid yet.',
           detail: amount ? amount + ' still to pay.' : '',
-          tab: 'reports', params: { report: 'fees' }, link: 'See list',
+          tab: 'fees/report', params: null, link: 'See list',
         });
       }
     } else if (Number(due.count) > 0) {
@@ -166,17 +166,17 @@
       out.push({
         key: 'promises',
         text: plural(due.count, 'fee promise is', 'fee promises are') + ' due today.',
-        detail: amount ? amount + ' in total, ' + S.REPORTED_BY_CALLER + '.' : '',
-        tab: 'reports', params: { report: 'fees' }, link: 'See list',
+        detail: amount ? amount + ' in total. ' + S.PARENT_SAID + '.' : '',
+        tab: 'fees/report', params: null, link: 'See list',
       });
     }
     const rel = led && led.released_today;
     if (rel && Number(rel.count) > 0) {
       out.push({
         key: 'released',
-        text: plural(rel.count, 'follow-up', 'follow-ups') + ' returned to the pool today.',
+        text: plural(rel.count, 'follow-up', 'follow-ups') + ' went to other callers today.',
         detail: releasedDetail(rel),
-        tab: 'callers', params: null, link: 'See callers',
+        tab: 'team', params: null, link: 'See team',
       });
     }
     (sm.callers || []).forEach((c) => {
@@ -186,7 +186,7 @@
           key: 'phone-' + c.seat_id,
           text: c.label + '\'s phone is offline.',
           detail: (since ? 'Since ' + since + '. ' : '') + 'Calls cannot start.',
-          tab: 'callers', params: { seat: c.seat_id }, link: 'Open caller',
+          tab: 'team', params: { seat: c.seat_id }, link: 'Open caller',
         });
       }
     });
@@ -196,7 +196,7 @@
         key: 'script-' + e.script_id,
         text: e.script_name + ': ' + Math.round(Number(e.share) * 100) + '% of picked-up calls end at the ' + step + ' step.',
         detail: 'Last 7 days, ' + plural(e.picked_up, 'call', 'calls') + ' picked up.',
-        tab: 'reports', params: { script: e.script_id }, link: 'Open report',
+        tab: 'today/reports', params: { script: e.script_id }, link: 'Open report',
       });
     });
     (sm.callers || []).forEach((c) => {
@@ -205,7 +205,7 @@
           key: 'idle-' + c.seat_id,
           text: c.label + ' has made no calls for ' + minutes(c.now.idle_minutes) + '.',
           detail: '',
-          tab: 'callers', params: { seat: c.seat_id }, link: 'Open caller',
+          tab: 'team', params: { seat: c.seat_id }, link: 'Open caller',
         });
       }
     });
@@ -245,15 +245,12 @@
 
   const cell = (text, cls, label) => el('td', { text: text === null || text === undefined ? '' : String(text), className: cls || '', 'data-label': label || null });
 
+  // Inside the Today tab (js/admin/today.js), which has the page title. Always today; numbers refresh by
+  // themselves every minute, so there is no day picker and no refresh button. The calling-list filter is an
+  // advanced option.
   function build() {
-    box.appendChild(el('div', { className: 'tab-head' }, [
-      el('h1', { id: 'home-title', text: 'Today' }),
-      el('p', { className: 'muted', text: 'Live numbers from all callers. Updates every minute.' }),
-    ]));
-    box.appendChild(el('form', { id: 'home-filters', className: 'row home-filters' }, [
-      el('label', null, ['Day', el('select', { id: 'home-day' }, DAYS.map((d) => el('option', { value: d[0], text: d[1] })))]),
-      el('label', null, ['Campaign', el('select', { id: 'home-campaign' }, [el('option', { value: '', text: 'All campaigns' })])]),
-      el('button', { type: 'button', id: 'home-refresh', text: 'Refresh now' }),
+    box.appendChild(el('form', { id: 'home-filters', className: 'row home-filters adv' }, [
+      el('label', null, ['Calling list', el('select', { id: 'home-campaign' }, [el('option', { value: '', text: 'All calling lists' })])]),
     ]));
     box.appendChild(el('p', { id: 'home-msg', className: 'msg', role: 'status' }));
     box.appendChild(el('div', { id: 'home-tiles', className: 'home-tiles' }));
@@ -261,14 +258,14 @@
     box.appendChild(el('div', { className: 'panel', id: 'home-now' }, [
       el('div', { className: 'row between' }, [
         el('h2', { text: 'Callers right now' }),
-        el('a', { href: S.buildHash('callers'), text: 'All callers' }),
+        el('a', { href: S.buildHash('team'), text: 'Team' }),
       ]),
       el('div', { className: 'scroll' }, [el('table', { className: 'stack' }, [
-        el('thead', null, [el('tr', null, [['Caller'], ['Campaign'], ['Calls', 'num'], ['Target', 'num'], ['Talk', 'num'], ['Results'], ['Status']]
+        el('thead', null, [el('tr', null, [['Caller'], ['Calling list'], ['Calls', 'num'], ['Target', 'num'], ['Talk', 'num'], ['Results'], ['Status']]
           .map((c) => el('th', { text: c[0], className: c[1] || '' })))]),
         el('tbody', { id: 'home-callers-body' }),
       ])]),
-      el('p', { id: 'home-callers-empty', className: 'muted', hidden: true, text: 'No callers yet. Add them on the Callers tab.' }),
+      el('p', { id: 'home-callers-empty', className: 'muted', hidden: true, text: 'No callers yet. Add people on the Team tab.' }),
     ]));
 
     box.appendChild(el('div', { className: 'home-split' }, [
@@ -278,25 +275,23 @@
         el('p', { id: 'home-attention-empty', className: 'muted', hidden: true, text: 'Nothing needs you right now.' }),
       ]),
       el('div', { className: 'panel', id: 'home-campaigns' }, [
-        el('h2', { text: 'Campaigns' }),
+        el('h2', { text: 'Calling lists' }),
         el('ul', { id: 'home-campaigns-list', className: 'plain home-campaigns-list' }),
-        el('p', { id: 'home-campaigns-empty', className: 'muted', hidden: true, text: 'No running campaigns.' }),
+        el('p', { id: 'home-campaigns-empty', className: 'muted', hidden: true, text: 'No calling lists running.' }),
       ]),
     ]));
     box.appendChild(el('p', { id: 'home-updated', className: 'muted small' }));
   }
 
   function wire() {
-    $('home-day').addEventListener('change', () => load());
     $('home-campaign').addEventListener('change', () => load());
-    $('home-refresh').addEventListener('click', () => load());
     $('home-filters').addEventListener('submit', (e) => { e.preventDefault(); load(); });
     document.addEventListener('visibilitychange', onVisibility);
     timer = setInterval(tick, REFRESH_MS);
     clockTimer = setInterval(tickClocks, 1000);
   }
 
-  const visible = () => !!box && !box.hidden && !document.hidden;
+  const visible = () => !!box && !box.hidden && !document.hidden && !!box.offsetParent;
 
   // Every minute: reload only while the tab and the page are visible.
   function tick() { if (visible()) load(); }
@@ -305,7 +300,7 @@
   async function load() {
     if (!ctx) return;
     const mine = ++seq;
-    const day = $('home-day').value || 'today';
+    const day = 'today';
     const campaign = $('home-campaign').value || null;
     if (!summary) say('home-msg', 'Loading...');
     try {
@@ -322,19 +317,18 @@
       say('home-msg', '');
     } catch (err) {
       if (mine !== seq || !ctx) return;
-      if (ctx.isMissing(err)) say('home-msg', 'Home numbers are not available yet. Ask your Vector contact to update the database.', false);
+      if (ctx.isMissing(err)) say('home-msg', 'Today\'s numbers are not available yet. Ask your Vector contact to update the database.', false);
       else say('home-msg', 'Could not load the numbers: ' + err.message, true);
     }
   }
 
   function render(day) {
-    $('home-title').textContent = (DAYS.find((d) => d[0] === day) || DAYS[0])[1];
     fillCampaigns(summary.campaign_choices || []);
     renderTiles(day);
     renderCallers();
     renderAttention();
     renderProgress();
-    $('home-updated').textContent = 'Updated ' + S.formatTime(new Date()) +
+    $('home-updated').textContent = 'Updated ' + S.formatTime(new Date()) + ', every minute' +
       (summary.time_zone ? '. Days are counted in ' + summary.time_zone + '.' : '.');
   }
 
@@ -388,8 +382,8 @@
       const span = el('span', { className: 'home-status ' + st.level, text: st.text });
       if (ticks(c.now)) live.push({ span, now: c.now });
       body.appendChild(el('tr', null, [
-        el('td', { 'data-label': 'Caller' }, [el('a', { href: S.buildHash('callers', { seat: c.seat_id }), text: c.label })]),
-        cell((c.campaigns || []).join(', ') || '—', '', 'Campaign'),
+        el('td', { 'data-label': 'Caller' }, [el('a', { href: S.buildHash('team', { seat: c.seat_id }), text: c.label })]),
+        cell((c.campaigns || []).join(', ') || '—', '', 'Calling list'),
         cell(S.count(c.calls || 0), 'num', 'Calls'),
         cell(c.target ? S.count(c.target) : '—', 'num', 'Target'),
         cell(duration(c.talk_seconds), 'num', 'Talk'),
@@ -411,13 +405,16 @@
     list.textContent = '';
     const items = attentionItems(summary, { canSeeMoney: ctx.canSeeMoney, ledger });
     $('home-attention-empty').hidden = items.length > 0;
+    const tabs = typeof ctx.tabIds === 'function' ? ctx.tabIds() : null;
     items.forEach((it) => {
+      // No link to a tab this person does not have (a manager without money has no Fees tab).
+      const reachable = !tabs || tabs.includes(String(it.tab).split('/')[0]);
       list.appendChild(el('li', { className: 'home-alert', 'data-key': it.key }, [
         el('div', null, [
           el('strong', { text: it.text }),
           it.detail ? el('span', { className: 'muted', text: ' ' + it.detail }) : null,
         ]),
-        el('button', { type: 'button', text: it.link, onClick: () => ctx.navigate(it.tab, it.params) }),
+        reachable ? el('button', { type: 'button', text: it.link, onClick: () => ctx.navigate(it.tab, it.params) }) : null,
       ]));
     });
   }
@@ -439,9 +436,13 @@
     });
   }
 
+  // The status words and timers, for the Team tab (js/admin/callers.js), so both say the same thing.
+  window.VectorAdminHome = { statusInfo, ticks, clock };
+
   S.registerTab({
     id: 'home',
     label: 'Home',
+    part: true,   // shown inside Today (js/admin/today.js)
     mount(container, c) {
       ctx = c;
       box = container;
@@ -453,6 +454,8 @@
     },
     // Opening the tab again after a while reloads at once instead of waiting for the next minute.
     show() { if (ctx && lastLoad && Date.now() - lastLoad >= REFRESH_MS) load(); },
+    // The numbers now (Today's checklist calls this after a change elsewhere).
+    refresh() { if (ctx) load(); },
     unmount() {
       if (timer) clearInterval(timer);
       timer = null;

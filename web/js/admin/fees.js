@@ -1,7 +1,10 @@
 'use strict';
 /* Fees tab of the admin app (web/admin.html), Phase A.2: the institute's fee ledger.
-   - Summary: due now (all students), collected this month (ledger payments, by mode), promised and not yet
-     paid, and broken promises (running and paused fees campaigns, judged against the ledger).
+   - This month: due now, collected this month (by mode), promised and not paid yet, and "Promised date missed",
+     all four from admin_fees_ledger through VectorAdminShared.loadFeeNumbers / feeCards: the same server function
+     and the same cards as the collection report, so the two always agree.
+   - Collection report (#fees/report): js/admin/reports.js's fees collection report, with its dates and Excel.
+   - On a phone the student list is a list of small cards: name, class, due now and "Record payment".
    - Students: search (name, parent, phone, admission no), class, board, academic year, "only with dues";
      total fees, paid, due now and the last payment; a totals row; pages of 50.
    - One student (#fees?student=<id>): details, fee items (add, void with a reason), payments (record, reverse
@@ -11,12 +14,12 @@
    Who sees it: owners, managers who can see money, and Accounts seats (the shell shows Accounts only Fees and
    Reports). Owners and Accounts record payments and change the ledger; managers only read it and, with money
    access, make fees campaigns. The database checks every call.
-   Reads: accounts_students, accounts_student_detail, ledger_collected, promises_vs_payments, and the call_types,
+   Reads: accounts_students, accounts_student_detail, admin_fees_ledger, and the call_types,
    campaigns and scripts tables (the fees type, its running campaigns, live scripts). Writes:
    accounts_record_payment, accounts_reverse_payment, accounts_add_fee_item, accounts_void_fee_item,
    accounts_import_students, accounts_create_fees_campaign. Contract: docs/data-contract.md, "Phase A.2".
-   Money rules: ₹ only when the server returns it (money_hidden false); ledger amounts say "recorded in ledger",
-   amounts from calls say "reported by caller". No bank, card or UPI ids: a reference is a UTR or cheque number.
+   Money rules: ₹ only when the server returns it (money_hidden false); money the fees office recorded is
+   "Paid (office)", amounts from calls are what the parent said (not paid yet). No bank, card or UPI ids: a reference is a UTR or cheque number.
    The pure helpers at the top are also loaded by tests/web/fees-tab.test.js (Node, no DOM). */
 (function () {
   const inNode = typeof window === 'undefined' && typeof module !== 'undefined' && module.exports;
@@ -32,8 +35,8 @@
   const PAGE_SIZE = 50;
   const LIST_LIMIT = 5000;
   const IMPORT_CHUNK = 5000;
-  const RECORDED_IN_LEDGER = 'recorded in ledger';
-  const ACCOUNTS_TABS = ['fees', 'reports'];
+  const RECORDED_IN_LEDGER = S.PAID_OFFICE;
+  const ACCOUNTS_TABS = ['fees'];   // the fees collection report is inside Fees
   const pad2 = (n) => String(n).padStart(2, '0');
   const ymd = (d) => d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
   const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
@@ -402,29 +405,9 @@
     return { from: ymd(new Date(d.getFullYear(), d.getMonth(), 1)), to: ymd(d) };
   }
 
-  // promises_vs_payments answers of several campaigns, added up: promises waiting or part paid (and what is
-  // still to come on them), and broken promises. Amounts null when any answer hid money.
-  function promiseTotals(results) {
-    const list = (results || []).filter(Boolean);
-    const money = list.every((r) => !r.money_hidden);
-    const t = { open: 0, open_amount: money ? 0 : null, broken: 0, broken_amount: money ? 0 : null, kept: 0, promises: 0, money };
-    list.forEach((r) => {
-      t.promises += Number(r.promises) || 0;
-      t.kept += Number(r.kept) || 0;
-      t.broken += Number(r.broken) || 0;
-      t.open += (Number(r.waiting) || 0) + (Number(r.part_paid) || 0);
-      (r.rows || []).forEach((x) => {
-        if (!money) return;
-        const promised = Number(x.promised_amount) || 0;
-        const paid = Number(x.paid_amount) || 0;
-        if (x.state === 'waiting' || x.state === 'part_paid') t.open_amount += Math.max(0, promised - paid);
-        if (x.state === 'broken') t.broken_amount += promised;
-      });
-    });
-    return t;
-  }
 
-  // ledger_collected by mode, biggest first: [{ mode, label, payments, amount }].
+
+  // Collected by mode (admin_fees_ledger), biggest first: [{ mode, label, payments, amount }].
   function collectedByMode(data) {
     return ((data && data.by_mode) || []).map((m) => ({ mode: m.mode, label: modeLabel(m.mode), payments: Number(m.payments) || 0, amount: num(m.amount) }))
       .sort((a, b) => (b.amount || 0) - (a.amount || 0) || b.payments - a.payments);
@@ -442,7 +425,7 @@
     modeLabel, needsReference, roleOf, isAccounts, canManage, canMakeCampaign, tabVisible, rupees2, amountInWords,
     receiptNo, parseDay, parseYear, parseBoard, guessImportColumns, buildImportRows, serverSkips, addImportCounts,
     importSummary, filtersToRpc, listTotals, pageOf, choices, paymentProblem, paymentRows, monthRange,
-    promiseTotals, collectedByMode, campaignName,
+    collectedByMode, campaignName,
   };
   if (inNode) { module.exports = helpers; return; }
 
@@ -461,6 +444,7 @@
   let page = 1;
   let detail = null;       // accounts_student_detail of the open student
   let studentId = null;
+  let wantPay = false;     // #fees?student=<id>&pay=1: focus the payment form once the student is shown
   let feesTypeId = null;
   let imp = null;          // { sheet, map, file, built }
   let xlsxLoading = null;
@@ -479,17 +463,17 @@
 
   function build() {
     const manage = canManage(ctx.seat);
-    const head = el('div', { className: 'tab-head' }, [
+    box.appendChild(el('div', { className: 'tab-head' }, [
       el('h1', { text: 'Fees' }),
       el('p', { className: 'muted', text: 'Students, their fees and the payments your fees office recorded.' }),
-    ]);
-    if (isAccounts(ctx.seat)) {
-      head.appendChild(el('p', { className: 'small' }, [el('a', { href: 'reset.html', id: 'fees-password', text: 'Change your password' })]));
-    }
-    box.appendChild(head);
+    ]));
+    box.appendChild(el('nav', { className: 'subnav', id: 'fees-subnav', 'aria-label': 'Fees' }, [
+      el('a', { href: '#fees', id: 'fees-view-students', text: 'Students' }),
+      el('a', { href: '#fees/report', id: 'fees-view-report', text: 'Collection report' }),
+    ]));
 
     box.appendChild(el('div', { className: 'panel fees-summary', id: 'fees-summary', 'aria-labelledby': 'fees-summary-h' }, [
-      el('h2', { id: 'fees-summary-h', text: 'Summary' }),
+      el('h2', { id: 'fees-summary-h', text: 'This month' }),
       el('div', { className: 'fees-cards', id: 'fees-cards' }),
       el('p', { id: 'fees-modes', className: 'muted small' }),
       msg('fees-summary-msg'),
@@ -510,8 +494,8 @@
       el('form', { id: 'fees-filters', className: 'row fees-filters', role: 'search' }, [
         field('Search', el('input', { id: 'fees-f-search', type: 'search', placeholder: 'Name, parent, phone or admission no', autocomplete: 'off' }), 'grow'),
         field('Class', el('select', { id: 'fees-f-class' }, [el('option', { value: '', text: 'All classes' })])),
-        field('Board', boardSel),
-        field('Academic year', el('select', { id: 'fees-f-year' }, [el('option', { value: '', text: 'All years' })])),
+        field('Board', boardSel, 'adv'),
+        field('Academic year', el('select', { id: 'fees-f-year' }, [el('option', { value: '', text: 'All years' })]), 'adv'),
         el('label', { className: 'check' }, [el('input', { type: 'checkbox', id: 'fees-f-due' }), ' Only with dues']),
       ]),
       msg('fees-list-msg'),
@@ -520,6 +504,7 @@
           el('th', { text: 'Student' }), el('th', { text: 'Class' }), el('th', { text: 'Parent' }),
           el('th', { className: 'num', text: 'Total fees' }), el('th', { className: 'num', text: 'Paid' }),
           el('th', { className: 'num', text: 'Due now' }), el('th', { text: 'Last payment' }),
+          el('th', { className: 'fees-pay-col', text: '' }),
         ])]),
         el('tbody', { id: 'fees-body' }),
         el('tfoot', { id: 'fees-foot' }),
@@ -534,6 +519,8 @@
 
     box.appendChild(el('div', { className: 'fees-student', id: 'fees-student', hidden: true }));
     box.appendChild(el('div', { className: 'panel fees-receipt', id: 'fees-receipt', hidden: true, role: 'region', 'aria-labelledby': 'fees-r-title' }));
+    // The fees collection report (js/admin/reports.js, the same code as Today's Reports), with its dates and Excel.
+    box.appendChild(el('div', { id: 'fees-report', hidden: true }));
   }
 
   function wire() {
@@ -561,29 +548,53 @@
 
   // ---------- views ----------
 
-  function showView(params) {
+  // #fees (students), #fees?student=<id> (one student; &pay=1 goes to the payment form), #fees/report (the fees
+  // collection report).
+  function showView(params, sub) {
     const id = params && params.student;
     closeReceipt();
-    const listView = !id;
+    const report = sub === 'report';
+    const listView = !id && !report;
+    $('fees-view-students').toggleAttribute('aria-current', !report);
+    if (!report) $('fees-view-students').setAttribute('aria-current', 'page');
+    if (report) $('fees-view-report').setAttribute('aria-current', 'page'); else $('fees-view-report').removeAttribute('aria-current');
     ['fees-summary', 'fees-actions', 'fees-list'].forEach((x) => { $(x).hidden = !listView; });
-    if (listView) { $('fees-import').hidden = true; $('fees-camp').hidden = true; }
-    $('fees-student').hidden = listView;
+    if (!listView) { $('fees-import').hidden = true; $('fees-camp').hidden = true; }
+    $('fees-student').hidden = !id || report;
+    $('fees-report').hidden = !report;
+    if (report) {
+      ctx.part('reports', $('fees-report'));
+      const rep = S.tab('reports');
+      if (rep && typeof rep.setMode === 'function') rep.setMode('fees');
+      ctx.showPart('reports', params || {});
+      return;
+    }
     if (listView) {
       const wasStudent = !!studentId;
       studentId = null;
       detail = null;
-      if (wasStudent) { loadAll(); loadList(); }
+      if (wasStudent) { loadAll(); loadList(); loadSummary(); }
       return;
     }
+    wantPay = params && params.pay === '1';
     if (id !== studentId) {
       studentId = id;
       loadStudent(id);
-    }
+    } else if (wantPay) focusPay();
+  }
+
+  // "Record payment" from the list: the payment form of the student, focused.
+  function focusPay() {
+    wantPay = false;
+    const a = $('fs-pay-amount');
+    if (!a) return;
+    a.scrollIntoView({ block: 'center' });
+    a.focus();
   }
 
   // ---------- summary ----------
 
-  // Every active student, for "due now" and the filter choices.
+  // Every active student, for the filter choices.
   async function loadAll() {
     const n = ++seq.all;
     try {
@@ -591,7 +602,6 @@
       if (n !== seq.all || !ctx) return;
       allRows = data;
       fillChoices();
-      renderSummary();
     } catch (err) {
       if (n === seq.all && ctx) say('fees-summary-msg', 'Could not load the students: ' + errText(err), true);
     }
@@ -610,36 +620,7 @@
     fill('fees-f-year', choices(allRows, 'academic_year'), 'All years');
   }
 
-  let collected = null;
-  let promises = null;
-
-  async function loadSummary() {
-    const n = ++seq.summary;
-    const r = monthRange(new Date());
-    const [c, p] = await Promise.all([
-      ctx.rpc('ledger_collected', { p_institute: ctx.institute.id, p_from: r.from, p_to: r.to }).catch((err) => ({ error: err })),
-      loadPromises().catch((err) => ({ error: err })),
-    ]);
-    if (n !== seq.summary || !ctx) return;
-    collected = c;
-    promises = p;
-    renderSummary();
-  }
-
-  // promises_vs_payments of each running or paused fees campaign the seat can read.
-  async function loadPromises() {
-    const typeId = await feesType();
-    if (!typeId) return promiseTotals([]);
-    const { data, error } = await ctx.client.from('campaigns').select('id, name, status, call_type_id')
-      .eq('institute_id', ctx.institute.id).eq('call_type_id', typeId).in('status', ['running', 'paused']);
-    if (error) throw new Error(error.message);
-    const list = await Promise.all((data || []).map((c) => ctx.rpc('promises_vs_payments', { p_campaign: c.id }).catch(() => null)));
-    const t = promiseTotals(list);
-    t.campaigns = (data || []).length;
-    return t;
-  }
-
-  // The id of the built-in fees call type (for the campaigns and the scripts of fees calls).
+  // The id of the built-in fees call type (for the live scripts of fees calls).
   async function feesType() {
     if (feesTypeId) return feesTypeId;
     const { data, error } = await ctx.client.from('call_types').select('id, key').eq('key', 'fees').is('institute_id', null);
@@ -648,11 +629,29 @@
     return feesTypeId;
   }
 
-  function card(label, value, sub, level, id) {
-    return el('div', { className: 'fees-card' + (level ? ' ' + level : ''), id: id || null }, [
-      el('div', { className: 'fees-card-label', text: label }),
-      el('div', { className: 'fees-card-value', text: value }),
-      el('div', { className: 'fees-card-sub', text: sub }),
+  let summary = null;   // S.loadFeeNumbers for this month: the same numbers as the collection report
+
+  // The four cards: due now, collected this month, promised and not paid yet, promised date missed. One server
+  // function (admin_fees_ledger) for all four, the same one the collection report reads.
+  async function loadSummary() {
+    const n = ++seq.summary;
+    const r = S.monthToDate(new Date());
+    let nums = null;
+    let error = null;
+    try { nums = await S.loadFeeNumbers(ctx, r); } catch (err) { error = err; }
+    if (n !== seq.summary || !ctx) return;
+    summary = nums;
+    if (error) say('fees-summary-msg', 'Could not load the totals: ' + errText(error), true);
+    else if (!nums) say('fees-summary-msg', 'The totals need the latest database update.');
+    else say('fees-summary-msg', nums.money ? '' : 'Amounts are hidden for you, so you see counts only.');
+    renderSummary();
+  }
+
+  function card(c) {
+    return el('div', { className: 'fees-card' + (c.level ? ' ' + c.level : ''), id: 'fees-card-' + c.key }, [
+      el('div', { className: 'fees-card-label', text: c.label }),
+      el('div', { className: 'fees-card-value', text: c.value }),
+      el('div', { className: 'fees-card-sub', text: c.sub }),
     ]);
   }
 
@@ -660,22 +659,12 @@
     const box2 = $('fees-cards');
     if (!box2) return;
     box2.textContent = '';
-    const t = listTotals(allRows);
-    box2.appendChild(card('Due now', t.money ? rupees2(t.due_now) : S.count(t.with_dues),
-      plural(t.with_dues, 'student', 'students') + ' · ' + RECORDED_IN_LEDGER, 'bad', 'fees-card-due'));
-    const c = collected && !collected.error ? collected : null;
-    box2.appendChild(card('Collected this month', c ? (c.money_hidden ? S.count(c.payments || 0) : rupees2(c.total || 0)) : '…',
-      c ? plural(c.payments || 0, 'payment', 'payments') + ' · ' + RECORDED_IN_LEDGER : (collected && collected.error ? 'Could not load' : ''), 'good', 'fees-card-collected'));
-    const p = promises && !promises.error ? promises : null;
-    box2.appendChild(card('Promised, not yet paid', p ? (p.money ? rupees2(p.open_amount) : S.count(p.open)) : '…',
-      p ? plural(p.open, 'promise', 'promises') + ' · ' + S.REPORTED_BY_CALLER : (promises && promises.error ? 'Could not load' : ''), '', 'fees-card-promised'));
-    box2.appendChild(card('Broken promises', p ? S.count(p.broken) : '…',
-      p ? (p.money && p.broken ? rupees2(p.broken_amount) + ' promised, nothing paid' : 'Promise date + 2 days passed, nothing paid') : '', 'bad', 'fees-card-broken'));
-    const modes = c ? collectedByMode(c) : [];
+    if (!summary) return;
+    S.feeCards(summary, 'this month').forEach((c) => box2.appendChild(card(c)));
+    const modes = collectedByMode({ by_mode: summary.collected.byMode });
     $('fees-modes').textContent = modes.length
-      ? 'This month by mode: ' + modes.map((m) => m.label + ' ' + (m.amount === null ? plural(m.payments, 'payment', 'payments') : rupees2(m.amount))).join(' · ')
-      : (c ? 'No payments recorded this month yet.' : '');
-    if (!t.money && allRows.length) say('fees-summary-msg', 'Amounts are hidden for you, so you see counts only.');
+      ? 'This month by mode: ' + modes.map((m) => m.label + ' ' + (m.amount === null || !summary.money ? plural(m.payments, 'payment', 'payments') : rupees2(m.amount))).join(' · ')
+      : 'No payments recorded this month yet.';
   }
 
   // ---------- list ----------
@@ -714,7 +703,7 @@
       const who = el('td', { 'data-label': 'Student' }, [link]);
       if (r.admission_no) who.appendChild(el('div', { className: 'muted small', text: 'Adm. no ' + r.admission_no }));
       const cls = [r.class_label, r.section].filter(Boolean).join('-') + (r.board ? ' · ' + r.board : '');
-      const parent = el('td', { 'data-label': 'Parent' }, [
+      const parent = el('td', { 'data-label': 'Parent', className: 'fees-more' }, [
         el('div', { text: r.parent_name || '' }),
         el('div', { className: 'muted small', text: r.phone || 'No phone' }),
       ]);
@@ -722,12 +711,18 @@
       const last = r.last_payment_on
         ? [money(r.last_payment_amount), S.formatDate(r.last_payment_on), modeLabel(r.last_payment_mode)].filter(Boolean).join(' · ')
         : 'None yet';
+      // On a phone each row is a small card: name, class, due now and "Record payment" (css/admin-fees.css).
+      const pay = canManage(ctx.seat)
+        ? el('a', { href: S.buildHash('fees', { student: r.student_id, pay: '1' }), className: 'button-link fees-pay', text: 'Record payment',
+          'aria-label': 'Record payment for ' + r.name })
+        : null;
       body.appendChild(el('tr', null, [
-        who, cell(cls, '', 'Class'), parent,
-        cell(r.money_hidden ? '' : money(r.total_fees), 'num', 'Total fees'),
-        cell(r.money_hidden ? '' : money(r.paid), 'num', 'Paid'),
-        cell(r.money_hidden ? (due > 0 ? 'Due' : '') : money(r.balance_due_now), 'num' + (due > 0 ? ' due' : ''), 'Due now'),
-        cell(last, '', 'Last payment'),
+        who, cell(cls, 'fees-class', 'Class'), parent,
+        cell(r.money_hidden ? '' : money(r.total_fees), 'num fees-more', 'Total fees'),
+        cell(r.money_hidden ? '' : money(r.paid), 'num fees-more', 'Paid'),
+        cell(r.money_hidden ? (due > 0 ? 'Due' : '') : money(r.balance_due_now), 'num fees-due' + (due > 0 ? ' due' : ''), 'Due now'),
+        cell(last, 'fees-more', 'Last payment'),
+        el('td', { className: 'fees-pay-col', 'data-label': '' }, [pay]),
       ]));
     });
     $('fees-empty').hidden = listRows.length > 0;
@@ -741,6 +736,7 @@
         cell(t.money ? money(t.paid) : '', 'num', 'Paid'),
         cell(t.money ? money(t.due_now) : '', 'num', 'Due now'),
         cell(RECORDED_IN_LEDGER, 'muted small', ''),
+        cell('', 'fees-pay-col', ''),
       ]));
     }
     $('fees-pager').hidden = pg.pages <= 1;
@@ -761,6 +757,7 @@
       if (n !== seq.detail || !ctx) return;
       detail = d || {};
       renderStudent();
+      if (wantPay) focusPay();
     } catch (err) {
       if (n !== seq.detail || !ctx) return;
       wrap.textContent = '';
@@ -1014,16 +1011,16 @@
     const calls = detail.calls || [];
     return el('div', { className: 'panel' }, [
       el('h3', { text: 'Calls to this parent' }),
-      el('p', { className: 'muted small', text: 'Promised amounts are ' + S.REPORTED_BY_CALLER + '. Only payments above are ' + RECORDED_IN_LEDGER + '.' }),
+      el('p', { className: 'muted small', text: 'Promised amounts are what the parent said on a call (not paid yet). Only the payments above are ' + RECORDED_IN_LEDGER + '.' }),
       calls.length ? el('div', { className: 'scroll' }, [el('table', { className: 'stack', id: 'fs-calls' }, [
-        el('thead', null, [el('tr', null, ['When', 'Caller', 'Campaign', 'Result', 'Promised for', 'Promised amount', 'Note'].map((h, i) => el('th', { text: h, className: i === 5 ? 'num' : null })))]),
+        el('thead', null, [el('tr', null, ['When', 'Caller', 'Calling list', 'Result', 'Promised for', 'Promised amount', 'Note'].map((h, i) => el('th', { text: h, className: i === 5 ? 'num' : null })))]),
         el('tbody', null, calls.map((c) => el('tr', { className: c.corrects_id ? 'correction' : null }, [
           cell(S.formatDateTime(c.at), '', 'When'),
           cell(c.caller || '', '', 'Caller'),
-          cell(c.campaign_name || '', '', 'Campaign'),
+          cell(c.campaign_name || '', '', 'Calling list'),
           cell((c.result_label || String(c.result_key || '').replace(/_/g, ' ')) + (c.corrects_id ? ' (correction)' : ''), '', 'Result'),
           cell(c.promised_date ? S.formatDate(c.promised_date) : '', '', 'Promised for'),
-          cell(hidden || c.promised_amount === null || c.promised_amount === undefined ? '' : money(c.promised_amount) + ' (' + S.REPORTED_BY_CALLER + ')', 'num', 'Promised amount'),
+          cell(hidden || c.promised_amount === null || c.promised_amount === undefined ? '' : money(c.promised_amount) + ' (parent said)', 'num', 'Promised amount'),
           cell(c.note || '', '', 'Note'),
         ]))),
       ])]) : el('p', { className: 'muted', text: 'No calls to this parent yet.' }),
@@ -1057,7 +1054,7 @@
       p.note ? line('Note', p.note) : null,
       line('Received by', p.recorded_by_label),
     ]));
-    r.appendChild(el('p', { className: 'fees-r-foot muted small', text: 'Recorded in the fee ledger. This is a computer-made receipt.' }));
+    r.appendChild(el('p', { className: 'fees-r-foot muted small', text: 'Paid (office): recorded by the fees office. This is a computer-made receipt.' }));
     const print = el('button', { type: 'button', className: 'primary', id: 'fees-r-print', text: 'Print' });
     const close = el('button', { type: 'button', id: 'fees-r-close', text: 'Close' });
     print.addEventListener('click', printReceipt);
@@ -1294,7 +1291,7 @@
     board.addEventListener('change', rename);
     const form = el('form', { id: 'fees-c-form', className: 'fees-c-form', novalidate: 'novalidate' }, [
       el('div', { className: 'row' }, [
-        field('Campaign name', name, 'grow'),
+        field('Calling list name', name, 'grow'),
         field('Class', cls), dl,
         field('Board', board),
       ]),
@@ -1305,7 +1302,7 @@
       ]),
       el('label', { className: 'check' }, [el('input', { type: 'checkbox', id: 'fees-c-open', checked: true }), ' Open to all callers']),
       el('p', { className: 'muted small', text: 'Each parent with a balance gets one call. The amount on the call is the balance due by that date. When a payment is recorded here, the call list updates by itself and parents who paid are not called again.' }),
-      el('div', { className: 'row' }, [el('button', { type: 'submit', text: 'Make the campaign' })]),
+      el('div', { className: 'row' }, [el('button', { type: 'submit', text: 'Make the calling list' })]),
     ]);
     form.addEventListener('submit', (e) => { e.preventDefault(); createCampaign(); });
     p.appendChild(el('h2', { text: 'Call parents with dues' }));
@@ -1320,18 +1317,18 @@
         .sort((a, b) => String(a.name).localeCompare(String(b.name)))
         .forEach((s) => script.appendChild(el('option', { value: s.id, text: s.name })));
     } catch (err) {
-      say('fees-c-msg', 'Could not load the scripts, so the campaign will have none: ' + errText(err));
+      say('fees-c-msg', 'Could not load the call scripts, so the calling list will have none: ' + errText(err));
     }
   }
 
   async function createCampaign() {
     const name = $('fees-c-name').value.trim();
     const min = LU.parseAmount($('fees-c-min').value || '0');
-    if (!name) { say('fees-c-msg', 'Give the campaign a name.', true); return; }
+    if (!name) { say('fees-c-msg', 'Give the calling list a name.', true); return; }
     if (min === null || Number.isNaN(min)) { say('fees-c-msg', 'The minimum due must be an amount in rupees, or 0.', true); return; }
     const btn = $('fees-c-form').querySelector('button[type="submit"]');
     btn.disabled = true;
-    say('fees-c-msg', 'Making the campaign…');
+    say('fees-c-msg', 'Making the calling list…');
     try {
       const id = await ctx.rpc('accounts_create_fees_campaign', {
         p_name: name, p_class_label: $('fees-c-class').value.trim() || null, p_board: $('fees-c-board').value || null,
@@ -1342,10 +1339,10 @@
       const done = $('fees-c-done');
       done.textContent = '';
       const open = $('fees-c-open').checked;
-      const text = open ? 'Campaign "' + name + '" is made. When it has parents to call it starts at once, and every caller can pick it.'
-        : 'Campaign "' + name + '" is made as a draft. An admin adds callers and starts it in Campaigns.';
+      const text = open ? 'Calling list "' + name + '" is made. When it has parents to call it starts at once, and every caller can pick it.'
+        : 'Calling list "' + name + '" is made but not started. An owner or manager adds callers and starts it in Calling.';
       done.appendChild(el('p', { id: 'fees-c-made', className: 'fees-done', text }));
-      if (!isAccounts(ctx.seat)) done.appendChild(el('p', null, [el('a', { href: S.buildHash('campaigns', { id }), id: 'fees-c-link', text: 'Open the campaign' })]));
+      if (!isAccounts(ctx.seat)) done.appendChild(el('p', null, [el('a', { href: S.buildHash('calling', { id }), id: 'fees-c-link', text: 'Open the calling list' })]));
       loadSummary();
     } catch (err) {
       say('fees-c-msg', 'Not made: ' + errText(err), true);
@@ -1370,13 +1367,13 @@
       loadList();
       loadSummary();
     },
-    show(params) { if (ctx) showView(params || {}); },
+    show(params, sub) { if (ctx) showView(params || {}, sub); },
     unmount() {
       window.removeEventListener('afterprint', afterPrint);
       clearTimeout(searchTimer);
       Object.keys(seq).forEach((k) => { seq[k]++; });
       ctx = null; box = null; allRows = []; listRows = []; detail = null; studentId = null; feesTypeId = null;
-      imp = null; collected = null; promises = null; page = 1;
+      imp = null; summary = null; wantPay = false; page = 1;
     },
   });
 })();

@@ -23,10 +23,10 @@ test('time zones: India first, and an unusual zone is kept', () => {
   assert.strictEqual(T.zoneChoices('UTC').length, T.TIME_ZONES.length);
 });
 test('plan line', () => {
-  assert.strictEqual(T.planText({ status: 'trial', trial_days_left: 3, seats_used: 5, seat_limit: 5 }), 'Trial: 3 days left · 5 of 5 seats used');
+  assert.strictEqual(T.planText({ status: 'trial', trial_days_left: 3, seats_used: 5, seat_limit: 5 }), 'Trial: 3 days left · 5 of 5 team members');
   assert.strictEqual(T.planText({ status: 'trial', trial_days_left: 1 }), 'Trial: 1 day left');
   assert.strictEqual(T.planText({ status: 'trial', trial_days_left: 0 }), 'Trial ended');
-  assert.strictEqual(T.planText({ status: 'active', seats_used: 12, seat_limit: 20 }), 'Paid plan · 12 of 20 seats used');
+  assert.strictEqual(T.planText({ status: 'active', seats_used: 12, seat_limit: 20 }), 'Paid plan · 12 of 20 team members');
   assert.strictEqual(T.planText({ status: 'suspended' }), 'Paused: payment needed');
 });
 test('add-ons with the "Add Scripts" note', () => {
@@ -59,13 +59,21 @@ test('activity log in plain English', () => {
   assert.strictEqual(T.actionText({ action: 'money.exported', target: 'fees_report:1200' }), 'Downloaded a file with money (fees report, 1,200 rows)');
   assert.strictEqual(T.actionText({ action: 'money.access_given', target_label: 'Priya' }), 'Allowed a manager to see money: Priya');
   assert.strictEqual(T.actionText({ action: 'institute.changed', target: 'name,time_zone' }), 'Changed the institute name and time zone');
-  assert.strictEqual(T.actionText({ action: 'campaign.paused', target_label: 'Oct fees' }), 'Paused a campaign: Oct fees');
+  assert.strictEqual(T.actionText({ action: 'campaign.paused', target_label: 'Oct fees' }), 'Paused a calling list: Oct fees');
   assert.strictEqual(T.actionText({ action: 'whatsapp.number_connected' }), 'Whatsapp number connected');
   assert.strictEqual(T.actionText({}), 'Something changed');
 });
-test('the tab keeps the password panel and leaves a WhatsApp section', () => {
+test('the tab has the advanced switch and a WhatsApp section; the password is in the account menu', () => {
   const src = fs.readFileSync(path.join(root, 'web', 'js', 'admin', 'settings.js'), 'utf8');
-  ['\'login\'', '\'reset-send\'', '\'settings-whatsapp\'', 'settings-whatsapp.js'].forEach((s) => assert.ok(src.includes(s), s));
+  ['\'settings-advanced-switch\'', '\'settings-whatsapp\'', 'settings-whatsapp.js'].forEach((s) => assert.ok(src.includes(s), s));
+  assert.ok(!src.includes('\'reset-send\''), 'no password panel in Settings');
+  // Call result options, money, plan, terms and the activity log are advanced (class adv); the rest is not.
+  ['settings-call-types', 'settings-money', 'settings-plan', 'settings-terms', 'settings-log'].forEach((id) =>
+    assert.ok(new RegExp("className: 'panel adv', id: '" + id + "'").test(src), id + ' is advanced'));
+  ['settings-institute', 'settings-answers'].forEach((id) =>
+    assert.ok(new RegExp("className: 'panel', id: '" + id + "'").test(src), id + ' is simple'));
+  const html = fs.readFileSync(path.join(root, 'web', 'admin.html'), 'utf8');
+  ['id="account"', 'href="reset.html"', 'id="account-reset"', 'id="account-advanced"'].forEach((s) => assert.ok(html.includes(s), s));
 });
 
 // ---------- Phase A.2: common answers ----------

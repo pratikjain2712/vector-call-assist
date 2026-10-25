@@ -186,7 +186,7 @@
         .select('id, name, status, script_id').neq('status', 'closed').order('created_at', { ascending: false });
       if (error) throw new Error(error.message);
       picker.textContent = '';
-      picker.appendChild(el('option', { value: '', text: rows && rows.length ? 'Choose a campaign' : 'No campaigns yet' }));
+      picker.appendChild(el('option', { value: '', text: rows && rows.length ? 'Choose a calling list' : 'No calling lists yet' }));
       (rows || []).forEach((c) => picker.appendChild(el('option', { value: c.id, text: c.name })));
       if (campaign) picker.value = campaign;
     }
@@ -199,7 +199,7 @@
         if (!(await checkFeature())) {
           if (my !== seq) return;
           say('');
-          body.appendChild(el('p', { className: 'ix-addon', text: 'Script tests are part of the Scripts add-on. Add Scripts to use this.' }));
+          body.appendChild(el('p', { className: 'ix-addon', text: 'Script tests are part of Scripts, an extra (paid). Add Scripts to use this.' }));
           return;
         }
         if (ownPicker) await loadCampaigns();
@@ -215,7 +215,7 @@
       const my = ++seq;
       if (allowed === false) return;
       body.textContent = '';
-      if (!campaign) { say(''); body.appendChild(el('p', { className: 'muted', text: 'Choose a campaign to see or start a script test.' })); return; }
+      if (!campaign) { say(''); body.appendChild(el('p', { className: 'muted', text: 'Choose a calling list to see or start a script test.' })); return; }
       say('Loading…');
       let out;
       try {
@@ -243,7 +243,7 @@
       const c = data.campaign || {};
       const test = data.test || null;
       if (!c.script_id) {
-        body.appendChild(el('p', { text: 'This campaign has no script. Choose one in Campaigns first.' }));
+        body.appendChild(el('p', { text: 'This calling list has no call script. Choose one in Calling first.' }));
         return;
       }
       if (test && test.status === 'running') renderRunning(c, test);
@@ -302,7 +302,7 @@
       body.appendChild(el('p', { className: 'muted', text: 'Half of the leads hear each version. Started '
         + S.formatDate(test.started_at, { year: false }) + '.' }));
       if (test.same_script === false) {
-        body.appendChild(el('p', { className: 'ix-warn', text: 'This campaign now uses another script, so the test is paused. Stop it and start a new one.' }));
+        body.appendChild(el('p', { className: 'ix-warn', text: 'This calling list now uses another call script, so the test is paused. Stop it and start a new one.' }));
       }
 
       const card = (arm, key) => {
@@ -347,7 +347,7 @@
         btn.addEventListener('click', () => ctx.confirm({
           title: 'Use ' + v(arm.version) + ' for everyone?',
           text: v(arm.version) + ' becomes the version in use of "' + (c.script_name || 'this script')
-            + '". Every campaign with this script uses it from the next call, and the test ends.',
+            + '". Every calling list with this script uses it from the next call, and the test ends.',
           button: 'Use ' + v(arm.version) + ' for everyone',
           run: () => ctx.rpc('admin_end_script_test', { p_test: test.id, p_winner: Number(arm.version) }),
           done: v(arm.version) + ' is now used for everyone.',

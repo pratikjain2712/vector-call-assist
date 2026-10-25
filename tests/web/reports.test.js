@@ -20,7 +20,7 @@ const hasRupee = (sheets) => sheets.some((s) => s.headers.some((h) => /₹/.test
 
 // ----- picker and dates -----
 test('the five reports in the mockup order, Fees first', () => {
-  assert.deepStrictEqual(R.REPORTS.map((r) => r.label), ['Fees collection', 'Sales funnel', 'Results', 'Why calls are lost', 'Weekly summary']);
+  assert.deepStrictEqual(R.REPORTS.map((r) => r.label), ['Fees collection', 'Enquiry to admission', 'Call results', 'Why calls are lost', 'Weekly summary']);
   assert.strictEqual(R.DEFAULT_REPORT, 'fees');
 });
 test('date presets: last 7 and 30 days include today', () => {
@@ -34,6 +34,8 @@ test('date presets: this week starts on Monday, this month on the 1st', () => {
   assert.deepStrictEqual(R.presetRange('week', new Date(2026, 9, 19)), { from: '2026-10-19', to: '2026-10-19' });   // Monday
   assert.deepStrictEqual(R.presetRange('month', new Date(2026, 9, 24)), { from: '2026-10-01', to: '2026-10-24' });
   assert.strictEqual(R.presetRange('custom', new Date()), null);
+  assert.deepStrictEqual(R.presetRange('today', new Date(2026, 9, 24, 15)), { from: '2026-10-24', to: '2026-10-24' });
+  assert.deepStrictEqual(R.DATE_PRESETS.map((p) => p.id), ['today', 'last7', 'week', 'last30', 'month', 'custom']);
 });
 
 // ----- promises -----
@@ -90,12 +92,12 @@ test('funnel notes: drop, top reason in plain words, guessed pitch and calls wit
 // ----- Fees collection -----
 const REP = { leads: 240, total_due: 4320000, paid_leads: 80, paid_calls: 85, paid_amount: 1440000, promised_leads: 50,
   promised_amount: 900000, broken_promises: 14, money_hidden: false };
-test('fees cards with money: rupees in Indian format, paid says reported by caller', () => {
+test('fees cards with money: rupees in Indian format, paid is what the parent said, not in Paid (office) yet', () => {
   const c = R.feesCards(REP, true);
-  assert.deepStrictEqual(c.map((x) => x.label), ['Total due', 'Paid after a call', 'Promised', 'Promise date passed, not paid']);
+  assert.deepStrictEqual(c.map((x) => x.label), ['Total due', 'Parent said they paid', 'Promised', 'Promised date missed']);
   assert.deepStrictEqual(c.map((x) => x.value), ['₹43,20,000', '₹14,40,000', '₹9,00,000', '14']);
   assert.strictEqual(c[0].sub, '240 parents');
-  assert.strictEqual(c[1].sub, '80 parents · reported by caller');
+  assert.strictEqual(c[1].sub, '80 parents · not in Paid (office) yet');
   assert.strictEqual(c[3].level, 'bad');
 });
 test('fees cards without money: counts only, no ₹ anywhere', () => {
@@ -103,7 +105,7 @@ test('fees cards without money: counts only, no ₹ anywhere', () => {
   const c = R.feesCards(hidden, false);
   assert.deepStrictEqual(c.map((x) => x.value), ['240', '80', '50', '14']);
   assert.ok(c.every((x) => !/₹/.test(x.value + x.sub)), JSON.stringify(c));
-  assert.strictEqual(c[1].sub, 'parents · reported by caller');
+  assert.strictEqual(c[1].sub, 'parents · not in Paid (office) yet');
   assert.strictEqual(R.feesCards(Object.assign({}, hidden, { leads: 1 }), false)[0].sub, 'parent');
 });
 
@@ -117,8 +119,8 @@ test('fees workbook with money has ₹ columns and the amounts as numbers', () =
   assert.deepStrictEqual(s.map((x) => x.name), ['Fees collection', 'Promises due this week']);
   assert.deepStrictEqual(s[0].headers, ['Measure', 'Parents', 'Amount (₹)']);
   assert.deepStrictEqual(s[0].rows[0], ['Total due', 240, 4320000]);
-  assert.ok(/reported by caller/.test(s[0].rows[1][0]));
-  assert.deepStrictEqual(s[1].headers, ['Parent', 'Student and class', 'Promised amount (₹)', 'Promised for', 'Caller', 'Campaign', 'Status']);
+  assert.ok(/^Parent said they paid \(not in Paid \(office\) yet\)$/.test(s[0].rows[1][0]));
+  assert.deepStrictEqual(s[1].headers, ['Parent', 'Student and class', 'Promised amount (₹)', 'Promised for', 'Caller', 'Calling list', 'Status']);
   assert.deepStrictEqual(s[1].rows[0], ['Parent One', 'Ravi · 10-A', 18000, '2026-10-24', 'Ravi', 'Oct fees', 'Due today']);
   assert.deepStrictEqual(s[1].rows[1], ['=Parent', '', 9000, '2026-10-22', 'Not assigned', 'Oct fees', '2 days late']);
 });
@@ -140,7 +142,7 @@ test('funnel workbook: one sheet with the steps and the notes', () => {
 test('results workbook: outcome pivot and team activity', () => {
   const reps = A.pivotOutcomes([{ seat_id: 's1', label: 'Rep 1', outcome: 'won', outcome_count: 2 }, { seat_id: 's1', label: 'Rep 1', outcome: 'busy', outcome_count: 1 }]);
   const s = R.resultsSheets(reps, A.OUTCOMES, A.TEAM_HEADERS, A.teamCsvRows([{ label: 'Rep 1', day: '2026-10-24', calls: 3, connected_calls: 2, connect_rate: 0.6667, talk_seconds: 90, last_activity: 'x' }]));
-  assert.deepStrictEqual(s.map((x) => x.name), ['Results by outcome', 'Team activity']);
+  assert.deepStrictEqual(s.map((x) => x.name), ['Call results', 'Team activity']);
   assert.strictEqual(s[0].headers[0], 'Caller');
   assert.strictEqual(s[0].headers[s[0].headers.length - 1], 'Total');
   assert.strictEqual(s[0].rows[0][s[0].rows[0].length - 1], 3);

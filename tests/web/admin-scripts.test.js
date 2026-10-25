@@ -14,16 +14,18 @@ test('goodRate rounds to a whole percent and shows a dash without calls', () => 
   assert.strictEqual(P.goodRate(null, 5), '—');
 });
 
-test('usedInText lists campaigns and marks closed and draft ones', () => {
+test('usedInText lists calling lists and marks closed and not started ones', () => {
   assert.strictEqual(P.usedInText([]), 'Not used');
   assert.strictEqual(P.usedInText(null), 'Not used');
   assert.strictEqual(P.usedInText([{ name: 'Oct fees', status: 'running' }, { name: 'Sep fees', status: 'closed' }, { name: 'Nov', status: 'draft' }]),
-    'Oct fees, Sep fees (closed), Nov (draft)');
+    'Oct fees, Sep fees (closed), Nov (not started)');
 });
 
-test('liveText shows the live version or Draft', () => {
-  assert.strictEqual(P.liveText({ live_version: 3 }), 'v3');
-  assert.strictEqual(P.liveText({ live_version: null }), 'Draft');
+test('liveText says Ready for callers or Not ready; the version number is a small detail', () => {
+  assert.strictEqual(P.liveText({ live_version: 3 }), 'Ready for callers');
+  assert.strictEqual(P.liveText({ live_version: null }), 'Not ready');
+  assert.strictEqual(P.versionText({ live_version: 3 }), 'version 3');
+  assert.strictEqual(P.versionText({ live_version: null }), '');
 });
 
 test('usageText and usageLeft read admin_ai_usage', () => {
@@ -64,8 +66,8 @@ test('templateArgs sends null for blank filters', () => {
 test('templateTags, templateSize and languageLabel describe a template', () => {
   assert.strictEqual(P.templateTags({ class_labels: [], boards: [] }), 'All classes · All boards');
   assert.strictEqual(P.templateTags({ class_labels: ['9th', '10th'], boards: ['CBSE'] }), '9th, 10th · CBSE');
-  assert.strictEqual(P.templateSize({ steps: [1, 2], pushbacks: [1], check_marks: 3 }), '2 steps · 1 pushback answer · 3 facts to fill in');
-  assert.strictEqual(P.templateSize({ steps: [1], pushbacks: [] }), '1 step · 0 pushback answers');
+  assert.strictEqual(P.templateSize({ steps: [1, 2], pushbacks: [1], check_marks: 3 }), '2 steps · 1 answer to an objection · 3 facts to fill in');
+  assert.strictEqual(P.templateSize({ steps: [1], pushbacks: [] }), '1 step · 0 answers to objections');
   assert.strictEqual(P.languageLabel('hinglish'), 'Hinglish');
   assert.strictEqual(P.languageLabel('en'), 'English');
 });
@@ -94,4 +96,16 @@ test('libraryProblems allows "Check this" marks but not broken endings', () => {
   broken.steps.find((s) => s.id === 'refused').result = 'joined';
   assert.match(P.libraryProblems(broken, keys, M).join(' '), /not a result of this call type/);
   assert.deepStrictEqual(P.libraryProblems({ steps: 'x' }, keys, M), ['The steps must be a list.']);
+});
+
+test('"+ New script" suggests at most 6 templates of the institute\'s kinds of calls, then "See all"', () => {
+  const lib = [];
+  ['fees', 'sales', 'admission', 'fees', 'sales', 'fees', 'event', 'fees', 'fees', 'fees'].forEach((t, i) => lib.push({ key: 'k' + i, call_type: t }));
+  assert.strictEqual(P.SUGGESTIONS, 6);
+  assert.deepStrictEqual(P.suggestTemplates(lib, ['fees']).map((t) => t.key), ['k0', 'k3', 'k5', 'k7', 'k8', 'k9']);
+  assert.deepStrictEqual(P.suggestTemplates(lib, ['sales', 'admission', 'sales']).map((t) => t.key), ['k1', 'k2', 'k4']);
+  // No calling lists yet, or none of the library's kinds: the first six of the library.
+  assert.deepStrictEqual(P.suggestTemplates(lib, []).map((t) => t.key), ['k0', 'k1', 'k2', 'k3', 'k4', 'k5']);
+  assert.deepStrictEqual(P.suggestTemplates(lib, ['renewal']).length, 6);
+  assert.deepStrictEqual(P.suggestTemplates(null, ['fees']), []);
 });

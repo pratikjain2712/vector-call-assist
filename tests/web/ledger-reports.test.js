@@ -9,6 +9,7 @@ const assert = require('assert');
 const path = require('path');
 const root = path.join(__dirname, '..', '..');
 const R = require(path.join(root, 'web', 'js', 'admin', 'reports.js'));
+const S = require(path.join(root, 'web', 'js', 'admin', 'shared.js'));
 const H = require(path.join(root, 'web', 'js', 'admin', 'home.js'));
 const M = require(path.join(root, 'web', 'js', 'insights-model.js'));
 
@@ -36,20 +37,25 @@ HIDDEN.collected.by_mode.forEach((m) => { m.amount = null; });
 HIDDEN.collected.by_day.forEach((m) => { m.amount = null; });
 
 // ----- Reports: cards -----
-test('ledger cards with money: due now and collected from the ledger, promised from calls', () => {
-  const c = R.ledgerCards(LED, true);
-  assert.deepStrictEqual(c.map((x) => x.label), ['Total due now', 'Collected', 'Promised, not yet paid', 'Broken promises']);
+test('ledger cards with money: due now and collected (Paid (office)), promised from calls, with the period', () => {
+  const c = R.ledgerCards(LED, true, '2026-10-25');
+  assert.deepStrictEqual(c.map((x) => x.label), ['Due now', 'Collected in these dates (19 Oct – 25 Oct)', 'Promised, not paid yet', 'Promised date missed']);
   assert.deepStrictEqual(c.map((x) => x.value), ['₹22,000', '₹18,000', '₹11,000', '1']);
-  assert.strictEqual(c[0].sub, '3 students · fee ledger');
-  assert.strictEqual(c[1].sub, '4 payments · fee ledger');
-  assert.strictEqual(c[2].sub, '2 parents · from calls');
-  assert.strictEqual(c[3].sub, 'Date passed, not paid in the ledger · 1 partly paid');
+  assert.strictEqual(c[0].sub, '3 students · fees due till today, minus paid (office)');
+  assert.strictEqual(c[1].sub, '4 payments · Paid (office)');
+  assert.strictEqual(c[2].sub, '2 parents · parent said (not paid yet)');
+  assert.strictEqual(c[3].sub, '₹4,000 still to pay · date passed, not paid · 1 partly paid');
+  // The Fees tab shows these exact cards (S.feeCards) for this month, so the two never disagree.
+  const month = Object.assign({}, LED, { from: '2026-10-01' });
+  assert.deepStrictEqual(R.ledgerCards(month, true, '2026-10-25'), S.feeCards(S.feeNumbers(month), 'this month'));
+  assert.strictEqual(R.ledgerCards(Object.assign({}, LED, { from: '2026-10-25' }), true, '2026-10-25')[1].label, 'Collected today');
 });
 test('ledger cards without money: counts only, never ₹', () => {
   const c = R.ledgerCards(HIDDEN, false);
-  assert.deepStrictEqual(c.map((x) => x.value), ['3', '4', '2', '1']);
+  assert.deepStrictEqual(c.map((x) => x.value), ['3 students', '4 payments', '2 parents', '1']);
   assert.ok(!hasRupee(c));
-  assert.strictEqual(R.ledgerCards(null, false)[0].value, '0');
+  assert.ok(!hasRupee(R.ledgerCards(LED, false)), 'no ₹ when this admin may not see money, whatever the server sent');
+  assert.strictEqual(R.ledgerCards(null, false)[0].value, '0 students');
 });
 
 // ----- Reports: by mode and by day -----
@@ -82,7 +88,7 @@ test('ledger state of a promise: paid on a date by a mode, partly paid, not paid
   assert.deepStrictEqual(R.ledgerStatus({ ledger_state: 'part_paid', paid_amount: 2000 }, true), { text: 'Partly paid (₹2,000)', level: 'part' });
   assert.deepStrictEqual(R.ledgerStatus({ ledger_state: 'part_paid', paid_amount: null }, false), { text: 'Partly paid', level: 'part' });
   assert.deepStrictEqual(R.ledgerStatus({ ledger_state: 'not_paid' }), { text: 'Not paid', level: 'late' });
-  assert.deepStrictEqual(R.ledgerStatus({ ledger_state: 'no_student' }), { text: 'Not in the fee ledger', level: 'later' });
+  assert.deepStrictEqual(R.ledgerStatus({ ledger_state: 'no_student' }), { text: 'No student in Fees', level: 'later' });
   assert.deepStrictEqual(R.ledgerStatus(null), { text: '', level: '' });
 });
 test('send back leaves out promises paid in the ledger and closed leads', () => {
@@ -106,10 +112,11 @@ test('Excel with the ledger and money: summary, promises with the ledger column,
   const s = R.feesSheets(REP, PROMISES, true, LED);
   assert.deepStrictEqual(s.map((x) => x.name), ['Fees collection', 'Promises due this week', 'Ledger']);
   assert.deepStrictEqual(s[0].headers, ['Measure', 'Count', 'Amount (₹)']);
-  assert.deepStrictEqual(s[0].rows[0], ['Total due now (fee ledger, students)', 3, 22000]);
-  assert.deepStrictEqual(s[0].rows[1], ['Collected (fee ledger, payments)', 4, 18000]);
-  assert.deepStrictEqual(s[0].rows[4], ['Paid after a call (reported by caller, calls)', 85, 1440000]);
-  assert.ok(s[1].headers.includes('In the fee ledger'));
+  assert.deepStrictEqual(s[0].rows[0], ['Due now (students)', 3, 22000]);
+  assert.deepStrictEqual(s[0].rows[1], ['Collected, Paid (office) (payments)', 4, 18000]);
+  assert.deepStrictEqual(s[0].rows[3], ['Promised date missed (parents)', 1, 4000]);
+  assert.deepStrictEqual(s[0].rows[4], ['Parent said they paid (not in Paid (office) yet, calls)', 85, 1440000]);
+  assert.ok(s[1].headers.includes('Paid (office)'));
   assert.ok(s[1].rows[0].includes('Paid on 22 Oct by UPI'));
   assert.deepStrictEqual(s[2].headers, ['Collected', 'Mode or day', 'Payments', 'Amount (₹)']);
   assert.deepStrictEqual(s[2].rows[0], ['By mode', 'UPI', 2, 6000]);
@@ -118,7 +125,7 @@ test('Excel with the ledger and money: summary, promises with the ledger column,
 test('Excel with the ledger and no money: no ₹ columns anywhere', () => {
   const s = R.feesSheets(REP, PROMISES, false, HIDDEN);
   assert.ok(!s.some((x) => x.headers.some((h) => /₹/.test(h))));
-  assert.deepStrictEqual(s[0].rows[1], ['Collected (fee ledger, payments)', 4]);
+  assert.deepStrictEqual(s[0].rows[1], ['Collected, Paid (office) (payments)', 4]);
   assert.deepStrictEqual(s[2].rows[0], ['By mode', 'UPI', 2]);
   assert.ok(s[2].notes.some((n) => /counts only/.test(n)));
 });
@@ -141,8 +148,8 @@ test('Excel for Accounts (no caller-reported report): ledger rows only, money ke
   const s = R.feesSheets(null, PROMISES, true, LED);
   assert.deepStrictEqual(s.map((x) => x.name), ['Fees collection', 'Promises due this week', 'Ledger']);
   assert.strictEqual(s[0].rows.length, 4);
-  assert.ok(!s[0].rows.some((r) => /reported by caller/.test(r[0])));
-  assert.deepStrictEqual(s[0].rows[1], ['Collected (fee ledger, payments)', 4, 18000]);
+  assert.ok(!s[0].rows.some((r) => /Parent said/.test(r[0])));
+  assert.deepStrictEqual(s[0].rows[1], ['Collected, Paid (office) (payments)', 4, 18000]);
 });
 
 // ----- Home -----
@@ -150,37 +157,36 @@ const HOME_LED = { has_ledger: true, money_hidden: false, collected: { payments:
   promises_due_unpaid: { count: 2, amount: 9000 }, released_today: { count: 3, idle: 2, inactive: 0, revoked: 1, admin: 0 } };
 test('Home fees tile with a ledger: collected (ledger) and promised (calls), apart', () => {
   const t = H.feesTile({ has_fees: true, promised_amount: 30000, promised_calls: 4 }, HOME_LED, 'today', true);
-  assert.deepStrictEqual(t, { label: 'Collected today (ledger)', value: '₹12,500', sub: 'Promised today (calls): ₹30,000',
-    note: 'Collected is from the fee ledger. Promised is reported by caller.' });
+  assert.deepStrictEqual(t, { label: 'Collected today', value: '₹12,500', sub: 'Promised today: ₹30,000', note: 'Paid (office)' });
   const w = H.feesTile({ promised_calls: 1, promised_amount: null }, Object.assign({}, HOME_LED, { collected: { payments: 1, amount: null } }), 'week', true);
-  assert.strictEqual(w.label, 'Collected this week (ledger)');
+  assert.strictEqual(w.label, 'Collected this week');
   assert.strictEqual(w.value, '1 payment');
-  assert.strictEqual(w.sub, 'Promised this week (calls): 1 promise');
+  assert.strictEqual(w.sub, 'Promised this week: 1 promise');
 });
 test('Home fees tile without money access: counts only', () => {
   const t = H.feesTile({ promised_amount: 30000, promised_calls: 4 }, HOME_LED, 'yesterday', false);
-  assert.strictEqual(t.label, 'Collected yesterday (ledger)');
+  assert.strictEqual(t.label, 'Collected yesterday');
   assert.strictEqual(t.value, '3 payments');
-  assert.strictEqual(t.sub, 'Promised yesterday (calls): 4 promises');
+  assert.strictEqual(t.sub, 'Promised yesterday: 4 promises');
   assert.ok(!hasRupee(t));
 });
 test('Home fees tile without a ledger: what callers reported, as before', () => {
   assert.strictEqual(H.feesTile({ has_fees: false }, null, 'today', true), null);
   const t = H.feesTile({ has_fees: true, paid_calls: 5, promised_calls: 2 }, { has_ledger: false }, 'today', false);
-  assert.deepStrictEqual(t, { label: 'Fees: paid', value: '5 calls', sub: '2 promises', note: 'reported by caller' });
+  assert.deepStrictEqual(t, { label: 'Fees: paid', value: '5 calls', sub: '2 promises', note: 'Parent said (not paid yet)' });
   const m = H.feesTile({ has_fees: true, paid_amount: 1000, promised_amount: 500 }, null, 'today', true);
   assert.strictEqual(m.value, '₹1,000');
 });
-test('Needs your attention with a ledger: promises not yet paid in the ledger, and follow-ups back in the pool', () => {
+test('Needs your attention with a ledger: promises not paid yet (office), and follow-ups given to other callers', () => {
   const items = H.attentionItems({ promises_due_today: { count: 5, amount: 50000 } }, { canSeeMoney: true, ledger: HOME_LED });
   assert.deepStrictEqual(items.map((i) => i.key), ['promises', 'released']);
-  assert.strictEqual(items[0].text, '2 promises due today are not yet paid in the ledger.');
+  assert.strictEqual(items[0].text, '2 promises due today are not paid yet.');
   assert.strictEqual(items[0].detail, '₹9,000 still to pay.');
-  assert.deepStrictEqual(items[0].params, { report: 'fees' });
-  assert.strictEqual(items[1].text, '3 follow-ups returned to the pool today.');
+  assert.deepStrictEqual([items[0].tab, items[0].params], ['fees/report', null]);
+  assert.strictEqual(items[1].text, '3 follow-ups went to other callers today.');
   assert.ok(/2 because their callers had not called for a day/.test(items[1].detail));
   assert.ok(/1 because the caller was removed/.test(items[1].detail));
-  assert.strictEqual(items[1].tab, 'callers');
+  assert.strictEqual(items[1].tab, 'team');
 });
 test('Needs your attention: no ₹ without money access, nothing when all is paid', () => {
   const items = H.attentionItems({}, { canSeeMoney: false, ledger: HOME_LED });
@@ -193,8 +199,8 @@ test('Needs your attention without a ledger keeps the old promise rule, and stil
   const items = H.attentionItems({ promises_due_today: { count: 1, amount: null } },
     { ledger: { has_ledger: false, released_today: { count: 1, admin: 1 } } });
   assert.strictEqual(items[0].text, '1 fee promise is due today.');
-  assert.strictEqual(items[1].text, '1 follow-up returned to the pool today.');
-  assert.strictEqual(items[1].detail, '1 by an admin. Any caller can pick them up now.');
+  assert.strictEqual(items[1].text, '1 follow-up went to other callers today.');
+  assert.strictEqual(items[1].detail, '1 by an admin. Any caller can call them now.');
 });
 
 // ----- Insights -----
