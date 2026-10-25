@@ -1,8 +1,10 @@
 'use strict';
 /* Home tab of the admin app (web/admin.html): the day's numbers, callers right now, what needs attention and
    campaign progress (docs/phase-a-plan.md, Sprint 10, and "From the mockup review").
-   Reads one RPC, admin_home_summary(p_day, p_campaign) (migration 20261024100023), which checks the admin and
-   counts days in the institute's time zone. Numbers refresh every 60 seconds while this tab is open and the
+   Reads admin_home_summary(p_day, p_campaign) (migration 20261024100023), which checks the admin and counts
+   days in the institute's time zone, and admin_home_ledger(p_day, p_campaign) (20261025150000, Phase A.2): money
+   collected in the fee ledger, promises due today not yet paid in the ledger, follow-ups returned to the pool
+   today. Without the ledger function (or a ledger) the fees tile shows what callers reported, as before. Numbers refresh every 60 seconds while this tab is open and the
    browser tab is visible; a hidden page does not poll and catches up when it is shown again.
    Money: ₹ amounts come back only when the server allows it (can_see_money), and are shown only when
    ctx.canSeeMoney too; paid and promised amounts carry "reported by caller". Otherwise counts only.
@@ -69,21 +71,89 @@
 
   const plural = (n, one, many) => S.count(n) + ' ' + (Number(n) === 1 ? one : many);
 
-  // The "Needs your attention" list, in a fixed order: promises due today, phones offline, script steps where
-  // many calls end, callers idle 45 min or more. Each item: { key, text, detail, tab, params, link }.
+  const DAY_WORD = { today: 'today', yesterday: 'yesterday', week: 'this week' };
+
+  // Whether admin_home_ledger says the institute keeps a fee ledger (then money received comes from it).
+  const hasLedger = (led) => !!(led && led.has_ledger);
+
+  // The fees tile. With a fee ledger: "Collected today (ledger)" from ledger payments, and "Promised today
+  // (calls)" from the calls, kept apart. Without one: what callers reported, as before.
+  // t: admin_home_summary tiles; led: admin_home_ledger (or null); money: ₹ may be shown.
+  // Returns { label, value, sub, note } or null when there is nothing about fees to show.
+  function feesTile(t, led, day, money) {
+    const tt = t || {};
+    const word = DAY_WORD[day] || 'today';
+    if (hasLedger(led)) {
+      const col = led.collected || {};
+      const showMoney = money && col.amount !== null && col.amount !== undefined;
+      const promisedMoney = money && tt.promised_amount !== null && tt.promised_amount !== undefined;
+      return {
+        label: 'Collected ' + word + ' (ledger)',
+        value: showMoney ? S.rupees(col.amount) : plural(col.payments || 0, 'payment', 'payments'),
+        sub: 'Promised ' + word + ' (calls): ' + (promisedMoney ? S.rupees(tt.promised_amount)
+          : plural(tt.promised_calls || 0, 'promise', 'promises')),
+        note: 'Collected is from the fee ledger. Promised is ' + S.REPORTED_BY_CALLER + '.',
+      };
+    }
+    if (!tt.has_fees) return null;
+    if (money && tt.paid_amount !== null && tt.paid_amount !== undefined) {
+      return { label: 'Fees collected', value: S.rupees(tt.paid_amount), sub: S.rupees(tt.promised_amount || 0) + ' promised', note: S.REPORTED_BY_CALLER };
+    }
+    return { label: 'Fees: paid', value: plural(tt.paid_calls || 0, 'call', 'calls'),
+      sub: plural(tt.promised_calls || 0, 'promise', 'promises'), note: S.REPORTED_BY_CALLER };
+  }
+
+  // Why follow-ups went back to the pool today: '2 callers idle, 1 caller removed'.
+  function releasedDetail(rel) {
+    const r = rel || {};
+    const parts = [];
+    if (Number(r.idle) > 0) parts.push(plural(r.idle, 'because the caller had not called for a day', 'because their callers had not called for a day'));
+    if (Number(r.revoked) > 0 || Number(r.inactive) > 0) {
+      parts.push(plural((Number(r.revoked) || 0) + (Number(r.inactive) || 0), 'because the caller was removed', 'because their callers were removed'));
+    }
+    if (Number(r.admin) > 0) parts.push(plural(r.admin, 'by an admin', 'by an admin'));
+    return parts.length ? parts.join(', ') + '. Any caller can pick them up now.' : 'Any caller can pick them up now.';
+  }
+
+  // The "Needs your attention" list, in a fixed order: promises due today, follow-ups back in the pool today,
+  // phones offline, script steps where many calls end, callers idle 45 min or more. Each item:
+  // { key, text, detail, tab, params, link }.
   // opts.canSeeMoney: show the ₹ total of the promises (when the server sent one).
+  // opts.ledger: admin_home_ledger. With a fee ledger, the promises item counts promises due today that are not
+  // yet paid in the ledger (instead of every promise due today).
   function attentionItems(summary, opts) {
     const o = opts || {};
     const out = [];
     const sm = summary || {};
     const due = sm.promises_due_today || {};
-    if (Number(due.count) > 0) {
+    const led = o.ledger || null;
+    if (hasLedger(led)) {
+      const un = led.promises_due_unpaid || {};
+      if (Number(un.count) > 0) {
+        const amount = o.canSeeMoney && un.amount !== null && un.amount !== undefined ? S.rupees(un.amount) : '';
+        out.push({
+          key: 'promises',
+          text: plural(un.count, 'promise due today is', 'promises due today are') + ' not yet paid in the ledger.',
+          detail: amount ? amount + ' still to pay.' : '',
+          tab: 'reports', params: { report: 'fees' }, link: 'See list',
+        });
+      }
+    } else if (Number(due.count) > 0) {
       const amount = o.canSeeMoney && due.amount !== null && due.amount !== undefined ? S.rupees(due.amount) : '';
       out.push({
         key: 'promises',
         text: plural(due.count, 'fee promise is', 'fee promises are') + ' due today.',
         detail: amount ? amount + ' in total, ' + S.REPORTED_BY_CALLER + '.' : '',
         tab: 'reports', params: { report: 'fees' }, link: 'See list',
+      });
+    }
+    const rel = led && led.released_today;
+    if (rel && Number(rel.count) > 0) {
+      out.push({
+        key: 'released',
+        text: plural(rel.count, 'follow-up', 'follow-ups') + ' returned to the pool today.',
+        detail: releasedDetail(rel),
+        tab: 'callers', params: null, link: 'See callers',
       });
     }
     (sm.callers || []).forEach((c) => {
@@ -131,7 +201,7 @@
   }
 
   const helpers = { REFRESH_MS, IDLE_ALERT_MIN, DAYS, duration, minutes, percent, changeText, statusInfo, resultsText,
-    attentionItems, campaignProgress };
+    attentionItems, campaignProgress, feesTile, releasedDetail };
   if (typeof module !== 'undefined' && module.exports) { module.exports = helpers; return; }
 
   // ---------- the tab (browser only) ----------
@@ -146,6 +216,7 @@
   let seq = 0;
   let lastLoad = 0;
   let summary = null;
+  let ledger = null;    // admin_home_ledger (Phase A.2), null when the database does not have it
 
   const cell = (text, cls, label) => el('td', { text: text === null || text === undefined ? '' : String(text), className: cls || '', 'data-label': label || null });
 
@@ -212,10 +283,15 @@
     const campaign = $('home-campaign').value || null;
     if (!summary) say('home-msg', 'Loading...');
     try {
-      const data = await ctx.rpc('admin_home_summary', { p_day: day, p_campaign: campaign });
+      // The ledger numbers never stop Home: a database without admin_home_ledger (or an error) shows the rest.
+      const [data, led] = await Promise.all([
+        ctx.rpc('admin_home_summary', { p_day: day, p_campaign: campaign }),
+        ctx.rpc('admin_home_ledger', { p_day: day, p_campaign: campaign }).catch(() => null),
+      ]);
       if (mine !== seq || !ctx) return;
       lastLoad = Date.now();
       summary = data || {};
+      ledger = led && typeof led === 'object' ? led : null;
       render(day);
       say('home-msg', '');
     } catch (err) {
@@ -266,16 +342,12 @@
     if (t.has_sales) {
       wrap.appendChild(tile('Sales: joined', S.count(t.joined || 0), S.count(t.interested || 0) + ' more interested'));
     }
-    if (t.has_fees) {
-      // ₹ only when both the server and the shell say this admin may see money.
-      const money = ctx.canSeeMoney && t.paid_amount !== null && t.paid_amount !== undefined;
-      if (money) {
-        wrap.appendChild(tile('Fees collected', S.rupees(t.paid_amount),
-          S.rupees(t.promised_amount || 0) + ' promised', S.REPORTED_BY_CALLER));
-      } else {
-        wrap.appendChild(tile('Fees: paid', plural(t.paid_calls || 0, 'call', 'calls'),
-          plural(t.promised_calls || 0, 'promise', 'promises'), S.REPORTED_BY_CALLER));
-      }
+    // ₹ only when both the server and the shell say this admin may see money.
+    const fees = feesTile(t, ledger, day, ctx.canSeeMoney);
+    if (fees) {
+      const node = tile(fees.label, fees.value, fees.sub, fees.note);
+      node.id = 'home-fees-tile';
+      wrap.appendChild(node);
     }
   }
 
@@ -301,7 +373,7 @@
   function renderAttention() {
     const list = $('home-attention-list');
     list.textContent = '';
-    const items = attentionItems(summary, { canSeeMoney: ctx.canSeeMoney });
+    const items = attentionItems(summary, { canSeeMoney: ctx.canSeeMoney, ledger });
     $('home-attention-empty').hidden = items.length > 0;
     items.forEach((it) => {
       list.appendChild(el('li', { className: 'home-alert', 'data-key': it.key }, [
@@ -353,6 +425,7 @@
       ctx = null;
       box = null;
       summary = null;
+      ledger = null;
     },
   });
 })();

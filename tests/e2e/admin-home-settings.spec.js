@@ -20,6 +20,7 @@ test('Home shows the day\'s numbers, callers right now and what needs attention'
   A.setPresence(E.seats.rep1, { status: 'phone_offline', since: new Date().toISOString() });
   A.setPresence(E.seats.rep2, { status: 'idle', idle_minutes: 50, since: new Date().toISOString() });
   A.setPromisesDue(2);
+  backend.db.ledgerReports.home.released_today = { count: 2, idle: 2, inactive: 0, revoked: 0, admin: 0 };   // Phase A.2
   backend.addOutcome({ institute_id: E.institutes.a, seat_id: E.seats.rep1, client_record_id: 'home-1', outcome: 'interested',
     dialled_at: new Date().toISOString(), connected_seconds: 300 });
   const errors = [];
@@ -31,11 +32,16 @@ test('Home shows the day\'s numbers, callers right now and what needs attention'
   await expect(page.locator('#home-tiles')).toContainText('Picked up');
   await expect(page.locator('#home-tiles')).toContainText('100%');
   await expect(page.locator('#home-tiles')).toContainText('reported by caller');
+  // Phase A.2: money received comes from the fee ledger; promises from calls, kept apart.
+  await expect(page.locator('#home-fees-tile')).toContainText('Collected today (ledger)');
+  await expect(page.locator('#home-fees-tile')).toContainText('3 payments');
+  await expect(page.locator('#home-fees-tile')).toContainText('Promised today (calls): 0 promises');
   await expect(page.locator('#home-callers-body')).toContainText('Rep 1');
   await expect(page.locator('#home-callers-body tr', { hasText: 'Rep 1' })).toContainText('Phone offline');
   await expect(page.locator('#home-callers-body tr', { hasText: 'Rep 2' })).toContainText('No calls for 50 min');
   const attention = page.locator('#home-attention-list');
-  await expect(attention).toContainText('2 fee promises are due today.');
+  await expect(attention).toContainText('2 promises due today are not yet paid in the ledger.');
+  await expect(attention).toContainText('2 follow-ups returned to the pool today.');
   await expect(attention).toContainText('Rep 1\'s phone is offline.');
   await expect(attention).toContainText('Rep 2 has made no calls for 50 min.');
   await expect(page.locator('#home-campaigns-list')).toContainText('Oct fees');

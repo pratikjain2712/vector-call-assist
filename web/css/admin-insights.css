@@ -132,3 +132,8 @@
   .tab-insights .ins-big { font-size: 24px; }
   .tab-insights .bar-row { grid-template-columns: minmax(60px, 34%) minmax(0, 1fr) 56px; gap: 6px; }
 }
+
+/* Phase A.2: "Are promises kept?" says how promises are measured (the fee ledger or what callers reported). */
+.tab-insights .ins-method { margin: 0 0 6px; padding: 8px 12px; border-left: 3px solid var(--chart-2); background: var(--panel-soft);
+  border-radius: 0 var(--radius-control) var(--radius-control) 0; color: var(--text); }
+.tab-insights .ins-method[data-method="calls"] { border-left-color: var(--line); }

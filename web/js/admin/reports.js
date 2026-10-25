@@ -8,6 +8,11 @@
      changes the admin approves or rejects (moved here from the script editor). Needs the Scripts add-on.
    - Weekly summary, with its CSV.
    "Download Excel" saves the open report as one .xlsx workbook (js/excel-export.js). CSV downloads stay.
+   Phase A.2 (migration 20261025150000): with a fee ledger, Fees collection reads admin_fees_ledger (total due
+   now and collected, split by mode and by day, from the ledger; promised and broken promises from calls,
+   checked against the ledger) and admin_promises_ledger (each promise says paid on <date> by <mode>, partly
+   paid or not paid). "Paid after a call" stays apart, labelled "reported by caller". The Excel file then has a
+   Ledger sheet. Without the ledger functions or any students, the report is what callers reported, as before.
    Reads: admin_fees_report, admin_promises_due, admin_sales_funnel (migration 20261024100024),
    admin_results_by_outcome, admin_team_activity, admin_weekly_summary, admin_script_report, admin_loss_insights,
    admin_seat_list, my_features, the campaigns table. Writes: admin_send_back_leads, admin_decide_suggestion,
@@ -31,6 +36,11 @@
     { id: 'weekly', label: 'Weekly summary' },
   ];
   const DEFAULT_REPORT = 'fees';
+  // An Accounts seat (Phase A.2) opens Reports for Fees collection only: the other reports are for owners and
+  // managers, and their functions refuse Accounts.
+  const ACCOUNTS_REPORTS = ['fees'];
+  const isAccountsSeat = (seat) => !!seat && (seat.access_role === 'accounts' || seat.role === 'accounts' || seat.admin_kind === 'accounts');
+  const reportsFor = (seat) => (isAccountsSeat(seat) ? REPORTS.filter((r) => ACCOUNTS_REPORTS.includes(r.id)) : REPORTS.slice());
   const DATE_PRESETS = [
     { id: 'last7', label: 'Last 7 days' },
     { id: 'week', label: 'This week' },
@@ -69,9 +79,87 @@
     return { text: 'Not yet due', level: 'later' };
   }
 
-  // The leads "Send these back to callers" sends: promises due today or late (not the ones still to come).
+  // The leads "Send these back to callers" sends: promises due today or late (not the ones still to come),
+  // still open, and not already paid in the fee ledger.
   function dueForSendBack(promises) {
-    return (promises || []).filter((p) => num(p.days_late) !== null && num(p.days_late) >= 0).map((p) => p.lead_id);
+    return (promises || []).filter((p) => num(p.days_late) !== null && num(p.days_late) >= 0 &&
+      p.lead_status !== 'done' && p.ledger_state !== 'paid').map((p) => p.lead_id);
+  }
+
+  // ---------- the fee ledger (Phase A.2) ----------
+
+  // Payment modes in the ledger (payments.mode), in the order they are shown.
+  const MODES = [
+    ['upi', 'UPI'], ['cash', 'Cash'], ['cheque', 'Cheque'], ['card', 'Card'], ['bank', 'Bank transfer'], ['other', 'Other'],
+  ];
+  const modeLabel = (m) => (MODES.find((x) => x[0] === m) || [m, m ? String(m) : 'Other'])[1];
+  const FROM_LEDGER = 'fee ledger';
+  const FROM_CALLS = 'from calls';
+
+  // What the ledger shows for one promise (a row of admin_promises_ledger): { text, level }.
+  // money: the paid amount may be shown (part paid only).
+  function ledgerStatus(p, money) {
+    const r = p || {};
+    if (r.ledger_state === 'paid') {
+      const on = r.paid_on ? ' on ' + S.formatDate(r.paid_on, { year: false }) : '';
+      const by = r.paid_mode ? ' by ' + modeLabel(r.paid_mode) : '';
+      return { text: 'Paid' + on + by, level: 'good' };
+    }
+    if (r.ledger_state === 'part_paid') {
+      const amt = money && num(r.paid_amount) !== null ? ' (' + S.rupees(r.paid_amount) + ')' : '';
+      return { text: 'Partly paid' + amt, level: 'part' };
+    }
+    if (r.ledger_state === 'not_paid') return { text: 'Not paid', level: 'late' };
+    if (r.ledger_state === 'no_student') return { text: 'Not in the fee ledger', level: 'later' };
+    return { text: '', level: '' };
+  }
+
+  // The four ledger cards from admin_fees_ledger. money: show ₹ (else counts only).
+  function ledgerCards(led, money) {
+    const d = led || {};
+    const part = (k) => d[k] || {};
+    const n = (v) => Number(v) || 0;
+    const due = part('due_now');
+    const col = part('collected');
+    const pro = part('promised');
+    const brk = part('broken');
+    const value = (amount, count) => (money ? S.rupees(n(amount)) : S.count(n(count)));
+    const brokenSub = 'Date passed, not paid in the ledger' + (n(brk.part_paid) ? ' · ' + S.count(n(brk.part_paid)) + ' partly paid' : '');
+    return [
+      { label: 'Total due now', value: value(due.amount, due.students), sub: plural(S.count(n(due.students)), 'student', 'students') + ' · ' + FROM_LEDGER, level: '' },
+      { label: 'Collected', value: value(col.total, col.payments), sub: plural(S.count(n(col.payments)), 'payment', 'payments') + ' · ' + FROM_LEDGER, level: 'good' },
+      { label: 'Promised, not yet paid', value: value(pro.amount, pro.leads), sub: plural(S.count(n(pro.leads)), 'parent', 'parents') + ' · ' + FROM_CALLS, level: '' },
+      { label: 'Broken promises', value: S.count(n(brk.leads)), sub: brokenSub, level: 'bad' },
+    ];
+  }
+
+  // Collected by mode, in MODES order, only the modes with payments: [{ mode, label, payments, amount, text }].
+  function modeSplit(byMode, money) {
+    const list = Array.isArray(byMode) ? byMode : [];
+    const known = MODES.map((m) => m[0]);
+    return list.filter((r) => r && Number(r.payments) > 0)
+      .map((r) => ({ mode: r.mode, label: modeLabel(r.mode), payments: Number(r.payments) || 0, amount: money ? num(r.amount) : null }))
+      .sort((a, b) => (known.indexOf(a.mode) + 99 * (known.indexOf(a.mode) < 0)) - (known.indexOf(b.mode) + 99 * (known.indexOf(b.mode) < 0)))
+      .map((r) => Object.assign(r, { text: money ? S.rupees(r.amount || 0) : plural(S.count(r.payments), 'payment', 'payments') }));
+  }
+
+  // Collected by day for the chart: every day from..to (when the range is 14 days or less) with 0 for days without
+  // payments, else only the days with payments. [{ day 'YYYY-MM-DD', payments, amount }] oldest first.
+  function dayRows(byDay, from, to) {
+    const got = {};
+    (Array.isArray(byDay) ? byDay : []).forEach((r) => { if (r && r.day) got[String(r.day).slice(0, 10)] = r; });
+    const a = S.parseYmd(from);
+    const b = S.parseYmd(to);
+    const out = [];
+    if (a && b && b >= a && Math.round((b - a) / 86400000) <= 13) {
+      for (let d = new Date(a); d <= b; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) {
+        const k = ymd(d);
+        const r = got[k] || {};
+        out.push({ day: k, payments: Number(r.payments) || 0, amount: num(r.amount) });
+      }
+      return out;
+    }
+    return Object.keys(got).sort().map((k) => ({ day: k, payments: Number(got[k].payments) || 0, amount: num(got[k].amount) }));
   }
 
   // Student and class from a lead's sheet columns (extra), such as { "Student name": "Ravi", "Class": "10-A" }
@@ -152,10 +240,14 @@
   // ---------- workbooks (one per report; see js/excel-export.js for the sheet shape) ----------
 
   // money: put ₹ columns in. Only after log_money_export said yes.
-  function feesSheets(rep, promises, money) {
+  // led: admin_fees_ledger (Phase A.2). With it the summary counts money received from the fee ledger, the
+  // promises say what the ledger shows, and a Ledger sheet lists collections by mode and by day. Without it
+  // (an older database, or no ledger yet) the file is as before: what callers reported.
+  function feesSheets(rep, promises, money, led) {
     const r = rep || {};
     const n = (v) => Number(v) || 0;
     const amount = (v) => (money ? [num(v)] : []);
+    if (led) return ledgerSheets(rep || null, promises, money, led);
     const summary = {
       name: 'Fees collection',
       headers: ['Measure', 'Parents'].concat(money ? ['Amount (₹)'] : []),
@@ -175,6 +267,50 @@
         .concat([p.promised_date || '', p.caller || 'Not assigned', p.campaign || '', promiseStatus(p.days_late).text])),
     };
     return [summary, due];
+  }
+
+  function ledgerSheets(r, promises, money, led) {
+    const n = (v) => Number(v) || 0;
+    const amount = (v) => (money ? [num(v)] : []);
+    const part = (k) => led[k] || {};
+    const due = part('due_now');
+    const col = part('collected');
+    const pro = part('promised');
+    const brk = part('broken');
+    const summary = {
+      name: 'Fees collection',
+      headers: ['Measure', 'Count'].concat(money ? ['Amount (₹)'] : []),
+      rows: [
+        ['Total due now (fee ledger, students)', n(due.students)].concat(amount(due.amount)),
+        ['Collected (fee ledger, payments)', n(col.payments)].concat(amount(col.total)),
+        ['Promised, not yet paid (calls, parents)', n(pro.leads)].concat(amount(pro.amount)),
+        ['Broken promises (date passed, not paid in the ledger)', n(brk.leads)].concat(amount(brk.amount)),
+      ].concat(r ? [['Paid after a call (' + S.REPORTED_BY_CALLER + ', calls)', n(r.paid_calls)].concat(amount(r.paid_amount))] : []),
+      notes: ['Due and collected come from the fee ledger. Promises come from calls and are checked against the ledger.']
+        .concat(r ? ['Paid after a call is ' + S.REPORTED_BY_CALLER + ' and is not added to Collected.'] : [])
+        .concat(money ? [] : ['Amounts are hidden, so this file has counts only.']),
+    };
+    const dueSheet = {
+      name: 'Promises due this week',
+      headers: ['Parent', 'Student and class'].concat(money ? ['Promised amount (₹)'] : [])
+        .concat(['Promised for', 'Caller', 'Campaign', 'Status', 'In the fee ledger'])
+        .concat(money ? ['Paid since the promise (₹)'] : []),
+      rows: (promises || []).map((p) => [p.name, studentClass(p.extra)].concat(money ? [num(p.amount)] : [])
+        .concat([p.promised_date || '', p.caller || 'Not assigned', p.campaign || '', promiseStatus(p.days_late).text,
+          ledgerStatus(p, false).text])
+        .concat(money ? [num(p.paid_amount)] : [])),
+    };
+    const modes = modeSplit(col.by_mode, money).map((m) => ['By mode', m.label, m.payments].concat(money ? [m.amount] : []));
+    const days = dayRows(col.by_day, led.from, led.to).filter((d) => d.payments > 0)
+      .map((d) => ['By day', d.day, d.payments].concat(money ? [d.amount] : []));
+    const ledger = {
+      name: 'Ledger',
+      headers: ['Collected', 'Mode or day', 'Payments'].concat(money ? ['Amount (₹)'] : []),
+      rows: modes.concat(days),
+      notes: ['Payments in the fee ledger dated ' + (led.from || '') + ' to ' + (led.to || '') +
+        '. Reversed payments and opening balances are left out.'].concat(money ? [] : ['Amounts are hidden, so this sheet has counts only.']),
+    };
+    return [summary, dueSheet, ledger];
   }
 
   function funnelSheets(f) {
@@ -225,6 +361,7 @@
   const helpers = {
     REPORTS, DEFAULT_REPORT, DATE_PRESETS, PROMISE_DAYS, presetRange, promiseStatus, dueForSendBack, studentClass,
     funnelSteps, biggestDrop, funnelNotes, feesCards, feesSheets, funnelSheets, resultsSheets, weeklySheets, lostSheets,
+    MODES, modeLabel, ledgerStatus, ledgerCards, modeSplit, dayRows, isAccountsSeat, reportsFor,
   };
   if (inNode) { module.exports = helpers; return; }
 
@@ -234,6 +371,7 @@
   const T = window.VectorAdminTeamHelpers;
   const M = window.ScriptModel;
   const X = window.VectorExcel;
+  const C = window.VectorCharts;
   const el = S.el;
   const say = S.say;
   const $ = (id) => document.getElementById(id);
@@ -241,6 +379,7 @@
 
   let ctx = null;
   let picked = DEFAULT_REPORT;
+  let accounts = false;       // an Accounts seat: Fees collection only, from the ledger
   let scriptsAllowed = true;  // the Scripts add-on (my_features); a database without it allows everything
   let outcomes = [];
   let weeklyRows = [];
@@ -296,22 +435,31 @@
       msg('rp-msg'),
     ]));
 
-    box.appendChild(el('div', { className: 'picker', role: 'group', 'aria-label': 'Pick a report' },
-      REPORTS.map((r) => el('button', { type: 'button', id: 'rp-pick-' + r.id, 'data-report': r.id, 'aria-pressed': 'false', text: r.label }))));
+    box.appendChild(el('div', { className: 'picker', role: 'group', 'aria-label': 'Pick a report', hidden: accounts },
+      reportsFor(ctx.seat).map((r) => el('button', { type: 'button', id: 'rp-pick-' + r.id, 'data-report': r.id, 'aria-pressed': 'false', text: r.label }))));
 
     // Fees collection
     box.appendChild(el('div', { className: 'panel report', id: 'rp-fees', 'data-report': 'fees' }, [
       el('h2', { text: 'Fees collection' }),
-      el('p', { className: 'muted small', text: 'Fees campaigns. Paid counts calls in the dates you picked; due and promised are as of now.' }),
+      el('p', { id: 'fees-source', className: 'muted small', text: 'Fees campaigns. Paid counts calls in the dates you picked; due and promised are as of now.' }),
       msg('fees-msg'),
       el('div', { className: 'cards', id: 'fees-cards' }),
       el('p', { id: 'fees-money-note', className: 'muted small', hidden: true, text: 'Amounts are hidden for you, so you see counts only.' }),
+      el('p', { id: 'fees-seat-note', className: 'muted small', hidden: true, text: 'Due and collected are for every caller. The caller filter applies to promises.' }),
+      el('div', { className: 'subpanel', id: 'fees-ledger', hidden: true }, [
+        el('h3', { id: 'fees-modes-title', text: 'Collected, by how parents paid' }),
+        el('ul', { id: 'fees-modes', className: 'plain fees-modes', 'aria-labelledby': 'fees-modes-title' }),
+        el('p', { id: 'fees-modes-empty', className: 'muted', hidden: true, text: 'No payments in the fee ledger in these dates.' }),
+        el('p', { id: 'fees-reported', className: 'fees-reported small' }),
+        el('h3', { text: 'Collected by day' }),
+        el('div', { id: 'fees-days' }),
+      ]),
       el('div', { className: 'subpanel' }, [
         el('div', { className: 'row between' }, [
           el('h3', { text: 'Promises due this week' }),
           el('button', { type: 'button', id: 'fees-send', text: 'Send these back to callers' }),
         ]),
-        el('p', { className: 'muted small', text: 'Promises due today or late go to the top of their callers\' lists.' }),
+        el('p', { id: 'promise-note', className: 'muted small', text: 'Promises due today or late go to the top of their callers\' lists.' }),
         el('div', { className: 'scroll' }, [el('table', { className: 'stack', id: 'promise-table' }, [
           el('thead', null, [el('tr', { id: 'promise-head' })]),
           el('tbody', { id: 'promise-body' }),
@@ -408,7 +556,7 @@
 
   // Shows one report and loads it. A click remembers the choice for next time (this browser only).
   function pick(id, byUser) {
-    if (!REPORTS.some((r) => r.id === id)) id = DEFAULT_REPORT;
+    if (!reportsFor(ctx && ctx.seat).some((r) => r.id === id)) id = DEFAULT_REPORT;
     picked = id;
     if (byUser) storage.set(id);
     document.querySelectorAll('.tab-reports .picker button').forEach((b) => {
@@ -481,20 +629,41 @@
 
   // ---------- Fees collection ----------
 
+  // Asks a ledger function; null when the database does not have it yet (then the page shows what callers reported).
+  async function ledgerRpc(name, args) {
+    try { return await ctx.rpc(name, args); } catch (err) {
+      if (ctx.isMissing(err)) return null;
+      throw err;
+    }
+  }
+
+  // Due and collected come from the fee ledger (admin_fees_ledger) when the database has it and the institute
+  // has students; promises then carry what the ledger shows (admin_promises_ledger). Otherwise the report is
+  // what callers reported (admin_fees_report, admin_promises_due). "Paid after a call" is always loaded and shown
+  // apart, labelled "reported by caller".
   async function loadFees() {
     const f = filters();
     if (!f) return;
     const n = ++seq.fees;
     say('fees-msg', 'Loading...');
+    const id = ctx.institute.id;
     try {
-      const [rep, promises] = await Promise.all([
-        rpc('admin_fees_report', { p_institute: ctx.institute.id, p_from: f.from, p_to: f.to, p_campaign: f.campaign, p_seat: f.seat, p_tz: ctx.tz }),
-        rpc('admin_promises_due', { p_institute: ctx.institute.id, p_campaign: f.campaign, p_seat: f.seat, p_tz: ctx.tz, p_days: PROMISE_DAYS }),
+      const [rep, led] = await Promise.all([
+        accounts ? Promise.resolve(null)
+          : rpc('admin_fees_report', { p_institute: id, p_from: f.from, p_to: f.to, p_campaign: f.campaign, p_seat: f.seat, p_tz: ctx.tz }),
+        ledgerRpc('admin_fees_ledger', { p_institute: id, p_from: f.fromDay, p_to: f.toDay, p_campaign: f.campaign, p_seat: f.seat }),
       ]);
       if (n !== seq.fees) return;
-      fees = { rep: firstRow(rep), promises: promises || [], from: f.fromDay, to: f.toDay };
+      const useLedger = !!(led && led.has_ledger);
+      let promises = useLedger
+        ? await ledgerRpc('admin_promises_ledger', { p_institute: id, p_campaign: f.campaign, p_seat: f.seat, p_days: PROMISE_DAYS })
+        : null;
+      if (accounts && !useLedger) throw new Error(led ? 'The fee ledger has no students yet. Import students and fees on the Fees tab.' : T.NOT_YET);
+      if (!promises) promises = await rpc('admin_promises_due', { p_institute: id, p_campaign: f.campaign, p_seat: f.seat, p_tz: ctx.tz, p_days: PROMISE_DAYS });
+      if (n !== seq.fees) return;
+      fees = { rep: rep ? firstRow(rep) : null, led: useLedger ? led : null, promises: promises || [], from: f.fromDay, to: f.toDay, seat: f.seat };
       renderFees();
-      say('fees-msg', 'Paid after a call: ' + rangeText(f) + '.');
+      say('fees-msg', (useLedger ? 'Collected and paid after a call: ' : 'Paid after a call: ') + rangeText(f) + '.');
     } catch (err) {
       if (n !== seq.fees) return;
       fees = null;
@@ -504,7 +673,49 @@
   }
 
   // ₹ only when this admin may see money and the server sent it.
-  const feesMoney = () => !!(ctx && ctx.canSeeMoney && fees && fees.rep && fees.rep.money_hidden === false);
+  const feesMoney = () => !!(ctx && ctx.canSeeMoney && fees &&
+    (fees.led ? fees.led.money_hidden === false : fees.rep && fees.rep.money_hidden === false));
+
+  function renderCards(list) {
+    const cards = $('fees-cards');
+    list.forEach((c) => cards.appendChild(el('div', { className: 'card' + (c.level ? ' ' + c.level : '') }, [
+      el('div', { className: 'card-label', text: c.label }),
+      el('div', { className: 'card-value', text: c.value }),
+      el('div', { className: 'card-sub', text: c.sub }),
+    ])));
+  }
+
+  // The ledger part: collected by mode, what callers reported (kept apart) and the chart of collections by day.
+  function renderLedger(money) {
+    const led = fees.led;
+    const col = led.collected || {};
+    const modes = modeSplit(col.by_mode, money);
+    const list = $('fees-modes');
+    modes.forEach((m) => list.appendChild(el('li', { 'data-mode': m.mode }, [
+      el('span', { className: 'mode-label', text: m.label }),
+      el('span', { className: 'mode-value', text: m.text }),
+      money ? el('span', { className: 'mode-count', text: plural(S.count(m.payments), 'payment', 'payments') }) : null,
+    ])));
+    $('fees-modes-empty').hidden = modes.length > 0;
+    $('fees-reported').hidden = !fees.rep;
+    const r = fees.rep || {};
+    const calls = Number(r.paid_calls) || 0;
+    const amt = money && r.paid_amount !== null && r.paid_amount !== undefined ? ' (' + S.rupees(r.paid_amount) + ')' : '';
+    $('fees-reported').textContent = 'Callers marked ' + plural(S.count(calls), 'call', 'calls') + ' as paid in these dates' + amt +
+      ', ' + S.REPORTED_BY_CALLER + '. This is not added to Collected.';
+    const box = $('fees-days');
+    const days = dayRows(col.by_day, led.from || fees.from, led.to || fees.to);
+    if (!days.length) { box.appendChild(el('p', { className: 'muted', text: 'No payments to show.' })); return; }
+    const value = (d) => (money ? Number(d.amount) || 0 : d.payments);
+    const text = (d) => (money ? S.rupees(Number(d.amount) || 0) : S.count(d.payments));
+    box.appendChild(C.barChart({
+      label: 'Collected by day, from the fee ledger',
+      rows: days.map((d) => ({ label: S.formatDate(d.day, { year: false }), value: value(d), text: text(d),
+        tip: [text(d), S.formatDate(d.day) + ': ' + plural(S.count(d.payments), 'payment', 'payments')] })),
+      table: { caption: 'Collected by day (fee ledger)', head: ['Day', 'Payments'].concat(money ? ['Amount'] : []), num: [1, 2],
+        rows: days.map((d) => [S.formatDate(d.day), S.count(d.payments)].concat(money ? [S.rupees(Number(d.amount) || 0)] : [])) },
+    }));
+  }
 
   function renderFees() {
     const cards = $('fees-cards');
@@ -513,26 +724,41 @@
     cards.textContent = '';
     head.textContent = '';
     body.textContent = '';
+    $('fees-modes').textContent = '';
+    $('fees-days').textContent = '';
+    const ledger = !!(fees && fees.led);
+    $('fees-ledger').hidden = !ledger;
+    $('fees-seat-note').hidden = !ledger || !fees.seat;
     $('fees-money-note').hidden = !fees || feesMoney();
     $('promise-empty').hidden = !fees || fees.promises.length > 0;
     $('fees-send').disabled = !fees || dueForSendBack(fees.promises).length === 0;
+    $('fees-send').hidden = accounts;   // sending leads back to callers is for owners and managers
+    $('fees-source').textContent = ledger
+      ? 'Due and collected come from the fee ledger. Promises come from calls and are checked against the ledger.'
+      : 'Fees campaigns. Paid counts calls in the dates you picked; due and promised are as of now.' +
+        (fees ? ' There is no fee ledger yet, so paid amounts are ' + S.REPORTED_BY_CALLER + '.' : '');
+    $('promise-note').textContent = 'Promises due today or late, and not paid' + (ledger ? ' in the ledger' : '') +
+      ', go to the top of their callers\' lists.';
     if (!fees) return;
     const money = feesMoney();
-    feesCards(fees.rep, money).forEach((c) => cards.appendChild(el('div', { className: 'card' + (c.level ? ' ' + c.level : '') }, [
-      el('div', { className: 'card-label', text: c.label }),
-      el('div', { className: 'card-value', text: c.value }),
-      el('div', { className: 'card-sub', text: c.sub }),
-    ])));
-    const cols = ['Parent', 'Student'].concat(money ? ['Amount'] : []).concat(['Promised for', 'Caller', 'Status']);
+    renderCards(ledger ? ledgerCards(fees.led, money) : feesCards(fees.rep, money));
+    if (ledger) renderLedger(money);
+    const cols = ['Parent', 'Student'].concat(money ? ['Amount'] : []).concat(['Promised for', 'Caller', 'Status'])
+      .concat(ledger ? ['Fee ledger'] : []);
     cols.forEach((c) => head.appendChild(el('th', { text: c, className: c === 'Amount' ? 'num' : '' })));
     fees.promises.forEach((p) => {
-      const st = promiseStatus(p.days_late);
+      const closed = p.ledger_state === 'paid' || p.lead_status === 'done';
+      const st = closed ? { text: 'Done', level: 'later' } : promiseStatus(p.days_late);
       const cells = [cell(p.name, '', 'Parent'), cell(studentClass(p.extra), '', 'Student')];
       if (money) cells.push(cell(S.rupees(p.amount), 'num', 'Amount'));
       cells.push(cell(S.formatDate(p.promised_date, { year: false }), '', 'Promised for'));
       cells.push(cell(p.caller || 'Not assigned', '', 'Caller'));
       cells.push(cell(st.text, 'status ' + st.level, 'Status'));
-      body.appendChild(el('tr', null, cells));
+      if (ledger) {
+        const lg = ledgerStatus(p, money);
+        cells.push(cell(lg.text, 'status ledger-' + (lg.level || 'none'), 'Fee ledger'));
+      }
+      body.appendChild(el('tr', { 'data-ledger': ledger ? p.ledger_state || '' : null }, cells));
     });
   }
 
@@ -880,15 +1106,18 @@
       if (picked === 'fees') {
         if (!fees) throw new Error('Show the report first, then download it.');
         let money = feesMoney();
+        const col = fees.led ? fees.led.collected || {} : {};
+        const sheetRows = fees.led ? 5 + modeSplit(col.by_mode, true).length +
+          dayRows(col.by_day, fees.led.from, fees.led.to).filter((d) => d.payments > 0).length : 4;
         if (money) {
           try {
-            await ctx.rpc('log_money_export', { p_institute: ctx.institute.id, p_what: 'fees_report', p_rows: fees.promises.length + 4 });
+            await ctx.rpc('log_money_export', { p_institute: ctx.institute.id, p_what: 'fees_report', p_rows: fees.promises.length + sheetRows });
           } catch (err) {
             money = false;
             note = ' The file has no ₹ columns: ' + err.message;
           }
         }
-        sheets = feesSheets(fees.rep, fees.promises, money);
+        sheets = feesSheets(fees.rep, fees.promises, money, fees.led);
         name = X.fileName(['vector fees collection', fees.from, 'to', fees.to]);
       } else if (picked === 'funnel') {
         if (!funnel) throw new Error('Show the report first, then download it.');
@@ -924,6 +1153,7 @@
     label: 'Reports',
     mount(box, c) {
       ctx = c;
+      accounts = isAccountsSeat(ctx.seat);
       build(box);
       wire();
       const d = presetRange('last7', new Date());
@@ -931,8 +1161,15 @@
       $('rp-from').value = d.from;
       $('rp-to').value = d.to;
       $('week-start').value = T.weekStart(new Date());
-      loadFeatures();
       loadFilterLists();
+      if (accounts) {
+        // Accounts: Fees collection only; nothing that would ask an owner/manager function and show its refusal.
+        scriptsReady = Promise.resolve();
+        $('rp-caller').closest('label').hidden = true;
+        pick('fees');
+        return;
+      }
+      loadFeatures();
       scriptsReady = loadScripts();
       const route = ctx.route();
       const first = route.params && route.params.script ? 'lost' : (route.params && route.params.report) || storage.get();
@@ -940,7 +1177,7 @@
       if (picked !== 'results') loadResults();   // the results table is filled from the start, as before
     },
     show(params) {
-      if (!params) return;
+      if (!params || accounts) return;
       if (params.script) {
         if (picked !== 'lost') pick('lost');
         const mine = ctx;
@@ -951,6 +1188,7 @@
     },
     unmount() {
       ctx = null;
+      accounts = false;
       outcomes = []; weeklyRows = []; scripts = []; versions = [];
       fees = null; funnel = null; lost = null;
       Object.keys(seq).forEach((k) => { seq[k]++; });
