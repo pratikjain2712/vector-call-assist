@@ -213,6 +213,14 @@
     ]));
 
     box.appendChild(el('section', { className: 'panel', id: 'camp-detail', hidden: true, 'aria-labelledby': 'camp-d-name' }));
+    // Autopilot: the one-screen New calling list (fees from the ledger), filled in by the planner.
+    box.appendChild(el('section', { className: 'panel', id: 'camp-quick', hidden: true, 'aria-labelledby': 'camp-q-title' }, [
+      el('p', { className: 'back' }, [el('a', { href: S.buildHash('calling'), text: '← All calling lists' })]),
+      el('h2', { id: 'camp-q-title', text: 'New calling list' }),
+      el('div', { id: 'camp-q-body' }),
+      el('p', { className: 'small camp-q-other' }, [el('a', { href: S.buildHash('calling', { new: '1', full: '1' }), id: 'camp-q-other',
+        text: 'Another kind of list (from a sheet or by hand)' })]),
+    ]));
     box.appendChild(buildWizard());
   }
 
@@ -390,6 +398,9 @@
       pane.appendChild(el('p', { className: 'muted small', id: 'camp-d-open-note', text: 'Every caller can work this list. A caller who stops calling for ' +
         S.count(c.release_after_hours || 24) + ' working hours has their due follow-ups given to other callers.' }));
     } else if (!closed) pane.appendChild(buildCallerEditor(c, callers));
+    const people = el('details', { className: 'camp-people', id: 'camp-people' }, [el('summary', { text: 'People on this list' })]);
+    pane.appendChild(people);
+    loadPeople(c, people);
     if (!closed) pane.appendChild(buildMoreLeads());
     if (!closed) pane.appendChild(buildDetailsEditor(c));
     sizeBars(pane);
@@ -1165,16 +1176,90 @@
 
   // ---------- routes ----------
 
+  // The one-screen list is for fees from the ledger: someone who can see money, a database with the planner.
+  let quickMissing = false;
+  const quickOn = () => !!window.VectorAutopilot && !!ctx.canSeeMoney && !quickMissing;
+
   function showView(params) {
     const p = params || {};
-    const view = p.new ? 'new' : p.id ? 'detail' : 'list';
+    const view = p.new ? (p.full || !quickOn() ? 'new' : 'quick') : p.id ? 'detail' : 'list';
     $('camp-list').hidden = view !== 'list';
     $('camp-new').hidden = view !== 'list';
     $('camp-detail').hidden = view !== 'detail';
     $('camp-wizard').hidden = view !== 'new';
+    $('camp-quick').hidden = view !== 'quick';
     if (view === 'list') { current = null; loadList(); }
     else if (view === 'detail') loadDetail(p.id);
+    else if (view === 'quick') openQuick();
     else openWizard();
+  }
+
+  function openQuick() {
+    const host = $('camp-q-body');
+    host.textContent = '';
+    window.VectorAutopilot.newList(host, ctx, {
+      classes: CLASSES, boards: BOARDS,
+      // "Change everything" (or a database without the planner): the full form.
+      onAdvanced: (isMissing) => {
+        if (isMissing) { quickMissing = true; $('camp-quick').hidden = true; $('camp-wizard').hidden = false; openWizard(); return; }
+        ctx.navigate('calling', { new: '1', full: '1' });
+      },
+      onDone: (out) => {
+        const r = (out && out.result) || {};
+        ctx.status((r.text || 'Calling list started.') + ' Undo is on Today for 24 hours.');
+        ctx.navigate('calling', r.campaign_id ? { id: r.campaign_id } : {});
+      },
+    });
+  }
+
+  // ---------- one list's people, with the filter bar ----------
+  async function loadPeople(c, host) {
+    const FB = window.VectorFilterBar;
+    if (!FB) return;
+    let data = null;
+    try {
+      const res = await ctx.client.from('leads').select('id, name, phone, status, next_call_at, promised_date, assigned_seat_id, extra')
+        .eq('campaign_id', c.id).order('created_at').limit(3000);
+      if (res.error) throw res.error;
+      data = rows(res.data);
+    } catch (err) { host.hidden = true; return; }
+    if (!current || current.id !== c.id) return;
+    const today = S.ymd(new Date());
+    const seatName = new Map(rows(c.callers).map((m) => [m.seat_id, m.label]));
+    const classOf = (l) => (l.extra && (l.extra.class || l.extra.Class)) || '';
+    const STATUS_WORD = { new: 'To call', callback: 'Call back', promised: 'Promised', done: 'Done', wrong_number: 'Wrong number', do_not_call: 'Do not call' };
+    const missed = (l) => l.status === 'promised' && l.promised_date && l.promised_date < today;
+    const body = el('tbody', { id: 'camp-p-body' });
+    const more = el('p', { className: 'muted small', id: 'camp-p-more' });
+    host.querySelector('summary').textContent = 'People on this list (' + S.count(data.length) + ')';
+    const barHost = el('div');
+    host.appendChild(barHost);
+    host.appendChild(el('div', { className: 'scroll' }, [el('table', { className: 'stack' }, [
+      head([['Name'], ['Phone'], ['Class'], ['Status'], ['Caller']]), body])]));
+    host.appendChild(more);
+    FB.create(barHost, {
+      id: 'camp-fbar', placeholder: 'Search name or phone',
+      searchText: (l) => l.name + ' ' + l.phone + ' ' + ((l.extra && l.extra.student) || ''),
+      chips: [
+        { key: 'tocall', label: 'To call', test: (l) => l.status === 'new' },
+        { key: 'callback', label: 'Call back', test: (l) => l.status === 'callback' },
+        { key: 'missed', label: 'Promise missed', test: missed },
+        { key: 'done', label: 'Done', test: (l) => ['done', 'wrong_number', 'do_not_call'].includes(l.status) },
+      ],
+      classOf,
+      actions: [{ label: 'Download', run: (list) => S.download(['Name,Phone,Class,Status'].concat(list.map((l) =>
+        ['"' + String(l.name).replace(/"/g, '""') + '"', l.phone, '"' + classOf(l) + '"', STATUS_WORD[l.status] || l.status].join(','))).join('\n'),
+        'calling-list.csv') }],
+      onChange: (list) => {
+        body.textContent = '';
+        list.slice(0, 200).forEach((l) => body.appendChild(el('tr', null, [
+          cell(l.name, '', 'Name'), cell(l.phone, '', 'Phone'), cell(classOf(l), '', 'Class'),
+          cell((missed(l) ? 'Promise missed' : STATUS_WORD[l.status] || l.status) + (l.promised_date && l.status === 'promised' ? ' · ' + S.formatDate(l.promised_date, { year: false }) : ''), missed(l) ? 'warn-text' : '', 'Status'),
+          cell(seatName.get(l.assigned_seat_id) || (l.assigned_seat_id ? 'A caller' : 'Waiting'), '', 'Caller'),
+        ])));
+        more.textContent = list.length > 200 ? 'Showing 200 of ' + S.count(list.length) + '. Search or pick a filter to see others.' : '';
+      },
+    }).setRows(data);
   }
 
   S.registerTab({
@@ -1192,7 +1277,7 @@
     unmount() {
       ctx = null; box = null; campaigns = []; types = []; scripts = []; seats = []; features = null;
       current = null; pickers = {}; busy = false; seq++;
-      detailMode = 'excel'; detailModeFor = null; oneNote = null; listKeys = null; listKeysFor = null; wizMode = 'excel';
+      detailMode = 'excel'; detailModeFor = null; oneNote = null; listKeys = null; listKeysFor = null; wizMode = 'excel'; quickMissing = false;
     },
   });
 })();

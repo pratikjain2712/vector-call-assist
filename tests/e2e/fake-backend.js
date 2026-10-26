@@ -1696,7 +1696,11 @@ function createFakeBackend(world) {
       const camp = (url.searchParams.get('campaign_id') || '').replace(/^eq\./, '');
       const limit = Number(url.searchParams.get('limit')) || 1000;
       if (!s || s.role !== 'admin') return json(200, []);
-      return json(200, db.leads.filter((l) => l.campaign_id === camp && l.institute_id === s.institute_id).slice(0, limit).map((l) => ({ extra: l.extra || {} })));
+      const full = /status/.test(url.searchParams.get('select') || '');   // autopilot: a list's people (no money columns)
+      return json(200, db.leads.filter((l) => l.campaign_id === camp && l.institute_id === s.institute_id).slice(0, limit).map((l) => (full
+        ? { id: l.id, name: l.name, phone: l.phone, status: l.status, next_call_at: l.next_call_at || null, promised_date: l.promised_date || null,
+            assigned_seat_id: l.assigned_seat_id || null, extra: l.extra || {} }
+        : { extra: l.extra || {} })));
     }
     return { route };
   })();
@@ -2140,6 +2144,186 @@ function createFakeBackend(world) {
   })();
   // end presence
 
+  // autopilot
+  // Vector Autopilot (20261026120000_autopilot_engine.sql), in short: off until a test calls autopilot.enable()
+  // (so every other test sees a database without it: PGRST202, Today as before). Then my_suggestions answers
+  // three cards (a Class 8 State Board fees list, missed promises, setup) and one line Vector did; Confirm on the
+  // fees card makes a calling list in db.campaigns with its focus callers; Undo removes it. The role rules are
+  // the same: owners see everything, managers the calling kinds (fees lists only with money), Accounts nothing.
+  const autopilot = (() => {
+    const ap = { on: false, cards: [], runs: 0, lastRun: null, log: [], paused: false,
+      modes: { fees_due_list: 'auto', missed_promises: 'auto', enquiries_uncalled: 'auto', list_behind_pace: 'auto', setup_gaps: 'ask' },
+      goals: null };
+    db.autopilot = ap;
+    const NAMES = ['my_suggestions', 'autopilot_plan', 'autopilot_numbers', 'accept_suggestion', 'undo_suggestion', 'dismiss_suggestion',
+      'autopilot_get_settings', 'autopilot_save_settings', 'autopilot_save_goals', 'autopilot_list_defaults', 'autopilot_create_list'];
+    const CALLING = ['fees_due_list', 'missed_promises', 'enquiries_uncalled', 'list_behind_pace', 'new_list', 'balance_work', 'close_paid'];
+    const viewer = (u) => {
+      const s = u && seatOf(u.id);
+      if (!s) return null;
+      const kind = s.role === 'accounts' || s.access_role === 'accounts' ? 'accounts' : s.access_role === 'manager' ? 'manager' : s.role === 'admin' ? 'owner' : 'caller';
+      return { seat: s, kind, money: kind === 'accounts' || !!db.reports.money };
+    };
+    const maySee = (v, k) => (v.kind === 'owner' ? true : v.kind === 'manager' ? CALLING.includes(k) && (v.money || !['fees_due_list', 'new_list'].includes(k)) : false);
+    const strip = (o) => JSON.parse(JSON.stringify(o, (k, val) => (k === 'amount' || /_amount$/.test(k) ? undefined : val)));
+    const card = (c, v) => {
+      const out = { ...c, can_undo: ['accepted', 'auto_done'].includes(c.status) && !!c.undo, by: c.status === 'auto_done' ? 'vector' : 'you', money_hidden: !v.money };
+      delete out.undo;
+      return v.money ? out : strip(out);
+    };
+    const denied = () => pgErr(403, '42501', 'only an owner or manager can see suggestions');
+    const ymd = (d) => new Date(Date.now() + d * 864e5).toISOString().slice(0, 10);
+    const seatsA = () => db.seats.filter((s) => s.institute_id === world.institutes.a && s.role === 'rep' && s.status === 'active');
+    const feesType = () => CALL_TYPES.find((t) => t.key === 'fees').id;
+    function plan() {
+      const reps = seatsA();
+      return { action: 'create', call_type: 'fees', name: 'Term 2 fees – Class 8 State Board', class_label: '8th', board: 'State',
+        due_by: ymd(6), parents: 40, no_phone: 0, amount: 480000, start_date: ymd(0), end_date: ymd(13), working_days: 11,
+        daily_target: 4, per_caller_target: 2, hour: 19, hours_label: '7–9 pm', callers: reps.slice(0, 2).map((s) => s.id),
+        caller_options: reps.map((s, i) => ({ seat_id: s.id, label: s.label, score: 30 - i * 5, spare: 40, picked: 20 })),
+        script_id: null, script_name: null, template_key: 'fees_reminder_polite', template_name: 'Fee reminder before the due date',
+        whatsapp: false, whatsapp_available: false };
+    }
+    function enable() {
+      ap.on = true;
+      const now = new Date().toISOString();
+      ap.cards = [
+        { id: crypto.randomUUID(), kind: 'fees_due_list', dedupe_key: 'fees_list:8th:state:' + ymd(6), status: 'new', priority: 16, created_at: now,
+          title: 'Start "Term 2 fees – Class 8 State Board"',
+          why: { text: 'Term 2 tuition is due in 6 days. 40 parents of Class 8 State Board still owe it.', parents: 40, amount: 480000 },
+          impact: { text: 'About 4 calls a day; every parent called by ' + new Date(Date.now() + 13 * 864e5).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + '.' }, plan: plan() },
+        { id: crypto.randomUUID(), kind: 'missed_promises', dedupe_key: 'missed_promises:' + ymd(0), status: 'new', priority: 20, created_at: now,
+          title: '9 missed promises to pay', why: { text: '9 parents promised to pay by a date that has passed and have not paid.', amount: 81000 },
+          impact: { text: 'They go to the top of their callers\' lists.' }, plan: { lead_ids: [], reminders: 0 } },
+        { id: crypto.randomUUID(), kind: 'setup_gaps', dedupe_key: 'setup:answers', status: 'new', priority: 60, created_at: now,
+          title: 'Finish setup', why: { text: 'Fill common answers (0 of 5).' }, impact: { text: 'Callers get answers on calls.' }, plan: { link: '#settings' } },
+        { id: crypto.randomUUID(), kind: 'enquiries_uncalled', dedupe_key: 'enquiries:x:' + ymd(0), status: 'auto_done', priority: 40, created_at: now, done_at: now,
+          title: '64 enquiries waiting', why: { text: '64 people asked more than a day ago and nobody has called them yet.' }, impact: {}, plan: {},
+          result: { text: 'Put 64 waiting enquiries first in "Class 9 admission enquiries".' }, undo: { lead_ids: [] } },
+      ];
+      ap.lastRun = null;
+    }
+    function createList(p, s) {
+      const id = crypto.randomUUID();
+      db.campaigns.push({ id, institute_id: s.institute_id, name: p.name, call_type_id: feesType(), script_id: p.script_id || null,
+        start_date: p.start_date, end_date: p.end_date, daily_target: p.daily_target, share_mode: 'next_free', status: 'running',
+        open_to_all: true, class_label: p.class_label, board: p.board, focus_seats: p.callers || [], created_at: new Date().toISOString() });
+      for (let i = 0; i < (Number(p.parents) || 0); i++) {
+        db.leads.push({ id: crypto.randomUUID(), institute_id: s.institute_id, campaign_id: id, name: 'Parent ' + (i + 1),
+          phone: '+919999070' + String(i).padStart(3, '0'), status: 'new', assigned_seat_id: null, extra: { class: '8th' }, created_at: new Date().toISOString() });
+      }
+      const names = (p.callers || []).map((sid) => (db.seats.find((x) => x.id === sid) || {}).label).filter(Boolean);
+      const who = names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] : names[0];
+      return { result: { campaign_id: id, leads: p.parents, text: 'Created "' + p.name + '": ' + p.parents + ' parents, ' + (who ? who + ' calling' : 'open to all callers') +
+        (p.hour !== null && p.hour !== undefined ? ' 7–9 pm' : '') + '.' }, undo: { campaign_id: id, created: true } };
+    }
+    const RPCS = {
+      my_suggestions: (u) => {
+        const v = viewer(u);
+        if (!v || v.kind === 'caller') return denied();
+        return json(200, { viewer: v.kind, paused: ap.paused, last_run_at: ap.lastRun,
+          cards: ap.cards.filter((c) => c.status === 'new' && maySee(v, c.kind)).sort((a, b) => a.priority - b.priority).map((c) => card(c, v)),
+          feed: ap.cards.filter((c) => ['accepted', 'auto_done'].includes(c.status) && c.kind !== 'setup_gaps' && maySee(v, c.kind)).map((c) => card(c, v)) });
+      },
+      autopilot_plan: (u) => {
+        const v = viewer(u);
+        if (!v || !['owner', 'manager'].includes(v.kind)) return pgErr(403, '42501', 'only an owner or manager of this institute can plan');
+        ap.runs++;
+        ap.lastRun = new Date().toISOString();
+        return json(200, { new: 0, refreshed: ap.cards.length, auto_done: 0, expired: 0, failed: 0, paused: ap.paused });
+      },
+      autopilot_numbers: (u) => {
+        const v = viewer(u);
+        if (!v || !['owner', 'manager'].includes(v.kind)) return pgErr(403, '42501', 'only an owner or manager can see these numbers');
+        return json(200, { goals_set: !!ap.goals, money_hidden: !v.money,
+          fees: { has_ledger: true, goal_pct: (ap.goals && ap.goals.fees_pct) || 90, due_amount: v.money ? 3800000 : null, collected_amount: v.money ? 3120000 : null,
+            pct: v.money ? 82 : null, parents: 100, parents_paid: 80, parents_pct: 80 },
+          admissions: { confirmed: 10, target: ap.goals ? ap.goals.admissions_target : null, pct: ap.goals && ap.goals.admissions_target ? Math.round(1000 / ap.goals.admissions_target) : null },
+          team: { calls: 142, reached: 86, callers: 2, callers_total: 2 } });
+      },
+      accept_suggestion: (u, a) => {
+        const v = viewer(u);
+        const c = ap.cards.find((x) => x.id === a.p_id);
+        if (!v || !c || !maySee(v, c.kind)) return pgErr(403, '42501', 'suggestion not found');
+        if (!['new', 'snoozed'].includes(c.status)) return pgErr(400, '22023', 'this suggestion was already decided');
+        ap.log.push(['accept_suggestion', a]);
+        c.plan = { ...c.plan, ...(a.p_overrides || {}) };
+        const out = c.kind === 'fees_due_list' ? createList(c.plan, v.seat)
+          : { result: { text: 'Put 9 missed promises at the top of their callers\' lists.' }, undo: { leads: [] } };
+        Object.assign(c, { status: 'accepted', done_at: new Date().toISOString(), result: out.result, undo: out.undo });
+        return json(200, card(c, v));
+      },
+      undo_suggestion: (u, a) => {
+        const v = viewer(u);
+        const c = ap.cards.find((x) => x.id === a.p_id);
+        if (!v || !c || !maySee(v, c.kind)) return pgErr(403, '42501', 'suggestion not found');
+        if (!c.undo || !['accepted', 'auto_done'].includes(c.status)) return pgErr(400, '22023', 'this cannot be undone');
+        ap.log.push(['undo_suggestion', a]);
+        let text = 'Put them back as they were.';
+        if (c.undo.campaign_id) {
+          const camp = db.campaigns.find((x) => x.id === c.undo.campaign_id);
+          db.campaigns = db.campaigns.filter((x) => x.id !== c.undo.campaign_id);
+          db.leads = db.leads.filter((l) => l.campaign_id !== c.undo.campaign_id);
+          text = 'Removed "' + (camp ? camp.name : '') + '" (no calls had been made).';
+        }
+        c.status = 'undone';
+        return json(200, { id: c.id, status: 'undone', text });
+      },
+      dismiss_suggestion: (u, a) => {
+        const v = viewer(u);
+        const c = ap.cards.find((x) => x.id === a.p_id);
+        if (!v || !c || !maySee(v, c.kind)) return pgErr(403, '42501', 'suggestion not found');
+        c.status = a.p_snooze_days > 0 ? 'snoozed' : 'dismissed';
+        return json(200, { id: c.id, status: c.status });
+      },
+      autopilot_get_settings: (u) => {
+        const v = viewer(u);
+        if (!v || !['owner', 'manager'].includes(v.kind)) return pgErr(403, '42501', 'only an owner or manager can see Autopilot settings');
+        return json(200, { is_owner: v.kind === 'owner', paused: ap.paused, language: 'en', modes: ap.modes, goals: ap.goals,
+          toggles: { lists: ap.modes.fees_due_list === 'auto', reminders: ap.modes.missed_promises === 'auto',
+            balance: ap.modes.enquiries_uncalled === 'auto' && ap.modes.list_behind_pace === 'auto' } });
+      },
+      autopilot_save_settings: (u, a) => {
+        const v = viewer(u);
+        if (!v || v.kind !== 'owner') return pgErr(403, '42501', 'only the owner can change Autopilot');
+        if (a.p_paused !== undefined && a.p_paused !== null) ap.paused = !!a.p_paused;
+        Object.assign(ap.modes, a.p_modes || {});
+        ap.log.push(['autopilot_save_settings', a]);
+        return RPCS.autopilot_get_settings(u);
+      },
+      autopilot_save_goals: (u, a) => {
+        const v = viewer(u);
+        if (!v || v.kind !== 'owner') return pgErr(403, '42501', 'only the owner can set goals');
+        ap.goals = { fees_pct: a.p_fees_pct || 90, admissions_target: a.p_admissions_target || null };
+        return RPCS.autopilot_get_settings(u);
+      },
+      autopilot_list_defaults: (u, a) => {
+        const v = viewer(u);
+        if (!v || !['owner', 'manager'].includes(v.kind)) return pgErr(403, '42501', 'only an owner or manager can plan a calling list');
+        const p = plan();
+        if (a.p_class_label && a.p_class_label !== '8th') Object.assign(p, { class_label: a.p_class_label, parents: 12,
+          name: 'Term 2 fees – Class ' + String(a.p_class_label).replace(/\D/g, '') + (a.p_board ? ' ' + a.p_board : '') });
+        if (!a.p_class_label) Object.assign(p, { class_label: null, board: null, name: 'Term 2 fees', parents: 52 });
+        return json(200, v.money ? p : strip(p));
+      },
+      autopilot_create_list: (u, a) => {
+        const v = viewer(u);
+        if (!v || !['owner', 'manager'].includes(v.kind) || !v.money) return pgErr(403, '42501', 'only the owner or a manager who can see money can make a fees list from the ledger');
+        ap.log.push(['autopilot_create_list', a]);
+        const out = createList(a.p_plan, v.seat);
+        const c = { id: crypto.randomUUID(), kind: 'new_list', dedupe_key: 'manual:' + out.result.campaign_id, status: 'accepted', priority: 90,
+          created_at: new Date().toISOString(), done_at: new Date().toISOString(), title: 'Start "' + a.p_plan.name + '"', why: { text: 'You started this list.' },
+          impact: {}, plan: a.p_plan, result: out.result, undo: out.undo };
+        ap.cards.push(c);
+        return json(200, card(c, v));
+      },
+    };
+    // Off until enabled: the functions are looked up at request time.
+    NAMES.forEach((n) => { RPC[n] = (u, a) => (ap.on ? RPCS[n](u, a) : pgErr(404, 'PGRST202', 'fake backend has no function ' + n)); });
+    return { enable, data: ap };
+  })();
+  // end autopilot
+
   async function handle(route) {
     const req = route.request();
     const url = new URL(req.url());
@@ -2248,6 +2432,7 @@ function createFakeBackend(world) {
     fees,   // Phase A.2: fees (addAccounts, aarav, diya, balance; data in db.fees)
     feesBasics,   // fees basics (plans, applies, calls in db.feesBasics; discounts in db.fees.discounts)
     presence,   // presence (statusOf; reports in db.presenceReports, rows in db.seatPresence)
+    autopilot,   // autopilot (enable(); data in db.autopilot)
   };
 }
 

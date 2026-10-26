@@ -371,12 +371,43 @@
     return { text: nowText(s.now_status) || 'No calls today', level: 'muted' };
   }
 
+  // The filter bar (js/admin/filter-bar.js): search, Callers / Calling now / Not calling today, Download.
+  let bar = null;
+  const callsOf = (s) => {
+    const p = progress.get(s.seat_id) || {};
+    return s.calls_today !== undefined && s.calls_today !== null ? Number(s.calls_today) : Number(p.calls) || 0;
+  };
+  const calling = (s) => !!s.now_status && ['on_call', 'wrapup'].includes(s.now_status.status);
+  function teamBar() {
+    const FB = window.VectorFilterBar;
+    if (!FB || bar) return bar;
+    const host = el('div', { id: 'team-fbar-host' });
+    $('team-people').insertBefore(host, $('team-people').querySelector('.scroll'));
+    bar = FB.create(host, {
+      id: 'team-fbar', placeholder: 'Search people',
+      searchText: (s) => s.label + ' ' + roleLabel(s),
+      chips: [
+        { key: 'callers', label: 'Callers', test: (s) => roleOf(s) === 'caller' },
+        { key: 'now', label: 'Calling now', test: (s) => roleOf(s) === 'caller' && calling(s) },
+        { key: 'idle', label: 'Not calling today', test: (s) => roleOf(s) === 'caller' && s.status === 'active' && callsOf(s) === 0 },
+      ],
+      actions: [{ label: 'Download', run: (rows) => S.download(['Name,Role,Calls today'].concat(rows.map((s) =>
+        ['"' + String(s.label).replace(/"/g, '""') + '"', roleLabel(s), callsOf(s)].join(','))).join('\n'), 'team.csv') }],
+      onChange: (rows) => drawSeats(rows),
+    });
+    return bar;
+  }
+
   function renderSeats() {
+    const list = seats.filter((s) => s.status !== 'revoked' || S.isAdvanced()).map(fullSeat);
+    $('seat-empty').hidden = list.length > 0;
+    if (teamBar()) bar.setRows(list); else drawSeats(list);
+  }
+
+  function drawSeats(list) {
     const body = $('seat-body');
     body.textContent = '';
     live = [];
-    const list = seats.filter((s) => s.status !== 'revoked' || S.isAdvanced());
-    $('seat-empty').hidden = list.length > 0;
     list.forEach((row) => {
       const s = fullSeat(row);
       const role = roleOf(s);
@@ -820,7 +851,7 @@
       document.removeEventListener('vector:advanced', renderSeats);
       ctx = null;
       seats = []; extras = new Map(); extraRows = []; progress = new Map(); campaigns = [];
-      editing = null; wantSeat = null; extrasDone = false; live = [];
+      editing = null; wantSeat = null; extrasDone = false; live = []; bar = null;
       loadSeq++; notesSeq++;
       busy = false;
     },

@@ -70,7 +70,10 @@
     return { purpose: o.purposes.includes(w.purpose) ? w.purpose : "", class_label: pick(w.class_label, o.classes), board: pick(w.board, o.boards) };
   }
 
-  const api = { PURPOSES, purposeOf, waiting, tagLine, options, filter, groups, validFilter };
+  /* Autopilot: the lists the caller is a focus caller of (my_campaigns().is_focus), in the list's order. */
+  function focus(list) { return (list || []).filter((c) => c && c.is_focus === true); }
+
+  const api = { PURPOSES, purposeOf, waiting, tagLine, options, filter, groups, validFilter, focus };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   root.CampaignPicker = api;
 })(typeof window !== "undefined" ? window : globalThis);
