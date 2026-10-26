@@ -1871,6 +1871,71 @@ begin
     (inst, owner_u, 'script.published', (select id::text from public.script_versions where script_id = (select id from demo_scripts where k = 'polite8') and version = 2), pg_temp.ist(today - 1, 39000));
 end $$;
 
+-- ---------- 10b. Autopilot (docs/autopilot-plan.md, phase 1) ----------
+-- Class 8 State Board (new this year, 48 students, a fee plan): Term 2 is due in 6 days and nobody has made a
+-- calling list for it, so Today asks "Start Term 2 fees – Class 8 State Board". The owner switched "Create
+-- calling lists for me" and "Send reminders to parents who agreed" to ask first while she tries Vector, so the
+-- missed fee promises of Oct fees are a card too. "Balance work between callers" stays on: Vector put the
+-- Class 9 enquiries first by itself (the planning run below), and the feed also shows two things it did
+-- yesterday and this morning. Goals are set (90% of fees by the due date, 40 admissions this season).
+
+do $$
+declare
+  inst    uuid := '5a1e0000-0000-4000-8000-000000000001';
+  today   date := (select v::date from demo_ctx where k = 'today');
+  kavita  uuid := '5a1e0000-0000-4000-8000-000000000108';
+  owner_u uuid := (select user_id from demo_people where who = 'owner');
+  plan    uuid := '5a1e0000-0000-4000-8000-000000000504';
+  imp_t   timestamptz := pg_temp.ist((select v::date from demo_ctx where k = 'today') - 30, 11 * 3600);
+  pf  text[] := (select a from demo_names where k = 'pf');
+  sn  text[] := (select a from demo_names where k = 'sn');
+  kid text[] := (select a from demo_names where k = 'kid');
+  sid uuid;
+  i   int;
+begin
+  insert into public.fee_plans (id, institute_id, academic_year, class_label, board, auto_apply, created_by, created_at, updated_at)
+    values (plan, inst, '2026-27', '8th', 'State', true, kavita, imp_t - interval '10 minutes', imp_t - interval '10 minutes');
+  insert into public.fee_plan_items (institute_id, plan_id, head, amount, due_date, who, sort_order, created_at, updated_at) values
+    (inst, plan, 'Term 1 tuition', 12000, today - 130, 'all', 1, imp_t, imp_t),
+    (inst, plan, 'Term 2 tuition', 12000, today + 6, 'all', 2, imp_t, imp_t);
+  for i in 1 .. 48 loop
+    sid := gen_random_uuid();
+    insert into public.students (id, institute_id, admission_no, name, class_label, section, board, academic_year, parent_name,
+                                 phone, status, source, created_by, created_at, updated_at)
+      values (sid, inst, 'SCA/2026/' || lpad((900 + i)::text, 4, '0'), kid[1 + (i * 13) % 31] || ' ' || sn[1 + (i * 23) % 31],
+              '8th', 'S', 'State', '2026-27', pf[1 + (i * 19) % 41] || ' ' || sn[1 + (i * 23) % 31],
+              '+91' || (9999070000 + i)::text, 'active', 'import', kavita, imp_t, imp_t);
+    insert into public.fee_items (institute_id, student_id, head, amount, due_date, academic_year, created_by, created_at, plan_item_id)
+      select inst, sid, pi.head, pi.amount, pi.due_date, '2026-27', kavita, imp_t, pi.id
+      from public.fee_plan_items pi where pi.plan_id = plan;
+    insert into public.payments (institute_id, student_id, amount, paid_on, mode, note, recorded_by, created_at, opening)
+      values (inst, sid, 12000, today - 30, 'other', 'Opening balance import', kavita, imp_t, true);
+    if i % 6 = 0 then   -- a few have paid Term 2 already
+      perform pg_temp.add_payment(sid, 12000, today - 1 - i % 5, pg_temp.pay_mode(), null, pg_temp.ist(today - 1 - i % 5, 11 * 3600 + i * 60));
+    end if;
+  end loop;
+
+  insert into public.institute_goals (institute_id, fees_pct, admissions_target, season_start, updated_at, updated_by)
+    values (inst, 90, 40, today - 60, now() - interval '20 days', owner_u);
+  insert into public.autopilot_settings (institute_id, modes, updated_at, updated_by)
+    values (inst, '{"fees_due_list": "ask", "missed_promises": "ask"}', now() - interval '20 days', owner_u);
+
+  -- What Vector did yesterday evening and this morning (the jobs of phase 2; written here for the feed).
+  insert into public.suggestions (institute_id, kind, dedupe_key, title, why, status, result, priority, created_at, decided_at, done_at) values
+    (inst, 'close_paid', 'demo:close_paid:' || today, 'Closed paid parents',
+     '{"text": "The fees office recorded their payments, so nobody calls them again."}', 'auto_done',
+     '{"text": "Closed 6 parents in \"Oct fees – Class 10\" who paid at the office."}', 80,
+     pg_temp.ist(today - 1, 19 * 3600), pg_temp.ist(today - 1, 19 * 3600), pg_temp.ist(today - 1, 19 * 3600)),
+    (inst, 'balance_work', 'demo:balance:' || today, 'Gave waiting follow-ups to free callers',
+     '{"text": "Their caller had not called in that list for a working day, and the parents were due a call back."}', 'auto_done',
+     '{"text": "Gave 4 follow-ups in \"Admission follow-up\" to the next free callers."}', 80,
+     pg_temp.ist(today, 9 * 3600 + 900), pg_temp.ist(today, 9 * 3600 + 900), pg_temp.ist(today, 9 * 3600 + 900));
+
+  perform public.autopilot_plan(inst);
+end $$;
+
+select kind, status, title from public.suggestions where institute_id = '5a1e0000-0000-4000-8000-000000000001' order by status, priority;
+
 -- ---------- 11. a short summary ----------
 
 select k.k as campaign, c.status, count(distinct l.id) as leads,
