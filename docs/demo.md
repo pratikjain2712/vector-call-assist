@@ -239,7 +239,6 @@ person's amount due is their student's balance, so "Due now" is what is still ow
 
 The project has a server function `demo-reset` (supabase/functions/demo-reset). Signed in as the demo owner, a POST to
 `https://ehkjtowrcsplidjjjjca.supabase.co/functions/v1/demo-reset` rebuilds the demo institute with today's dates
-(about a minute). It refuses every other login. It runs the seed pinned to commit 6e7fb04, which is older
-than the Phase A.2 demo (no ledger, no Accounts login): after this demo_seed.sql is merged and pushed, update
-SEED_URL in the function to that commit and deploy it again. The database needs migration
-`20261025130000_ledger_open_campaigns.sql` first.
+(about a minute). It refuses every other login. It runs the seed pinned to commit 29c6f34 (the Phase A.2 demo:
+ledger, Accounts login, open campaigns). After changing demo_seed.sql, push it, update SEED_URL in the function to
+that commit and deploy the function again. The 8 demo logins must exist first.
