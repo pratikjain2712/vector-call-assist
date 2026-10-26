@@ -70,6 +70,8 @@
 
   let ctx = null;
   let checkSeq = 0;
+  let pilot = null;        // VectorAutopilot.today(...)
+  let apMissing = false;   // the database has no Autopilot functions
 
   function build(box) {
     box.appendChild(el('div', { className: 'tab-head today-head' }, [
@@ -80,6 +82,8 @@
       el('a', { href: '#today/reports', id: 'today-reports-open', className: 'button-link', text: 'Reports' }),
     ]));
     const main = el('div', { id: 'today-main', className: 'today-main' }, [
+      // Autopilot (js/admin/autopilot.js): the three numbers, Needs your OK, Vector did for you.
+      el('section', { id: 'today-numbers', className: 'today-numbers', hidden: true, 'aria-label': 'Your numbers' }),
       el('section', { className: 'panel today-check', id: 'today-checklist', hidden: true, 'aria-labelledby': 'today-check-title' }, [
         el('div', { className: 'row between' }, [
           el('h2', { id: 'today-check-title', text: 'Getting started' }),
@@ -87,20 +91,59 @@
         ]),
         el('ol', { id: 'today-check-list', className: 'plain today-check-list' }),
       ]),
-      el('div', { id: 'today-home' }),
-      el('div', { id: 'today-insights' }),
+      el('section', { className: 'panel ap-ok', id: 'today-ok', hidden: true, 'aria-labelledby': 'today-ok-title' }, [
+        el('h2', { id: 'today-ok-title' }, ['Needs your OK ', el('span', { className: 'ap-count' })]),
+        el('ul', { className: 'plain ap-cards', id: 'today-ok-list' }),
+        el('p', { className: 'muted ap-empty', id: 'today-ok-empty', text: 'Nothing needs your OK right now.' }),
+        el('p', { className: 'msg', id: 'today-ap-msg', role: 'status' }),
+      ]),
+      el('section', { className: 'panel ap-did', id: 'today-did', hidden: true, 'aria-labelledby': 'today-did-title' }, [
+        el('h2', { id: 'today-did-title', text: 'Vector did for you' }),
+        el('ul', { className: 'plain ap-feed', id: 'today-did-list' }),
+      ]),
+      // The detailed panels: callers right now, calling-list progress, the forecast and More analysis. Closed while
+      // Autopilot is on the page; open (as before) on a database without it.
+      el('details', { id: 'today-details', className: 'today-details' }, [
+        el('summary', { id: 'today-details-summary', text: 'Details' }),
+        el('div', { id: 'today-home' }),
+        el('div', { id: 'today-insights' }),
+      ]),
     ]);
     box.appendChild(main);
     box.appendChild(el('div', { id: 'today-reports', hidden: true }, [
       el('p', { className: 'back' }, [el('a', { href: '#today', id: 'today-reports-back', text: '← Back to Today' })]),
       el('div', { id: 'today-reports-host' }),
     ]));
-    $('today-check-close').addEventListener('click', () => { closedSet(); $('today-checklist').hidden = true; });
+    $('today-check-close').addEventListener('click', () => { closedSet(); $('today-checklist').hidden = true; if (pilot) pilot.render(); });
+    $('today-details').addEventListener('toggle', () => { if ($('today-details').open) ctx.showPart('home', {}); });
+  }
+
+  // Autopilot on Today. Without its functions (an older database) Today is as before: Details open.
+  function startAutopilot() {
+    const AP = window.VectorAutopilot;
+    if (!AP || apMissing) { noAutopilot(); return; }
+    if (!pilot) {
+      pilot = AP.today({ numbers: $('today-numbers'), ok: $('today-ok'), did: $('today-did'), msg: $('today-ap-msg') }, ctx, {
+        onMissing: noAutopilot,
+        // The Getting started list already says what setup is left.
+        skipKinds: () => ($('today-checklist').hidden ? [] : ['setup_gaps']),
+      });
+    }
+    $('today-ok').hidden = false;
+    pilot.load();
+  }
+  function noAutopilot() {
+    apMissing = true;
+    $('today-numbers').hidden = true;
+    $('today-ok').hidden = true;
+    $('today-did').hidden = true;
+    $('today-details').open = true;
+    $('today-details').classList.add('flat');
   }
 
   // The checklist: owners only, from real data, every time Today opens (cheap reads).
   async function loadChecklist() {
-    if (S.seatKind(ctx.seat) !== 'owner' || closedGet()) { $('today-checklist').hidden = true; return; }
+    if (S.seatKind(ctx.seat) !== 'owner' || closedGet()) { $('today-checklist').hidden = true; if (pilot) pilot.render(); return; }
     const mine = ++checkSeq;
     const ask = (p) => p.then((v) => v, () => null);
     const range = S.monthToDate(new Date());
@@ -124,6 +167,7 @@
       ]));
     });
     $('today-checklist').hidden = !showChecklist(items, false);
+    if (pilot) pilot.render();
   }
 
   function showMain(params) {
@@ -135,7 +179,10 @@
     ctx.part('insights', $('today-insights'));
     ctx.showPart('home', {});
     ctx.showPart('insights', params);
+    // An old link to More analysis (#today?more=1, #insights) opens Details too.
+    if (params && (params.more || params.campaign)) $('today-details').open = true;
     loadChecklist();
+    startAutopilot();
   }
 
   function showReports(params) {
@@ -161,6 +208,6 @@
       if (sub === 'reports') showReports(params || {});
       else showMain(params || {});
     },
-    unmount() { ctx = null; checkSeq++; },
+    unmount() { ctx = null; checkSeq++; pilot = null; apMissing = false; },
   });
 })();

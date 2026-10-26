@@ -1,0 +1,109 @@
+/* Autopilot (js/admin/autopilot.js): Today's three numbers, "Needs your OK" cards, "Vector did for you", the
+   one-screen setup (Today's Change, Calling's New calling list) and Settings > Autopilot. The app's own sizes:
+   nothing here is bigger than admin.css. */
+
+/* three numbers */
+.today-numbers { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ap-nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.ap-num { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-card); padding: 12px 16px; min-width: 0; }
+.ap-num-label { font-size: 13px; color: var(--muted); font-weight: 600; }
+.ap-num-value { font-family: var(--font-display); font-size: 24px; font-weight: 800; color: var(--heading); line-height: 1.2; margin-top: 2px; overflow-wrap: anywhere; }
+.ap-num-sub { font-size: 13px; color: var(--text); }
+.ap-num-goal { font-size: 12px; margin-top: 2px; }
+.ap-num-goal.ok { color: var(--ok); }
+.ap-num-goal.warn { color: var(--warn); }
+.ap-bar { position: relative; height: 6px; background: var(--line-soft); border-radius: 3px; margin-top: 8px; }
+.ap-bar-fill { height: 100%; background: var(--chart-2); border-radius: 3px; }
+.ap-bar-goal { position: absolute; top: -3px; width: 2px; height: 12px; background: var(--heading); }
+.ap-setgoals { margin: 0; }
+
+/* Needs your OK */
+.ap-ok h2, .ap-did h2 { margin: 0 0 6px; }
+.ap-count:not(:empty) { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: var(--radius-pill); background: var(--accent-soft);
+  color: var(--accent); font-size: 13px; text-align: center; }
+.ap-cards { display: flex; flex-direction: column; }
+.ap-cards li.ap-card { border: 0; border-top: 1px solid var(--line-soft); padding: 12px 0; display: flex; flex-direction: column; gap: 8px; }
+.ap-cards li.ap-card:first-child { border-top: 0; padding-top: 4px; }
+.ap-card-title { font-weight: 600; color: var(--heading); }
+.ap-why, .ap-impact { margin: 2px 0 0; font-size: 14px; }
+.ap-why { color: var(--text); }
+.ap-impact { color: var(--muted); }
+.ap-impact::before { content: "→ "; }
+.ap-acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ap-acts .linkish { margin-left: 4px; }
+.ap-card .msg:empty { display: none; }
+.ap-empty { margin: 0; }
+#today-ap-msg:empty { display: none; }
+.ap-done-line { margin: 0; color: var(--heading); }
+.ap-tick { color: var(--ok); font-weight: 700; }
+
+/* one-screen setup */
+.ap-change { border: 1px solid var(--line); border-radius: var(--radius-button); padding: 10px 14px; background: var(--panel-soft); }
+.ap-setup { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.ap-row { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px; align-items: center; }
+.ap-row dt { font-size: 13px; font-weight: 600; color: var(--muted); }
+.ap-row dd { margin: 0; min-width: 0; }
+.ap-row input[type="text"], .ap-row select { width: min(100%, 360px); }
+.ap-row input[type="number"] { width: 100px; }
+.ap-inline { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ap-callers { display: flex; flex-wrap: wrap; gap: 6px; }
+.ap-caller { flex-direction: row; align-items: center; gap: 6px; font-weight: 400; border: 1px solid var(--input-line); border-radius: var(--radius-pill);
+  padding: 4px 10px; background: var(--panel); cursor: pointer; font-size: 14px; }
+.ap-caller:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.ap-caller input { width: 16px; height: 16px; accent-color: var(--accent); }
+.ap-note { margin: -2px 0 0 120px; }
+
+/* Vector did for you */
+.ap-feed li.ap-feed-item { border: 0; border-top: 1px solid var(--line-soft); padding: 8px 0; }
+.ap-feed li.ap-feed-item:first-child { border-top: 0; }
+.ap-feed-line { display: flex; gap: 6px 12px; align-items: baseline; flex-wrap: wrap; }
+.ap-feed-text { flex: 1 1 260px; min-width: 0; }
+.ap-feed-acts { display: inline-flex; gap: 12px; }
+.ap-feed-why { margin: 4px 0 0; }
+
+/* Details (the old Today panels) */
+.today-details > summary { cursor: pointer; font-weight: 600; color: var(--heading); font-size: 15px; padding: 4px 0; }
+.today-details[open] { display: flex; flex-direction: column; gap: var(--gap); }
+.today-details.flat > summary { display: none; }
+
+/* Calling: one-screen New calling list */
+.ap-new-pick { margin-bottom: 12px; }
+.ap-new-acts { margin-top: 12px; align-items: center; }
+
+/* Settings > Autopilot */
+.ap-switches { display: flex; flex-direction: column; gap: 10px; margin: 6px 0 14px; }
+.ap-switch > span { display: flex; flex-direction: column; }
+.ap-switch-help { font-weight: 400; }
+
+/* filter bar (js/admin/filter-bar.js) */
+.fbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; min-width: 0; }
+.fbar input[type="search"] { flex: 1 1 200px; min-width: 0; max-width: 280px; }
+.fbar-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.fbar-chip { padding: 5px 10px; font-size: 13px; border-radius: var(--radius-pill); }
+.fbar-chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.fbar-n { color: var(--muted); font-variant-numeric: tabular-nums; }
+.fbar-chip[aria-pressed="true"] .fbar-n { color: inherit; }
+.fbar select { padding: 6px 10px; font-size: 13px; }
+.fbar-actions { margin-left: auto; display: flex; gap: 6px; }
+.fbar-act { padding: 5px 10px; font-size: 13px; }
+
+@media (max-width: 699px) {
+  .ap-nums { grid-template-columns: 1fr; gap: 8px; }
+  .ap-num { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 10px; padding: 10px 14px; align-items: baseline; }
+  .ap-num-value { font-size: 20px; grid-column: 2; grid-row: 1 / span 2; text-align: right; }
+  .ap-num-label { grid-column: 1; }
+  .ap-num-sub, .ap-num-goal { grid-column: 1; }
+  .ap-bar { grid-column: 1 / -1; }
+  .ap-row { grid-template-columns: 1fr; gap: 4px; }
+  .ap-note { margin-left: 0; }
+  .ap-acts > button.primary, .ap-acts > .ap-change-btn { flex: 1 1 0; }
+  .fbar input[type="search"] { max-width: none; flex-basis: 100%; }
+  .fbar-actions { margin-left: 0; }
+  .row > .fbar-act { width: auto; }
+}
+
+/* Calling: a list's people */
+.camp-people > summary { cursor: pointer; font-weight: 600; color: var(--heading); margin: 14px 0 8px; }
+.camp-people[open] > summary { margin-bottom: 10px; }
+.warn-text { color: var(--warn); }
+.camp-q-other { margin: 14px 0 0; }

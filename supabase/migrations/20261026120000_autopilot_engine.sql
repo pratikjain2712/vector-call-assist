@@ -347,6 +347,8 @@ declare
   daily int := case when coalesce(p_people, 0) > 0 then least(10000, ceil(p_people::numeric / wd)::int) end;
 begin
   return jsonb_build_object(
+    'call_type_id', (select t.id from public.call_types t where t.key = p_type and (t.institute_id is null or t.institute_id = p_inst)
+                     order by t.institute_id nulls first limit 1),
     'callers', cl -> 'picked', 'caller_options', cl -> 'options',
     'hour', best -> 'hour', 'hours_label', coalesce(best ->> 'label', 'Any time'), 'hours_source', best ->> 'source',
     'start_date', today, 'end_date', ends, 'working_days', wd,

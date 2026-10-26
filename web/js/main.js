@@ -2223,28 +2223,34 @@ function renderPicker() {
     p.appendChild(clear);
     box.appendChild(p);
   }
-  CampaignPicker.groups(shown).forEach((g) => {
+  const item = (c) => {
+    const li = el("li");
+    const b = el("button", "campitem"); b.type = "button"; b.dataset.campaign = c.campaign_id;
+    if (camp.id === c.campaign_id) b.setAttribute("aria-current", "true");
+    b.appendChild(el("strong", "", c.name + (c.status === "paused" ? " " + I18n.t("a2.paused") : "")));
+    const tags = CampaignPicker.tagLine(c, camp.filter, { classes: I18n.t("a2.allClasses"), boards: I18n.t("a2.allBoards") });
+    const target = c.is_focus && c.focus_target ? I18n.t("a2.yourTarget", { n: c.focus_target }) : "";
+    b.appendChild(el("span", "sub", [tags, c.call_type_label, target].filter(Boolean).join(" · ")));
+    const n = CampaignPicker.waiting(c);
+    b.appendChild(el("span", "waitn" + (n ? "" : " none"), I18n.t("a2.waitingN", { n: n })));
+    b.addEventListener("click", () => campPick(c.campaign_id));
+    li.appendChild(b);
+    return li;
+  };
+  const section = (id, title, list) => {
     const sec = el("section", "pickgroup");
-    const gh = el("h3", "", I18n.t(PURPOSE_LABEL[g.purpose]) + " (" + g.campaigns.length + ")"); gh.id = "camp-g-" + g.purpose;
+    const gh = el("h3", "", title + " (" + list.length + ")"); gh.id = id;
     sec.setAttribute("aria-labelledby", gh.id);
     sec.appendChild(gh);
     const ul = el("ul", "picklist");
-    g.campaigns.forEach((c) => {
-      const li = el("li");
-      const b = el("button", "campitem"); b.type = "button"; b.dataset.campaign = c.campaign_id;
-      if (camp.id === c.campaign_id) b.setAttribute("aria-current", "true");
-      b.appendChild(el("strong", "", c.name + (c.status === "paused" ? " " + I18n.t("a2.paused") : "")));
-      const tags = CampaignPicker.tagLine(c, camp.filter, { classes: I18n.t("a2.allClasses"), boards: I18n.t("a2.allBoards") });
-      b.appendChild(el("span", "sub", [tags, c.call_type_label].filter(Boolean).join(" · ")));
-      const n = CampaignPicker.waiting(c);
-      b.appendChild(el("span", "waitn" + (n ? "" : " none"), I18n.t("a2.waitingN", { n: n })));
-      b.addEventListener("click", () => campPick(c.campaign_id));
-      li.appendChild(b);
-      ul.appendChild(li);
-    });
+    list.forEach((c) => ul.appendChild(item(c)));
     sec.appendChild(ul);
     box.appendChild(sec);
-  });
+  };
+  // Autopilot: the lists this caller is planned for come first ("For you"), with their part of the daily target.
+  const mine = CampaignPicker.focus(shown);
+  if (mine.length) section("camp-g-focus", I18n.t("a2.forYou"), mine);
+  CampaignPicker.groups(shown.filter((c) => !mine.includes(c))).forEach((g) => section("camp-g-" + g.purpose, I18n.t(PURPOSE_LABEL[g.purpose]), g.campaigns));
   const sheetBtn = el("button", "campitem sheetitem", I18n.t("camp.sheetOption")); sheetBtn.type = "button"; sheetBtn.id = "camp-sheet";
   if (!campOn()) sheetBtn.setAttribute("aria-current", "true");
   sheetBtn.addEventListener("click", () => campPick(""));

@@ -256,6 +256,9 @@
       msg('inst-msg'),
     ]));
 
+    // Autopilot (js/admin/autopilot.js): goals, the three switches and "Pause all automation".
+    box.appendChild(el('section', { className: 'panel', id: 'settings-autopilot', 'aria-label': 'Autopilot' }));
+
     box.appendChild(el('div', { className: 'panel', id: 'settings-answers' }, [
       el('div', { className: 'row between' }, [
         el('h2', { text: 'Common answers' }),
@@ -676,6 +679,14 @@
       loadTerms();
       loadLog(0);
       loadWhatsapp();
+      if (window.VectorAutopilot) window.VectorAutopilot.settings($('settings-autopilot'), ctx);
+      else $('settings-autopilot').hidden = true;
+    },
+    // #settings?autopilot=1 (Today's "Set goals") goes to the Autopilot panel.
+    show(params) {
+      if (params && params.autopilot && $('settings-autopilot')) {
+        setTimeout(() => { const g = $('ap-goal-fees'); $('settings-autopilot').scrollIntoView({ block: 'start' }); if (g && !g.disabled) g.focus({ preventScroll: true }); }, 0);
+      }
     },
     unmount() {
       try { if (waModule && typeof waModule.unmount === 'function') waModule.unmount(); } catch (err) { /* cleared anyway */ }
