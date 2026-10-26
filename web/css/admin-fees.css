@@ -114,3 +114,13 @@
   .tab-fees .fees-receipt dd, .tab-fees .fees-receipt dt, .tab-fees .fees-r-inst, .tab-fees .fees-r-head h2 { color: #000; }
   .tab-fees .fees-r-actions { display: none; }
 }
+
+/* add row: "Import from Excel | + Add student" and the student form (js/admin/add-row.js, styles in admin.css) */
+.tab-fees .fees-actions .addrow-switch { flex: 0 1 auto; }
+.tab-fees .fees-head-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tab-fees .fees-head-row h2 { margin: 0 0 10px; overflow-wrap: anywhere; }
+.tab-fees .fees-addst h2 { margin-top: 0; }
+@media (max-width: 699px) {
+  .tab-fees .fees-actions > * { flex: 1 1 100%; }
+  .tab-fees .fees-actions > button { width: 100%; }
+}

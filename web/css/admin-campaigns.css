@@ -110,3 +110,7 @@
 .tab-campaigns .who label.check { align-items: flex-start; }
 .tab-campaigns .who label.check input { margin-top: 3px; }
 .tab-campaigns .camp-name .tag { display: block; margin-top: 2px; font-size: 12px; font-weight: 600; color: var(--muted); }
+
+/* add row: step 3 spans the whole row while leads are typed by hand (js/admin/add-row.js, styles in admin.css) */
+.tab-campaigns .step.addrow-by-hand { grid-column: 1 / -1; }
+.tab-campaigns .addrow-hand { margin-bottom: 4px; }
