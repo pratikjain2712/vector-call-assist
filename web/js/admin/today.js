@@ -1,5 +1,8 @@
 'use strict';
 /* Today tab of the admin app (web/admin.html): what an owner or manager looks at first.
+   - Autopilot (js/admin/autopilot.js, docs/autopilot-plan.md): three numbers against the goals, "Needs your OK"
+     (at most 3 cards) and "Vector did for you". The panels below are under a closed "Details"; on a database
+     without Autopilot Today is as before (Details open, no summary line).
    - A first-run checklist for owners (Import students and fees, Fill common answers (n of 5), Add a caller,
      Start a calling list from a template, Connect WhatsApp), worked out from real data, hidden when everything is
      done or when the owner closes it (remembered in this browser).
@@ -84,13 +87,6 @@
     const main = el('div', { id: 'today-main', className: 'today-main' }, [
       // Autopilot (js/admin/autopilot.js): the three numbers, Needs your OK, Vector did for you.
       el('section', { id: 'today-numbers', className: 'today-numbers', hidden: true, 'aria-label': 'Your numbers' }),
-      el('section', { className: 'panel today-check', id: 'today-checklist', hidden: true, 'aria-labelledby': 'today-check-title' }, [
-        el('div', { className: 'row between' }, [
-          el('h2', { id: 'today-check-title', text: 'Getting started' }),
-          el('button', { type: 'button', id: 'today-check-close', className: 'linkish', text: 'Hide' }),
-        ]),
-        el('ol', { id: 'today-check-list', className: 'plain today-check-list' }),
-      ]),
       el('section', { className: 'panel ap-ok', id: 'today-ok', hidden: true, 'aria-labelledby': 'today-ok-title' }, [
         el('h2', { id: 'today-ok-title' }, ['Needs your OK ', el('span', { className: 'ap-count' })]),
         el('ul', { className: 'plain ap-cards', id: 'today-ok-list' }),
@@ -100,6 +96,14 @@
       el('section', { className: 'panel ap-did', id: 'today-did', hidden: true, 'aria-labelledby': 'today-did-title' }, [
         el('h2', { id: 'today-did-title', text: 'Vector did for you' }),
         el('ul', { className: 'plain ap-feed', id: 'today-did-list' }),
+      ]),
+      // Getting started stays until setup is done (below the decisions: it is not urgent).
+      el('section', { className: 'panel today-check', id: 'today-checklist', hidden: true, 'aria-labelledby': 'today-check-title' }, [
+        el('div', { className: 'row between' }, [
+          el('h2', { id: 'today-check-title', text: 'Getting started' }),
+          el('button', { type: 'button', id: 'today-check-close', className: 'linkish', text: 'Hide' }),
+        ]),
+        el('ol', { id: 'today-check-list', className: 'plain today-check-list' }),
       ]),
       // The detailed panels: callers right now, calling-list progress, the forecast and More analysis. Closed while
       // Autopilot is on the page; open (as before) on a database without it.

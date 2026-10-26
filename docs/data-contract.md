@@ -716,3 +716,37 @@ _26 Oct 2026. Tests: `supabase/tests/fee_plans_test.sql`, `tests/web/fees-basics
 
 Internal (granted to nobody): `fee_item_left`, `can_give_discount`, `fee_plan_get`, `fee_plan_students`, `fee_plan_rows`, `fee_plan_removed_rows`, `discount_give_rows`, `fee_plan_apply_core`. `discount_reason_label(text)` is granted to `authenticated`.
 <!-- end Fees basics -->
+
+<!-- Autopilot -->
+## Autopilot, phase 1 (migration 20261026120000_autopilot_engine.sql)
+
+_26 Oct 2026, docs/autopilot-plan.md. Tests: `supabase/tests/autopilot_test.sql`, `tests/web/autopilot.test.js`, `tests/e2e/autopilot.spec.js`._
+
+Tables (RLS on, no browser grants; use the functions): `institute_goals` (fees_pct 90, admissions_target, sales_target, term/season dates), `autopilot_settings` (paused, modes `{kind: off|ask|auto}`, language en|hinglish), `suggestions` (kind, dedupe_key, title, why / impact / plan jsonb, priority, status new|accepted|dismissed|snoozed|expired|auto_done|undone, undo, result; one open row per `(institute, dedupe_key)`), `automation_runs`. New `campaigns` columns: `focus_seats uuid[]` (callers the list is planned for; it stays open to all), `wa_reminders boolean`.
+
+Money: amounts in suggestions live only in keys `amount` / `*_amount`; every function strips them unless `can_see_money()`. Titles and texts never hold ₹.
+
+Rules (defaults: fees lists, reminders and balancing `auto`, setup `ask`):
+
+| Kind | Fires when | Does |
+|---|---|---|
+| `fees_due_list` | a fee due in 0–7 days (fee plan items, else fee items) with parents owing it by that date, and no fees list for that class and board (due ±3 days) | creates the list from the ledger (one lead per phone), top 2 callers by fees score with spare capacity as focus callers, best 2-hour window for the class (else institute, else any time; 50 calls in 4 weeks, 20 in the window), daily target = parents ÷ working days (Mon–Sat) to due + 7, end = due + 7, template fees_reminder_polite (Hinglish when set), WhatsApp flag when connected. An existing list gets the new parents (`topup`). |
+| `missed_promises` | 3+ open promises with the date passed and the student still owing | moves them to the top of their callers' queues; lists parents who agreed to WhatsApp for one reminder (`autopilot_claim_reminders`) |
+| `enquiries_uncalled` | 5+ admission/sales leads in a running list's pool, new for 24 h, never called | due now; up to 2 focus callers |
+| `list_behind_pace` | running list, 10+ open, end date ahead, older than 2 days, pace of the last 3 working days < 80% of needed | adds a focus caller, best hours (if none), the needed daily target |
+| `setup_gaps` | common answers not filled, WhatsApp not connected, no goals | one "Finish setup" card (ask only) |
+
+| Function | Who | What |
+|---|---|---|
+| `autopilot_plan(p_institute)` | owner, manager, service role | Runs the rules, refreshes open suggestions, expires stale ones, carries out `auto` kinds unless paused (status `auto_done`, with undo). Idempotent (advisory lock, dedupe keys; a decided key never comes back). |
+| `my_suggestions()` | owner, manager, accounts (empty) | `{viewer, paused, last_run_at, cards, feed}`; managers see calling kinds (fees lists only with money). |
+| `accept_suggestion(p_id, p_overrides)` | same | Overrides: name, callers, script_id, hour, daily_target, end_date, whatsapp, add_callers. One transaction; audit `suggestion.accepted`. |
+| `undo_suggestion(p_id)` | same | Within 24 h: a created list with no calls is deleted, else paused; queue times and focus callers restored. |
+| `dismiss_suggestion(p_id, p_snooze_days)` | same | 1–30 days snooze, null/0 dismiss for good. |
+| `autopilot_numbers()` | owner, manager | Fees this term (₹ and % only with money; parents paid always), admissions vs target, team today. |
+| `autopilot_get_settings()`, `autopilot_save_settings(p_paused, p_modes, p_language)`, `autopilot_save_goals(...)` | read: owner, manager; write: owner | Settings > Autopilot. |
+| `autopilot_list_defaults(p_call_type, p_class_label, p_board, p_due_by)`, `autopilot_create_list(p_plan)` | owner, manager (create: with money) | The one-screen New calling list; creating records a `new_list` suggestion (Undo on Today). |
+| `caller_scores(p_call_type)` | owner, manager | Picked-up calls, good results, score, target, focus load, spare. |
+| `my_campaigns()` | seat | Two new columns `is_focus`, `focus_target`; focus lists first. |
+| `autopilot_claim_reminders(p_limit)` | service role | Reminders of missed-promise suggestions, same shape as `wa_claim_reminders`. |
+<!-- end Autopilot -->

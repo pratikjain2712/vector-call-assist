@@ -94,7 +94,13 @@ On a phone the tabs are a bar at the bottom of the screen.
   the Fees step", Amit idle, and **4 follow-ups went to other callers today** (walk-in enquiries in Admission
   follow-up that Priya took 3 days ago and has not worked since; their call back came due this morning, so the
   next free caller gets them).
-- Below that: **This week in 4 lines**, and the **forecast** for a calling list with *What closes the gap* and
+- **Autopilot (top of Today)**: three numbers against the goals (fees collected this term vs 90%, admissions 
+  vs 40, team today); **Needs your OK**: *Start "Term 2 fees – Class 8 State Board"* (48 new State Board students,
+  Term 2 due in 6 days; Confirm creates the list with two focus callers and 7–9 pm, Undo for 24 hours; Change
+  shows every default) and the missed fee promises of Oct fees; **Vector did for you**: the Class 9 enquiries put
+  first, 6 paid parents closed, 4 follow-ups given to free callers. The owner set "Create calling lists" and
+  "Send reminders" to ask first (Settings > Autopilot), so these are cards. The old panels are under **Details**.
+- Below that (in Details): **This week in 4 lines**, and the **forecast** for a calling list with *What closes the gap* and
   *Apply plan*. Everything else from the old Insights tab (what-if sliders, compare, best time to call, where
   calls end, promises kept, caller coaching, the v6 vs v7 script test) is under **More analysis**, closed until
   you open it.

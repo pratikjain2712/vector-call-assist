@@ -2191,7 +2191,7 @@ function createFakeBackend(world) {
         { id: crypto.randomUUID(), kind: 'fees_due_list', dedupe_key: 'fees_list:8th:state:' + ymd(6), status: 'new', priority: 16, created_at: now,
           title: 'Start "Term 2 fees – Class 8 State Board"',
           why: { text: 'Term 2 tuition is due in 6 days. 40 parents of Class 8 State Board still owe it.', parents: 40, amount: 480000 },
-          impact: { text: 'About 4 calls a day; every parent called by ' + ymd(13) + '.' }, plan: plan() },
+          impact: { text: 'About 4 calls a day; every parent called by ' + new Date(Date.now() + 13 * 864e5).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + '.' }, plan: plan() },
         { id: crypto.randomUUID(), kind: 'missed_promises', dedupe_key: 'missed_promises:' + ymd(0), status: 'new', priority: 20, created_at: now,
           title: '9 missed promises to pay', why: { text: '9 parents promised to pay by a date that has passed and have not paid.', amount: 81000 },
           impact: { text: 'They go to the top of their callers\' lists.' }, plan: { lead_ids: [], reminders: 0 } },

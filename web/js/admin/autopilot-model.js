@@ -133,7 +133,7 @@
     const usePct = money && f.pct !== null && f.pct !== undefined;
     const pct = usePct ? Number(f.pct) : (f.parents_pct === null || f.parents_pct === undefined ? null : Number(f.parents_pct));
     tiles.push({
-      key: 'fees', label: 'Fees collected this term',
+      key: 'fees', label: usePct ? 'Fees collected this term' : 'Parents paid this term',
       value: pct === null ? '—' : pct + '%',
       sub: usePct ? rupeesShort(f.collected_amount) + ' of ' + rupeesShort(f.due_amount) + ' due'
         : (Number(f.parents) > 0 ? count(f.parents_paid) + ' of ' + count(f.parents) + ' parents paid' : 'No fees due yet'),

@@ -61,10 +61,7 @@
       row('Who', el('span', { id: pre + '-who', text: whoText }));
       f.script = el('select', { id: pre + '-script' }, [el('option', { value: p.script_id || '', text: p.script_name || 'No script' })]);
       row('Script', f.script);
-      if (!p.script_id && p.template_name) {
-        f.script.appendChild(el('option', { value: '', text: 'No script' }));
-        f.script.options[0].textContent = 'No script yet (template: ' + p.template_name + ')';
-      }
+      if (!p.script_id && p.template_name) f.script.title = 'No ready script yet. Template to start from: ' + p.template_name;
       liveScripts(ctx).then((rows) => {
         const keep = f.script.value;
         rows.filter((s) => !s.call_type_id || !p.call_type_id || s.call_type_id === p.call_type_id).forEach((s) => {
@@ -105,8 +102,11 @@
     if (listKind) {
       f.end = el('input', { type: 'date', id: pre + '-end', value: p.end_date || '' });
       row('Ends', f.end);
-      f.wa = el('input', { type: 'checkbox', id: pre + '-wa', checked: !!p.whatsapp, disabled: !p.whatsapp_available });
-      row('WhatsApp', el('label', { className: 'check' }, [f.wa, el('span', { text: p.whatsapp_available ? 'Remind parents who agreed' : 'Not connected yet' })]));
+      // Only when WhatsApp is connected: one less line otherwise.
+      if (p.whatsapp_available) {
+        f.wa = el('input', { type: 'checkbox', id: pre + '-wa', checked: !!p.whatsapp });
+        row('WhatsApp', el('label', { className: 'check' }, [f.wa, el('span', { text: 'Remind parents who agreed' })]));
+      }
     }
 
     const ids = () => (f.callers ? [...f.callers.querySelectorAll('input[type="checkbox"]:checked')].map((i) => i.value) : undefined);

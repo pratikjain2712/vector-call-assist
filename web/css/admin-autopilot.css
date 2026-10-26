@@ -45,6 +45,8 @@
 .ap-row dd { margin: 0; min-width: 0; }
 .ap-row input[type="text"], .ap-row select { width: min(100%, 360px); }
 .ap-row input[type="number"] { width: 100px; }
+.ap-row select[id$="-hour"] { width: 160px; }
+.ap-new-pick select { min-width: 140px; }
 .ap-inline { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .ap-callers { display: flex; flex-wrap: wrap; gap: 6px; }
 .ap-caller { flex-direction: row; align-items: center; gap: 6px; font-weight: 400; border: 1px solid var(--input-line); border-radius: var(--radius-pill);
