@@ -133,7 +133,11 @@ On a phone the tabs are a bar at the bottom of the screen.
   wrong student, a cash payment typed twice). **Collection report** (next to Students): the fees collection
   report for any dates (this month by default) with collected by mode and by day, the promises due this week
   against what the office recorded, "Send these back to callers", and Download Excel. Its four cards are the
-  same numbers as the Fees cards for the same dates.
+  same numbers as the Fees cards for the same dates. **Import from Excel** and **+ Add student** sit side by side
+  (one student by hand, with fees and "paid so far"; it warns about the same admission number or the same name and
+  phone first), and **Edit details** is on each student's page. Every calling list has **Import from Excel** and
+  **+ Add lead**, and New calling list can take leads typed **by hand**. Each import has **Download a ready Excel
+  template**. Use only 9999xxxxxx numbers when you show adding by hand in the demo.
 - **Team**: one row per person: Anita, Rahul, the five callers and Kavita (Accounts, "No phone needed"), with
   today's calls against the target, what they are doing now, and a hint under the name ("Not calling today",
   few calls picked up, short calls). **Edit** on a row: role, money access (managers), daily target, notes for

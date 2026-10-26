@@ -1626,6 +1626,79 @@ function createFakeBackend(world) {
   })();
   // end Phase A.2: fees
 
+  // add row
+  // "+ Add student" and "+ Add lead" (js/admin/add-row.js): accounts_save_student of 20261025130000 (owners and
+  // Accounts; add or edit; name needed, phones normalised, board checked, the same admission number refused with
+  // 23505), admin_add_leads with the consent keys of 20261026100000_add_row.sql (kept on the lead), and the REST read
+  // of a list's leads' extra fields (admins of the institute). Every admin_add_leads call is kept in db.addRow.leadCalls.
+  const addRow = (() => {
+    const A = { leadCalls: [], saved: [] };
+    db.addRow = A;
+    const F = db.fees;
+    const BOARDS = { cbse: 'CBSE', icse: 'ICSE', state: 'State', 'state board': 'State', ib: 'IB', igcse: 'IGCSE', other: 'Other' };
+    const normPhone = (v) => {
+      let d = String(v || '').replace(/[\s-]+/g, '');
+      if (d.startsWith('+91')) d = d.slice(3); else if (/^91\d{10}$/.test(d)) d = d.slice(2);
+      if (d.startsWith('0')) d = d.slice(1);
+      return /^\d{10}$/.test(d) ? '+91' + d : null;
+    };
+    RPC.accounts_save_student = (u, a) => {
+      const s = u && seatOf(u.id);
+      if (!s || !(s.role === 'accounts' || (s.role === 'admin' && (s.access_role || 'owner') === 'owner'))) {
+        return pgErr(403, '42501', 'only accounts and owners can change the ledger');
+      }
+      const d = a.p_data || {};
+      let st = a.p_student ? F.students.find((x) => x.id === a.p_student && x.institute_id === s.institute_id) : null;
+      if (a.p_student && !st) return pgErr(403, '42501', 'student not found');
+      const next = st ? { ...st } : { institute_id: s.institute_id, status: 'active' };
+      for (const k of Object.keys(d)) {
+        const v = String(d[k] === null || d[k] === undefined ? '' : d[k]).trim() || null;
+        if (k === 'name') { if (!v) return pgErr(400, '22023', 'name is required'); next.name = v.slice(0, 120); }
+        else if (['admission_no', 'class_label', 'section', 'parent_name'].includes(k)) next[k] = v;
+        else if (k === 'board') { if (v && !BOARDS[v.toLowerCase()]) return pgErr(400, '22023', 'board must be CBSE, ICSE, State, IB, IGCSE or Other'); next.board = v ? BOARDS[v.toLowerCase()] : null; }
+        else if (k === 'academic_year') { if (v && !/^\d{4}-\d{2}$/.test(v)) return pgErr(400, '22023', 'academic year must look like 2026-27'); next.academic_year = v; }
+        else if (k === 'phone' || k === 'alt_phone') { const p = normPhone(v); if (v && !p) return pgErr(400, '22023', 'enter a 10-digit mobile number'); next[k] = p; }
+      }
+      if (!next.name) return pgErr(400, '22023', 'name is required');
+      if (next.admission_no && F.students.some((x) => x.institute_id === s.institute_id && x.id !== (st && st.id)
+        && String(x.admission_no || '').toLowerCase() === next.admission_no.toLowerCase())) {
+        return pgErr(409, '23505', 'another student has this admission number');
+      }
+      if (st) Object.assign(st, next);
+      else {
+        st = { id: crypto.randomUUID(), admission_no: null, class_label: null, section: null, board: null, academic_year: null, parent_name: null,
+          phone: null, alt_phone: null, admission_lead_id: null, created_at: new Date().toISOString(), ...next, source: 'manual' };
+        F.students.push(st);
+      }
+      A.saved.push({ id: st.id, added: !a.p_student, data: d });
+      return json(200, st.id);
+    };
+    const addLeadsBefore = RPC.admin_add_leads;
+    RPC.admin_add_leads = (u, a) => {
+      A.leadCalls.push({ campaign: a.p_campaign, rows: a.p_rows });
+      const before = new Set(db.leads.map((l) => l.id));
+      const res = addLeadsBefore(u, a);
+      if (res.status === 200) {
+        db.leads.filter((l) => !before.has(l.id)).forEach((l) => {
+          const r = (a.p_rows || []).find((x) => normPhone(x.phone) === l.phone) || {};
+          l.consent_call = r.consent_call !== false;
+          l.consent_whatsapp = r.consent_whatsapp === true;
+        });
+      }
+      return res;
+    };
+    function route(p, method, url, u) {
+      if (p !== '/rest/v1/leads' || method !== 'GET') return null;
+      const s = u && seatOf(u.id);
+      const camp = (url.searchParams.get('campaign_id') || '').replace(/^eq\./, '');
+      const limit = Number(url.searchParams.get('limit')) || 1000;
+      if (!s || s.role !== 'admin') return json(200, []);
+      return json(200, db.leads.filter((l) => l.campaign_id === camp && l.institute_id === s.institute_id).slice(0, limit).map((l) => ({ extra: l.extra || {} })));
+    }
+    return { route };
+  })();
+  // end add row
+
   // presence
   // The call state on the caller screen (20261025190000_presence_call_state.sql): report_presence with the call
   // state and its start (the old two-argument call still works), kept per seat in db.seatPresence, and Home's and
@@ -1754,6 +1827,7 @@ function createFakeBackend(world) {
       return send(pgErr(404, 'PGRST202', 'fake backend has no function ' + name));
     }
     { const r = fees.route(p, method, url, u); if (r) return send(r); }   // Phase A.2: fees
+    { const r = addRow.route(p, method, url, u); if (r) return send(r); }   // add row
     // Phase A: caller: one script by id (a campaign's script).
     if (p === '/rest/v1/scripts' && method === 'GET' && url.searchParams.get('id')) {
       const sc = db.callerScripts[(url.searchParams.get('id') || '').replace(/^eq\./, '')];

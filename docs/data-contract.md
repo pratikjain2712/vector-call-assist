@@ -664,3 +664,20 @@ Internal (granted to nobody): `platform_require()`, `template_problem(p_call_typ
 | internal `student_next_due_date(p_student)` | Granted to nobody. The due date of the student's oldest unpaid fee item, or null. |
 
 Web: the Callers tab hides campaigns, "Move leads" and "Back to pool" for an Accounts seat, and "Back to pool" counts only leads in campaigns that are not closed (what `admin_release_leads` sends back). Campaign member checks and the Reports caller filter leave Accounts seats out; Reports for an Accounts seat shows no campaign or caller filter. The Settings "AI drafts used" line shows for platform admins only.
+
+<!-- Add row -->
+## Add row: "+ Add one" beside every Excel import (migration 20261026100000_add_row.sql)
+
+_26 Oct 2026. Tests: `supabase/tests/add_row_test.sql`, `tests/web/add-row.test.js`, `tests/e2e/add-row.spec.js`._
+
+| Function | Change |
+|---|---|
+| `admin_add_leads(p_campaign, p_rows)` | Same signature, checks and answer. Each row may also carry `consent_call` (default true) and `consent_whatsapp` (default false): a JSON boolean or the text `yes` / `no` / `true` / `false`; any other value skips the row as `other_skipped`. Rows without the keys (Excel uploads) behave as before. |
+| internal `lead_row_consent(p_row jsonb, p_key text)` | Granted to nobody. |
+
+Web (`web/js/admin/add-row.js`, shared by Fees and Calling):
+- **Fees → "+ Add student"** (beside "Import from Excel"): `accounts_save_student(null, p_data)` with every detail key, then `accounts_add_fee_item` per fee line and `accounts_record_payment` for "paid so far" (mode and reference; note "Paid so far, added with the student"; dated the day picked, so it counts in Collected for that day, unlike an import's opening balance). Before saving, the page lists students with the same admission number (save blocked; the database refuses it too) or the same name and phone / alternate phone ("Save anyway"). Phones are checked and normalised like the lead importer (`+91` and 10 digits). **Edit details** on a student's page uses the same form with `accounts_save_student(p_student, p_data)`.
+- **Calling → a calling list → "+ Add lead"** (beside "Import from Excel"): `admin_add_leads` with one row: name, phone, the list's extra fields (read from a few of its leads' `extra`, or the call type's usual ones), `extra.source` ("Where we got the number"), consent to calls and WhatsApp, and `amount_due` only on a fees list for someone with `can_see_money`. The answer's counts say "added", "not a 10-digit mobile number" or "already on this list".
+- **New calling list, step 3 → "+ Add by hand"**: a small table (at least one row, "+ Add row") sent through the same `admin_add_leads` call as a sheet.
+- **Excel templates** (`VectorExcel`, `js/excel-export.js`): "Download a ready Excel template" in the Fees import and both lead pickers: the headings the importers match and one example row (fake numbers), and a "How to fill" sheet. A lead template has an "Amount due" column only for a fees list and someone who can see money.
+<!-- end Add row -->

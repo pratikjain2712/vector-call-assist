@@ -11,6 +11,10 @@
    the institute's scripts with their live version (table read, as the Scripts tab does).
    Writes (all checked on the server, supabase/migrations/20261024100020_campaign_admin.sql): admin_create_campaign,
    admin_update_campaign, admin_add_leads, admin_set_campaign_members, admin_share_leads.
+   Add row (js/admin/add-row.js): "Import from Excel" or "+ Add lead" (one person, admin_add_leads with one row
+   and the consent keys of 20261026100000_add_row.sql) on a list's page; "Import from Excel" or "+ Add by hand"
+   (a small table) in step 3; a ready Excel template for the lead sheet. The list's extra fields come from a REST
+   read of a few of its leads' extra (never a money column).
    Lead sheets: .xlsx through the same XLSX library as the caller app (loaded the first time it is needed),
    .csv through LeadUpload.parseCsv; phone checks through ImportCheck (js/lead-upload.js, js/import-check.js).
    Money: counts only, except the campaign's total amount due when the server says this admin may see money.
@@ -151,6 +155,7 @@
 
   const S = window.VectorAdminShared;
   const LU = window.LeadUpload;
+  const AR = window.VectorAddRow;   // "+ Add lead", "+ Add by hand" and the Excel template (js/admin/add-row.js)
   const el = S.el;
   const say = S.say;
   const $ = (id) => document.getElementById(id);
@@ -440,13 +445,59 @@
     return form;
   }
 
+  // "Add more people" on a calling list: "Import from Excel" (a lead sheet, as before) or "+ Add lead" (one person
+  // by hand, admin_add_leads with one row), side by side (js/admin/add-row.js). The open one stays open when the
+  // page reloads after an add.
+  let detailMode = 'excel';
+  let detailModeFor = null;
+  let oneNote = null;      // { text, ok }: said under "+ Add lead" after the page reloads
+  let listKeys = null;     // the extra fields of the open list's leads (null until read)
+  let listKeysFor = null;
+
+  // The extra fields the open list's leads already have (a REST read of a few leads' extra; admins may read them).
+  async function loadListKeys(c) {
+    if (listKeysFor === c.id && listKeys) return listKeys;
+    let keys = [];
+    try {
+      const { data, error } = await ctx.client.from('leads').select('extra').eq('campaign_id', c.id).limit(50);
+      if (!error) keys = AR.extraKeysOf(rows(data));
+    } catch (err) { keys = []; }
+    if (!current || current.id !== c.id) return keys;
+    listKeys = keys;
+    listKeysFor = c.id;
+    return keys;
+  }
+
   function buildMoreLeads() {
-    const form = el('form', { className: 'subform', id: 'camp-d-leads-form' }, [
-      el('h4', { text: 'Add more leads' }),
+    const c = current;
+    if (detailModeFor !== c.id) { detailMode = 'excel'; detailModeFor = c.id; oneNote = null; }
+    const template = AR.templateButton(el, say, 'camp-d-template',
+      () => AR.leadTemplate({ typeKey: c.call_type_key, money: ctx.canSeeMoney, extras: listKeysFor === c.id ? listKeys : [] }),
+      'vector-' + String(c.name || 'calling-list').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') + '-template.xlsx', 'camp-d-leads-msg');
+    const form = el('form', { className: 'addrow-pane', id: 'camp-d-leads-form', hidden: detailMode !== 'excel' }, [
       leadPicker('camp-d-leads'),
+      el('p', { className: 'addrow-template-row' }, [template]),
       el('div', { className: 'row' }, [el('button', { type: 'submit', text: 'Add leads' })]),
       msg('camp-d-leads-msg'),
     ]);
+    const one = el('div', { className: 'addrow-pane', id: 'camp-d-one', hidden: detailMode !== 'one' }, [
+      el('div', { id: 'camp-d-one-body' }),
+      el('p', { id: 'camp-d-one-result', className: 'msg', role: 'status' }),
+    ]);
+    const sw = AR.modeSwitch(el, 'Add people to this calling list', [
+      { key: 'excel', label: 'Import from Excel', id: 'camp-d-mode-excel', controls: 'camp-d-leads-form' },
+      { key: 'one', label: '+ Add lead', id: 'camp-d-mode-one', controls: 'camp-d-one' },
+    ], detailMode, (key) => {
+      detailMode = key;
+      form.hidden = key !== 'excel';
+      one.hidden = key !== 'one';
+      if (key === 'one') fillOneLead(c, true);
+    });
+    const wrap = el('div', { className: 'subform', id: 'camp-d-more' }, [el('h4', { text: 'Add more people' }), sw.node, form, one]);
+    if (oneNote) { const r = one.querySelector('#camp-d-one-result'); r.textContent = oneNote.text; r.classList.toggle('error', !oneNote.ok); oneNote = null; }
+    if (detailMode === 'one') setTimeout(() => fillOneLead(c, false), 0);
+    else loadListKeys(c);
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (busy) return;
@@ -467,7 +518,74 @@
         say('camp-d-leads-msg', 'Not all leads were added: ' + err.message, true);
       }
     });
-    return form;
+    return wrap;
+  }
+
+  // The "+ Add lead" form: name, phone, the list's extra fields, amount due (fees lists, money access only), where
+  // the number came from, and consent to calls and WhatsApp.
+  async function fillOneLead(c, focus) {
+    const body = $('camp-d-one-body');
+    if (!body || body.childNodes.length) { if (focus && $('camp-d-one-name')) $('camp-d-one-name').focus(); return; }
+    const known = await loadListKeys(c);
+    if (!current || current.id !== c.id || !$('camp-d-one-body') || $('camp-d-one-body').childNodes.length) return;
+    const fields = AR.leadFields(c.call_type_key, known);
+    const amount = AR.amountAllowed(c.call_type_key, ctx.canSeeMoney);
+    const input = (id, props) => el('input', Object.assign({ id, type: 'text', autocomplete: 'off' }, props || {}));
+    const form = el('form', { id: 'camp-d-one-form', className: 'addrow-form', novalidate: 'novalidate' }, [
+      el('div', { className: 'addrow-grid' }, [
+        el('label', null, ['Name (needed)', input('camp-d-one-name', { maxlength: '120', 'aria-required': 'true' })]),
+        el('label', null, ['Phone (needed)', input('camp-d-one-phone', { type: 'tel', inputmode: 'tel', maxlength: '20', placeholder: '98765 43210', 'aria-required': 'true' })]),
+      ].concat(fields.map((k, i) => el('label', null, [k, input('camp-d-one-x' + i, { maxlength: '300', 'data-key': k })])),
+        amount ? [el('label', null, ['Amount due (₹)', input('camp-d-one-amount', { inputmode: 'decimal' })])] : [],
+        [el('label', { className: 'addrow-wide' }, ['Where we got the number', input('camp-d-one-source', { maxlength: '300', placeholder: 'the enquiry form on our website' })])])),
+      el('div', { className: 'addrow-checks' }, [
+        el('label', { className: 'check' }, [el('input', { type: 'checkbox', id: 'camp-d-one-call', checked: true }), ' Agreed to get calls']),
+        el('label', { className: 'check' }, [el('input', { type: 'checkbox', id: 'camp-d-one-wa' }), ' Agreed to WhatsApp messages']),
+      ]),
+      el('div', { className: 'row' }, [el('button', { type: 'submit', id: 'camp-d-one-save', text: 'Add lead' })]),
+    ]);
+    form.addEventListener('submit', (e) => { e.preventDefault(); addOneLead(c, fields, amount); });
+    body.appendChild(form);
+    if (focus) $('camp-d-one-name').focus();
+  }
+
+  async function addOneLead(c, fields, amount) {
+    if (busy) return;
+    const extra = {};
+    fields.forEach((k, i) => { extra[k] = $('camp-d-one-x' + i).value; });
+    const one = AR.leadRow({
+      name: $('camp-d-one-name').value, phone: $('camp-d-one-phone').value, extra, amount: amount ? $('camp-d-one-amount').value : '',
+      source: $('camp-d-one-source').value, consent_call: $('camp-d-one-call').checked, consent_whatsapp: $('camp-d-one-wa').checked,
+    }, { amount });
+    const result = $('camp-d-one-result');
+    if (one.problem) {
+      say(result, one.problem.text, true);
+      const f = { name: 'camp-d-one-name', phone: 'camp-d-one-phone', amount: 'camp-d-one-amount' }[one.problem.field];
+      if (f && $(f)) { $(f).setAttribute('aria-invalid', 'true'); $(f).focus(); }
+      return;
+    }
+    busy = true;
+    $('camp-d-one-save').disabled = true;
+    say(result, 'Adding…');
+    try {
+      const counts = await rpc('admin_add_leads', { p_campaign: c.id, p_rows: [one.row] });
+      busy = false;
+      const out = AR.oneLeadText(counts, one.row.name, c.name);
+      if (!out.ok) {
+        say(result, out.text, true);
+        $('camp-d-one-save').disabled = false;
+        if (/phone|number/.test(out.text)) $('camp-d-one-phone').focus();
+        return;
+      }
+      oneNote = { text: out.text + ' Add the next one, or go back to the list.', ok: true };
+      ctx.status(out.text);
+      await loadDetail(c.id);
+      if ($('camp-d-one-name')) $('camp-d-one-name').focus();
+    } catch (err) {
+      busy = false;
+      if ($('camp-d-one-save')) $('camp-d-one-save').disabled = false;
+      say(result, 'Not added: ' + err.message, true);
+    }
   }
 
   function buildDetailsEditor(c) {
@@ -696,6 +814,111 @@
     return total;
   }
 
+  // ---------- New calling list, step 3: "Import from Excel" or "+ Add by hand" ----------
+
+  let wizMode = 'excel';
+  // The hand table: its extra columns (from the call type), whether it has Amount due, and the rows typed so far.
+  let hand = { cols: [], amount: false, rows: [] };
+  const blankHandRow = () => ({ name: '', phone: '', extra: {}, amount: '' });
+  const wizTypeKey = () => { const sel = $('camp-w-type'); const t = sel ? types.find((x) => x.id === sel.value) : null; return t ? t.key : ''; };
+
+  function leadsStep() {
+    wizMode = 'excel';
+    hand = { cols: AR.leadFields(wizTypeKey(), []), amount: AR.amountAllowed(wizTypeKey(), ctx.canSeeMoney), rows: [blankHandRow()] };
+    const excel = el('div', { id: 'camp-w-excel', className: 'addrow-pane' }, [
+      leadPicker('camp-w-leads'),
+      el('p', { className: 'addrow-template-row' }, [AR.templateButton(el, say, 'camp-w-template',
+        () => AR.leadTemplate({ typeKey: wizTypeKey(), money: ctx.canSeeMoney }),
+        'vector-calling-list-template' + (wizTypeKey() ? '-' + wizTypeKey().replace(/_/g, '-') : '') + '.xlsx', 'camp-w-template-msg')]),
+      msg('camp-w-template-msg'),
+    ]);
+    const byHand = el('div', { id: 'camp-w-hand-pane', className: 'addrow-pane', hidden: true }, [
+      el('p', { className: 'muted small', text: 'Type a few people here: name and a 10-digit mobile number. Empty rows are left out.' }),
+      el('div', { id: 'camp-w-hand-box' }),
+      el('button', { type: 'button', id: 'camp-w-hand-add', text: '+ Add row' }),
+      el('p', { id: 'camp-w-hand-msg', className: 'msg', role: 'status' }),
+    ]);
+    const sw = AR.modeSwitch(el, 'How to add leads', [
+      { key: 'excel', label: 'Import from Excel', id: 'camp-w-mode-excel', controls: 'camp-w-excel' },
+      { key: 'hand', label: '+ Add by hand', id: 'camp-w-mode-hand', controls: 'camp-w-hand-pane' },
+    ], 'excel', (key) => {
+      wizMode = key;
+      excel.hidden = key !== 'excel';
+      byHand.hidden = key !== 'hand';
+      const card = $('camp-w-step3');
+      if (card) card.classList.toggle('addrow-by-hand', key === 'hand');
+      if (key === 'hand') { renderHand(); const first = $('camp-w-hand-name-0'); if (first) first.focus(); }
+      syncShareText();
+    });
+    byHand.querySelector('#camp-w-hand-add').addEventListener('click', () => {
+      readHand();
+      if (hand.rows.length >= AR.MAX_HAND_ROWS) { say('camp-w-hand-msg', 'At most ' + AR.MAX_HAND_ROWS + ' rows by hand. Use Import from Excel for more.', true); return; }
+      hand.rows.push(blankHandRow());
+      renderHand();
+      $('camp-w-hand-name-' + (hand.rows.length - 1)).focus();
+    });
+    return [sw.node, excel, byHand];
+  }
+
+  // The rows as typed (the table is the source while it is on the page).
+  function readHand() {
+    const body = $('camp-w-hand-body');
+    if (!body) return;
+    hand.rows = Array.from(body.querySelectorAll('tr')).map((tr, i) => {
+      const v = (id) => { const n = $(id); return n ? n.value : ''; };
+      const extra = {};
+      hand.cols.forEach((k, j) => { extra[k] = v('camp-w-hand-x' + j + '-' + i); });
+      return { name: v('camp-w-hand-name-' + i), phone: v('camp-w-hand-phone-' + i), extra, amount: hand.amount ? v('camp-w-hand-amount-' + i) : '' };
+    });
+  }
+
+  // The type changed: its usual columns. What was typed in Name, Phone and a column that stays is kept.
+  function syncHandColumns() {
+    readHand();
+    hand.cols = AR.leadFields(wizTypeKey(), []);
+    hand.amount = AR.amountAllowed(wizTypeKey(), ctx.canSeeMoney);
+    if (wizMode === 'hand') renderHand();
+  }
+
+  function renderHand() {
+    const box2 = $('camp-w-hand-box');
+    if (!box2) return;
+    box2.textContent = '';
+    if (!hand.rows.length) hand.rows.push(blankHandRow());
+    const cols = [['name', 'Name'], ['phone', 'Phone']].concat(hand.cols.map((k, j) => ['x' + j, k]), hand.amount ? [['amount', 'Amount due (₹)']] : []);
+    const valueOf = (r, key, j) => (key === 'name' ? r.name : key === 'phone' ? r.phone : key === 'amount' ? r.amount : (r.extra || {})[hand.cols[j]] || '');
+    const body = el('tbody', { id: 'camp-w-hand-body' }, hand.rows.map((r, i) => {
+      const cells = cols.map(([key, label], c) => {
+        const j = c - 2;
+        const props = { id: 'camp-w-hand-' + key + '-' + i, type: key === 'phone' ? 'tel' : 'text', autocomplete: 'off', value: valueOf(r, key, j),
+          'aria-label': label + ', row ' + (i + 1) };
+        if (key === 'phone') { props.inputmode = 'tel'; props.maxlength = '20'; }
+        if (key === 'amount') props.inputmode = 'decimal';
+        return el('td', { 'data-label': label }, [el('input', props)]);
+      });
+      const remove = el('button', { type: 'button', className: 'addrow-remove', text: 'Remove', 'aria-label': 'Remove row ' + (i + 1), disabled: hand.rows.length < 2 });
+      remove.addEventListener('click', () => {
+        readHand();
+        hand.rows.splice(i, 1);
+        renderHand();
+        $('camp-w-hand-add').focus();
+      });
+      return el('tr', null, cells.concat([el('td', { 'data-label': '', className: 'addrow-row-actions' }, [remove])]));
+    }));
+    box2.appendChild(el('table', { className: 'stack addrow-hand', id: 'camp-w-hand' }, [
+      el('thead', null, [el('tr', null, cols.map((x) => el('th', { text: x[1] })).concat([el('th', { text: '' })]))]),
+      body,
+    ]));
+    body.addEventListener('input', () => { say('camp-w-hand-msg', ''); syncShareText(); });
+  }
+
+  // The leads typed by hand, checked: { built: { rows, counts: { ready } }, problem } (problem: the first one).
+  function handResult() {
+    readHand();
+    const h = AR.handRows(hand.rows, { amount: hand.amount });
+    return { built: { rows: h.rows, counts: { ready: h.rows.length } }, problem: h.problems[0] || null };
+  }
+
   // ---------- New campaign ----------
 
   function buildWizard() {
@@ -773,10 +996,11 @@
       el('p', { className: 'muted small', id: 'camp-w-noscripts', text: 'Add Scripts to use a guided script. Without it, callers use the result buttons only.' }),
     ]));
     typeSel.addEventListener('change', fillScripts);
+    typeSel.addEventListener('change', syncHandColumns);
     scriptSel.addEventListener('change', () => { if (!$('camp-w-preview').hidden) renderPreview(); });
     if (hasScripts()) fillScripts();
 
-    steps.appendChild(step(3, 'Leads', [leadPicker('camp-w-leads')]));
+    steps.appendChild(step(3, 'Leads', leadsStep()));
 
     const target = el('input', { id: 'camp-w-target', type: 'number', min: '1', max: '10000', step: '1', inputmode: 'numeric', placeholder: '40' });
     steps.appendChild(step(4, 'Who can call', [
@@ -842,8 +1066,9 @@
   function syncShareText() {
     const sel = $('camp-w-share');
     if (!sel) return;
-    const built = pickerResult('camp-w-leads');
-    const n = built ? built.counts.ready : 0;
+    let n = 0;
+    if (wizMode === 'hand') { readHand(); n = AR.handRows(hand.rows, { amount: hand.amount }).counts.ready; }
+    else if (pickerResult('camp-w-leads')) n = pickerResult('camp-w-leads').counts.ready;
     const open = $('camp-w-who-all') && $('camp-w-who-all').checked;
     const callers = open ? 0 : checkedSeats('camp-w-seat').length;
     sel.options[0].textContent = LU.equalText(n, callers);
@@ -874,13 +1099,24 @@
   // then start. A failure after the campaign exists opens it, so the admin can finish there.
   async function saveWizard(start) {
     if (busy) return;
-    const built = pickerResult('camp-w-leads');
+    const byHand = wizMode === 'hand';
+    let built = pickerResult('camp-w-leads');
     const p = pickers['camp-w-leads'];
+    if (byHand) {
+      const h = handResult();
+      if (h.problem) {
+        say('camp-w-msg', h.problem.text, true);
+        const input = $('camp-w-hand-' + (h.problem.field === 'extra' ? 'name' : h.problem.field) + '-' + (h.problem.row - 1));
+        if (input) { input.setAttribute('aria-invalid', 'true'); input.focus(); }
+        return;
+      }
+      built = h.built;
+    }
     const f = {
       name: $('camp-w-name').value, typeId: $('camp-w-type').value,
       startDate: $('camp-w-startdate').value, endDate: $('camp-w-enddate').value, target: $('camp-w-target').value,
       leadCount: built ? built.counts.ready : 0, seatCount: checkedSeats('camp-w-seat').length,
-      moneyInExtra: p && p.sheet && p.map ? LU.moneyInExtra(p.sheet.header, p.map.extra) : [],
+      moneyInExtra: !byHand && p && p.sheet && p.map ? LU.moneyInExtra(p.sheet.header, p.map.extra) : [],
       openToAll: $('camp-w-who-all').checked,
       classLabel: classFromChoice(picked('camp-w-class'), $('camp-w-class-other').value),
       board: picked('camp-w-board'),
@@ -956,6 +1192,7 @@
     unmount() {
       ctx = null; box = null; campaigns = []; types = []; scripts = []; seats = []; features = null;
       current = null; pickers = {}; busy = false; seq++;
+      detailMode = 'excel'; detailModeFor = null; oneNote = null; listKeys = null; listKeysFor = null; wizMode = 'excel';
     },
   });
 })();

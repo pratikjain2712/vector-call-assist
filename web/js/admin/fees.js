@@ -9,7 +9,9 @@
      total fees, paid, due now and the last payment; a totals row; pages of 50.
    - One student (#fees?student=<id>): details, fee items (add, void with a reason), payments (record, reverse
      with a reason; reversals stay in the list), calls made to the parent, and a printable receipt per payment.
-   - Import students and fees from Excel or CSV (the same reader as the Campaigns tab), with a preview.
+   - Import students and fees from Excel or CSV (the same reader as the Campaigns tab), with a preview, and a
+     ready Excel template to fill. Beside it "+ Add student": one student by hand, with fees and "paid so far"
+     (js/admin/add-row.js); "Edit details" on a student's page uses the same form.
    - "Call parents with dues": a fees campaign made from the ledger.
    Who sees it: owners, managers who can see money, and Accounts seats (the shell shows Accounts only Fees and
    Reports). Owners and Accounts record payments and change the ledger; managers only read it and, with money
@@ -17,7 +19,7 @@
    Reads: accounts_students, accounts_student_detail, admin_fees_ledger, and the call_types,
    campaigns and scripts tables (the fees type, its running campaigns, live scripts). Writes:
    accounts_record_payment, accounts_reverse_payment, accounts_add_fee_item, accounts_void_fee_item,
-   accounts_import_students, accounts_create_fees_campaign. Contract: docs/data-contract.md, "Phase A.2".
+   accounts_import_students, accounts_save_student, accounts_create_fees_campaign. Contract: docs/data-contract.md, "Phase A.2".
    Money rules: ₹ only when the server returns it (money_hidden false); money the fees office recorded is
    "Paid (office)", amounts from calls are what the parent said (not paid yet). No bank, card or UPI ids: a reference is a UTR or cheque number.
    The pure helpers at the top are also loaded by tests/web/fees-tab.test.js (Node, no DOM). */
@@ -433,6 +435,7 @@
 
   const el = S.el;
   const say = S.say;
+  const AR = window.VectorAddRow;
   const $ = (id) => document.getElementById(id);
   const XLSX_URL = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
   const XLSX_SRI = 'sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw';
@@ -445,6 +448,7 @@
   let detail = null;       // accounts_student_detail of the open student
   let studentId = null;
   let wantPay = false;     // #fees?student=<id>&pay=1: focus the payment form once the student is shown
+  let pendingNote = '';    // said on the student's page once it is shown (after "+ Add student")
   let feesTypeId = null;
   let imp = null;          // { sheet, map, file, built }
   let xlsxLoading = null;
@@ -479,12 +483,20 @@
       msg('fees-summary-msg'),
     ]));
 
+    // Two ways to bring students in, side by side: an Excel sheet, or one by hand.
     const actions = el('div', { className: 'fees-actions', id: 'fees-actions' });
-    if (manage) actions.appendChild(el('button', { type: 'button', id: 'fees-import-open', text: 'Import students and fees' }));
-    if (canMakeCampaign(ctx.seat, ctx.canSeeMoney)) actions.appendChild(el('button', { type: 'button', id: 'fees-camp-open', text: 'Call parents with dues' }));
+    const opener = (id, text, controls) => el('button', { type: 'button', id, text, 'aria-expanded': 'false', 'aria-controls': controls });
+    if (manage) {
+      actions.appendChild(el('div', { className: 'addrow-switch', role: 'group', 'aria-label': 'Add students' }, [
+        opener('fees-import-open', 'Import from Excel', 'fees-import'),
+        opener('fees-add-open', '+ Add student', 'fees-add'),
+      ]));
+    }
+    if (canMakeCampaign(ctx.seat, ctx.canSeeMoney)) actions.appendChild(opener('fees-camp-open', 'Call parents with dues', 'fees-camp'));
     box.appendChild(actions);
 
     box.appendChild(el('div', { className: 'panel fees-import', id: 'fees-import', hidden: true }));
+    box.appendChild(el('div', { className: 'panel fees-addst', id: 'fees-add', hidden: true }));
     box.appendChild(el('div', { className: 'panel fees-camp', id: 'fees-camp', hidden: true }));
 
     const boardSel = el('select', { id: 'fees-f-board' }, [el('option', { value: '', text: 'All boards' })]
@@ -533,15 +545,21 @@
     $('fees-prev').addEventListener('click', () => { page--; renderList(); });
     $('fees-next').addEventListener('click', () => { page++; renderList(); });
     if ($('fees-import-open')) $('fees-import-open').addEventListener('click', () => togglePanel('fees-import', openImport));
+    if ($('fees-add-open')) $('fees-add-open').addEventListener('click', () => togglePanel('fees-add', openAddStudent));
     if ($('fees-camp-open')) $('fees-camp-open').addEventListener('click', () => togglePanel('fees-camp', openCampaign));
   }
 
+  const PANELS = { 'fees-import': 'fees-import-open', 'fees-add': 'fees-add-open', 'fees-camp': 'fees-camp-open' };
+  function syncOpeners() {
+    Object.keys(PANELS).forEach((x) => { const b = $(PANELS[x]); if (b) b.setAttribute('aria-expanded', String(!$(x).hidden)); });
+  }
   function togglePanel(id, open) {
     const p = $(id);
-    if (!p.hidden) { p.hidden = true; return; }
-    ['fees-import', 'fees-camp'].forEach((x) => { $(x).hidden = x !== id; });
+    if (!p.hidden) { p.hidden = true; syncOpeners(); return; }
+    Object.keys(PANELS).forEach((x) => { $(x).hidden = x !== id; });
     open();
     p.hidden = false;
+    syncOpeners();
     const h = p.querySelector('h2');
     if (h) { h.setAttribute('tabindex', '-1'); h.focus(); }
   }
@@ -559,7 +577,7 @@
     if (!report) $('fees-view-students').setAttribute('aria-current', 'page');
     if (report) $('fees-view-report').setAttribute('aria-current', 'page'); else $('fees-view-report').removeAttribute('aria-current');
     ['fees-summary', 'fees-actions', 'fees-list'].forEach((x) => { $(x).hidden = !listView; });
-    if (!listView) { $('fees-import').hidden = true; $('fees-camp').hidden = true; }
+    if (!listView) { Object.keys(PANELS).forEach((x) => { $(x).hidden = true; }); syncOpeners(); }
     $('fees-student').hidden = !id || report;
     $('fees-report').hidden = !report;
     if (report) {
@@ -758,6 +776,7 @@
       if (n !== seq.detail || !ctx) return;
       detail = d || {};
       renderStudent();
+      if (pendingNote) { say('fs-msg', pendingNote); pendingNote = ''; }
       if (wantPay) focusPay();
     } catch (err) {
       if (n !== seq.detail || !ctx) return;
@@ -789,8 +808,13 @@
     const manage = canManage(ctx.seat);
 
     wrap.appendChild(el('p', { className: 'fees-back' }, [el('a', { href: '#fees', id: 'fs-back', text: '← All students' })]));
+    let editBtn = null;
+    if (manage) {
+      editBtn = el('button', { type: 'button', id: 'fs-edit-open', text: 'Edit details', 'aria-expanded': 'false', 'aria-controls': 'fs-edit' });
+      editBtn.addEventListener('click', () => toggleEdit(editBtn));
+    }
     const head = el('div', { className: 'panel' }, [
-      el('h2', { id: 'fs-name', tabindex: '-1', text: st.name || 'Student' }),
+      el('div', { className: 'fees-head-row' }, [el('h2', { id: 'fs-name', tabindex: '-1', text: st.name || 'Student' }), editBtn]),
       el('dl', { className: 'fees-facts' }, [
         fact('Admission no', st.admission_no),
         fact('Class', [st.class_label, st.section].filter(Boolean).join('-') + (st.board ? ' · ' + st.board : '')),
@@ -803,6 +827,7 @@
       ]),
     ]);
     wrap.appendChild(head);
+    if (manage) wrap.appendChild(el('div', { className: 'panel', id: 'fs-edit', hidden: true }));
 
     const cards = el('div', { className: 'fees-cards', id: 'fs-cards' }, [
       card('Due now', hidden ? '—' : rupees2(b.balance_due_now || 0), 'fees due till today, minus paid', Number(b.balance_due_now) > 0 ? 'bad' : 'good', 'fs-due'),
@@ -1083,6 +1108,244 @@
   }
   const afterPrint = () => document.body.classList.remove('fees-printing');
 
+  // ---------- + Add student, and Edit details (js/admin/add-row.js) ----------
+
+  // The ids of a student form's fields, by the key AR.studentProblem names.
+  const FIELD_IDS = { name: 'name', admission_no: 'adm', class_label: 'class', section: 'section', board: 'board', academic_year: 'year',
+    parent_name: 'parent', phone: 'phone', alt_phone: 'alt', 'paid-amount': 'paid', 'paid-paid_on': 'paid-on', 'paid-mode': 'paid-mode',
+    'paid-reference': 'paid-ref', fees: 'fee-add' };
+
+  // The student form: details, and with withMoney the fees (one empty line to start) and "paid so far".
+  // prefix 'fsa' (+ Add student) or 'fse' (Edit details); st: the student to edit, or {}.
+  function studentForm(prefix, st, withMoney, submitText) {
+    const x = st || {};
+    const id = (k) => prefix + '-' + k;
+    const input = (k, props) => el('input', Object.assign({ id: id(k), type: 'text', autocomplete: 'off' }, props || {}));
+    const need = (text) => text + ' (needed)';
+    const phoneOptional = !!x.id && !x.phone;   // a student saved without a phone can stay without one
+    const boardSel = el('select', { id: id('board') }, [el('option', { value: '', text: 'Not set' })].concat(BOARDS.map((b) => el('option', { value: b, text: b }))));
+    boardSel.value = x.board || '';
+    const form = el('form', { id: id('form'), className: 'addrow-form', novalidate: 'novalidate' }, [
+      el('div', { className: 'addrow-grid' }, [
+        field(need('Student name'), input('name', { maxlength: '120', value: x.name || '', required: true, 'aria-required': 'true' })),
+        field('Admission no', input('adm', { maxlength: '40', value: x.admission_no || '' })),
+        field('Class', input('class', { maxlength: '20', value: x.class_label || '', placeholder: '8' })),
+        field('Section', input('section', { maxlength: '20', value: x.section || '', placeholder: 'A' })),
+        field('Board', boardSel),
+        field('Academic year', input('year', { maxlength: '9', value: x.academic_year || '', placeholder: '2026-27' })),
+        field('Parent name', input('parent', { maxlength: '120', value: x.parent_name || '' })),
+        field(phoneOptional ? 'Phone' : need('Phone'), input('phone', { type: 'tel', inputmode: 'tel', maxlength: '20', value: x.phone || '',
+          placeholder: '98765 43210', 'aria-required': phoneOptional ? null : 'true' })),
+        field('Alternate phone', input('alt', { type: 'tel', inputmode: 'tel', maxlength: '20', value: x.alt_phone || '' })),
+      ]),
+    ]);
+    if (withMoney) {
+      const lines = el('div', { id: id('fees'), className: 'addrow-fees' });
+      const addFee = el('button', { type: 'button', id: id('fee-add'), text: '+ Add a fee' });
+      addFee.addEventListener('click', () => {
+        addFeeLine(prefix);
+        const all = lines.querySelectorAll('.addrow-fee');
+        if (all.length) all[all.length - 1].querySelector('input').focus();
+      });
+      form.appendChild(el('fieldset', { className: 'addrow-set' }, [
+        el('legend', { text: 'Fees (optional)' }),
+        el('p', { className: 'muted small', text: 'Each fee with its amount and due date. You can add more later on the student\'s page.' }),
+        lines, addFee,
+      ]));
+      const mode = el('select', { id: id('paid-mode') }, MODES.map((m) => el('option', { value: m[0], text: m[1] })));
+      mode.value = 'cash';
+      form.appendChild(el('fieldset', { className: 'addrow-set' }, [
+        el('legend', { text: 'Paid so far (optional)' }),
+        el('p', { className: 'muted small', text: 'Money already paid. It is recorded as a payment, ' + RECORDED_IN_LEDGER + ', on the date you pick. A UPI, bank or card payment needs its UTR or transaction number; never a UPI ID or account number.' }),
+        el('div', { className: 'addrow-grid' }, [
+          field('Amount (₹)', input('paid', { inputmode: 'decimal' })),
+          field('Paid on', input('paid-on', { type: 'date', value: today(), max: today() })),
+          field('Mode', mode),
+          field('Reference', input('paid-ref', { maxlength: '60', placeholder: 'UTR or cheque no.' })),
+        ]),
+      ]));
+      addFeeLine(prefix, lines);
+    }
+    form.appendChild(el('div', { id: id('dups'), className: 'addrow-dups', role: 'alert', hidden: true }));
+    form.appendChild(el('div', { className: 'row' }, [el('button', { type: 'submit', id: id('save'), text: submitText })]));
+    form.appendChild(msg(id('msg')));
+    return form;
+  }
+
+  // One fee line: name, amount, due date and Remove. lines: the container (found by id when it is on the page).
+  let feeLineSeq = 0;
+  function addFeeLine(prefix, into) {
+    const lines = into || $(prefix + '-fees');
+    if (!lines) return;
+    const n = lines.querySelectorAll('.addrow-fee').length;
+    if (n >= AR.MAX_FEES) return;
+    const k = prefix + '-fee' + (++feeLineSeq);
+    const line = el('fieldset', { className: 'addrow-fee' }, [
+      el('legend', { className: 'sr-only', text: 'Fee ' + (n + 1) }),
+      field('Fee', el('input', { id: k + '-head', type: 'text', maxlength: '80', placeholder: 'Term 2 tuition', autocomplete: 'off', 'data-k': 'head' })),
+      field('Amount (₹)', el('input', { id: k + '-amount', type: 'text', inputmode: 'decimal', autocomplete: 'off', 'data-k': 'amount' })),
+      field('Due date', el('input', { id: k + '-due', type: 'date', 'data-k': 'due_date' })),
+    ]);
+    const remove = el('button', { type: 'button', className: 'addrow-remove', text: 'Remove', 'aria-label': 'Remove fee ' + (n + 1) });
+    remove.addEventListener('click', () => { line.remove(); const add = $(prefix + '-fee-add'); if (add) add.focus(); });
+    line.appendChild(remove);
+    lines.appendChild(line);
+  }
+
+  function readStudentForm(prefix) {
+    const v = (k) => { const n = $(prefix + '-' + k); return n ? n.value : ''; };
+    const lines = $(prefix + '-fees');
+    return {
+      name: v('name'), admission_no: v('adm'), class_label: v('class'), section: v('section'), board: v('board'),
+      academic_year: v('year'), parent_name: v('parent'), phone: v('phone'), alt_phone: v('alt'),
+      fees: lines ? Array.from(lines.querySelectorAll('.addrow-fee')).map((line) => {
+        const get = (k) => line.querySelector('[data-k="' + k + '"]').value;
+        return { head: get('head'), amount: get('amount'), due_date: get('due_date') };
+      }) : [],
+      paid: { amount: v('paid'), paid_on: v('paid-on'), mode: v('paid-mode'), reference: v('paid-ref') },
+    };
+  }
+
+  // Says the problem and puts the cursor in its field.
+  function showProblem(prefix, problem) {
+    say(prefix + '-msg', problem.text, true);
+    let node = null;
+    const fee = /^fee-(\d+)-(\w+)$/.exec(problem.field);
+    if (fee) {
+      const line = $(prefix + '-fees').querySelectorAll('.addrow-fee')[Number(fee[1])];
+      node = line && line.querySelector('[data-k="' + fee[2] + '"]');
+    } else node = $(prefix + '-' + (FIELD_IDS[problem.field] || problem.field));
+    if (node) {
+      node.setAttribute('aria-invalid', 'true');
+      node.focus();
+      node.addEventListener('input', () => node.removeAttribute('aria-invalid'), { once: true });
+    }
+  }
+
+  // Students that look the same, shown before saving. A same admission number blocks the save (the database
+  // refuses it); the same name and phone asks "Save anyway". Returns true when the save may go on.
+  function checkDuplicates(prefix, f, selfId, force) {
+    const box2 = $(prefix + '-dups');
+    box2.textContent = '';
+    box2.hidden = true;
+    const dups = AR.findDuplicates(f, allRows, selfId);
+    if (!dups.length) return true;
+    const blocking = dups.some((d) => d.reason === 'admission');
+    if (!blocking && force) return true;
+    box2.appendChild(el('p', { className: 'addrow-dups-title', text: blocking ? 'This admission number is already used:' : 'This student may already be in the list:' }));
+    box2.appendChild(el('ul', { id: prefix + '-dups-list' }, dups.map((d) => el('li', null, [
+      el('span', { text: d.text + ' ' }),
+      el('a', { href: S.buildHash('fees', { student: d.student_id }), text: 'Open ' + d.name }),
+    ]))));
+    if (blocking) {
+      box2.appendChild(el('p', { className: 'small', text: 'Change the admission number, or open that student and edit it there.' }));
+    } else {
+      const anyway = el('button', { type: 'button', id: prefix + '-anyway', text: 'Save anyway (it is a different student)' });
+      anyway.addEventListener('click', () => (prefix === 'fsa' ? saveNewStudent(true) : saveEdit(true)));
+      box2.appendChild(el('div', { className: 'row' }, [anyway]));
+    }
+    box2.hidden = false;
+    say(prefix + '-msg', blocking ? 'Not saved: the admission number is already used.' : 'Check the student above before you save.', blocking);
+    return false;
+  }
+
+  function openAddStudent() {
+    const p = $('fees-add');
+    p.textContent = '';
+    p.appendChild(el('h2', { text: 'Add a student' }));
+    p.appendChild(el('p', { className: 'muted small', text: 'One student by hand. Many students? Use Import from Excel.' }));
+    const form = studentForm('fsa', {}, true, 'Save student');
+    form.addEventListener('submit', (e) => { e.preventDefault(); saveNewStudent(false); });
+    p.appendChild(form);
+  }
+
+  let saving = false;
+  async function saveNewStudent(force) {
+    if (saving) return;
+    const f = readStudentForm('fsa');
+    const problem = AR.studentProblem(f, { today: today(), withMoney: true });
+    if (problem) { showProblem('fsa', problem); return; }
+    if (!checkDuplicates('fsa', f, null, force)) return;
+    saving = true;
+    const btn = $('fsa-save');
+    btn.disabled = true;
+    say('fsa-msg', 'Saving…');
+    let id = null;
+    try {
+      id = await ctx.rpc('accounts_save_student', { p_student: null, p_data: AR.studentData(f) });
+      if (Array.isArray(id)) id = id[0];
+    } catch (err) {
+      saving = false;
+      btn.disabled = false;
+      say('fsa-msg', 'Not saved: ' + errText(err), true);
+      return;
+    }
+    if (!ctx) return;
+    // The student exists now: its fees and "paid so far" follow. What fails is said on the student's page.
+    const fees = AR.studentFees(f);
+    const pay = AR.studentPayment(f);
+    const failed = [];
+    let added = 0;
+    for (const fee of fees) {
+      try { await ctx.rpc('accounts_add_fee_item', Object.assign({ p_student: id }, fee)); added++; } catch (err) { failed.push('fee "' + fee.p_head + '": ' + errText(err)); }
+    }
+    let paidText = '';
+    if (pay) {
+      try {
+        await ctx.rpc('accounts_record_payment', Object.assign({ p_student: id }, pay));
+        paidText = ' Paid so far ' + rupees2(pay.p_amount) + ' recorded.';
+      } catch (err) { failed.push('paid so far: ' + errText(err)); }
+    }
+    saving = false;
+    if (!ctx) return;
+    pendingNote = AR.studentData(f).name + ' added' + (added ? ' with ' + plural(added, 'fee', 'fees') : '') + '.' + paidText +
+      (failed.length ? ' Not saved: ' + failed.join('; ') + '. Add it below.' : '');
+    $('fees-add').hidden = true;
+    $('fees-add').textContent = '';
+    syncOpeners();
+    loadAll();
+    ctx.navigate('fees', { student: id });
+  }
+
+  function toggleEdit(btn) {
+    const p = $('fs-edit');
+    if (!p.hidden) { p.hidden = true; p.textContent = ''; btn.setAttribute('aria-expanded', 'false'); return; }
+    const st = (detail && detail.student) || {};
+    p.textContent = '';
+    p.appendChild(el('h3', { id: 'fs-edit-h', tabindex: '-1', text: 'Edit details' }));
+    const form = studentForm('fse', st, false, 'Save details');
+    const cancel = el('button', { type: 'button', id: 'fse-cancel', text: 'Cancel' });
+    cancel.addEventListener('click', () => { toggleEdit(btn); btn.focus(); });
+    form.querySelector('.row').appendChild(cancel);
+    form.addEventListener('submit', (e) => { e.preventDefault(); saveEdit(false); });
+    p.appendChild(form);
+    p.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    $('fs-edit-h').focus();
+  }
+
+  async function saveEdit(force) {
+    if (saving) return;
+    const st = (detail && detail.student) || {};
+    const f = readStudentForm('fse');
+    const problem = AR.studentProblem(f, { today: today(), phoneRequired: !!st.phone });
+    if (problem) { showProblem('fse', problem); return; }
+    if (!checkDuplicates('fse', f, studentId, force)) return;
+    saving = true;
+    $('fse-save').disabled = true;
+    say('fse-msg', 'Saving…');
+    try {
+      await ctx.rpc('accounts_save_student', { p_student: studentId, p_data: AR.studentData(f) });
+      saving = false;
+      await reloadStudent('Details saved.');
+    } catch (err) {
+      saving = false;
+      if (!ctx || !$('fse-save')) return;
+      $('fse-save').disabled = false;
+      say('fse-msg', 'Not saved: ' + errText(err), true);
+    }
+  }
+
   // ---------- import ----------
 
   function openImport() {
@@ -1093,6 +1356,9 @@
     input.addEventListener('change', () => { if (input.files && input.files[0]) readImportFile(input.files[0]); });
     p.appendChild(el('h2', { text: 'Import students and fees' }));
     p.appendChild(el('p', { className: 'muted small', text: 'One student per row. Columns: admission no, student, class, section, board, parent, phone, alternate phone, academic year, then each fee (name, amount, due date), and paid so far. A student with a known admission number is updated, not added twice.' }));
+    p.appendChild(el('p', { className: 'addrow-template-row' }, [
+      AR.templateButton(el, say, 'fees-imp-template', () => AR.studentTemplate(), 'vector-students-and-fees-template.xlsx', 'fees-imp-msg'),
+    ]));
     p.appendChild(el('label', { className: 'drop', for: 'fees-imp-file' }, [
       el('span', { className: 'drop-title', id: 'fees-imp-name', text: 'Choose an Excel or CSV file' }),
       el('span', { className: 'muted small', text: 'First row: column names.' }),
@@ -1374,7 +1640,7 @@
       clearTimeout(searchTimer);
       Object.keys(seq).forEach((k) => { seq[k]++; });
       ctx = null; box = null; allRows = []; listRows = []; detail = null; studentId = null; feesTypeId = null;
-      imp = null; summary = null; wantPay = false; page = 1;
+      imp = null; summary = null; wantPay = false; page = 1; pendingNote = ''; saving = false;
     },
   });
 })();

@@ -215,3 +215,44 @@ button.linkish:hover { color: var(--accent-hover); background: none; }
   .who { width: 100%; justify-content: flex-end; }
   .who > * { flex: 0 0 auto; }
 }
+
+/* ---------- add row (js/admin/add-row.js): "Import from Excel | + Add one", the add forms, the hand table ---------- */
+.addrow-switch { display: flex; gap: 8px; flex-wrap: wrap; }
+.addrow-switch > button[aria-pressed="true"], .addrow-switch > button[aria-expanded="true"] {
+  background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.addrow-switch > button[aria-pressed="true"]:hover, .addrow-switch > button[aria-expanded="true"]:hover {
+  background: var(--accent-hover); border-color: var(--accent-hover); color: var(--on-accent); }
+.addrow-pane { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.addrow-form { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.addrow-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 10px 14px; min-width: 0; }
+.addrow-grid input, .addrow-grid select { width: 100%; }
+.addrow-wide { grid-column: 1 / -1; }
+.addrow-set { border: 1px solid var(--line); border-radius: var(--radius-button); padding: 10px 14px 14px; margin: 0; min-width: 0;
+  display: flex; flex-direction: column; gap: 10px; }
+.addrow-set legend { font-weight: 600; font-size: 13px; padding: 0 4px; color: var(--heading); }
+.addrow-set > p { margin: 0; }
+.addrow-set > button { align-self: flex-start; }
+.addrow-fees { display: flex; flex-direction: column; gap: 10px; }
+.addrow-fee { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px 10px; align-items: end;
+  border: 0; padding: 0; margin: 0; min-width: 0; }
+.addrow-fee input { width: 100%; }
+.addrow-dups { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: var(--radius-button); padding: 10px 14px; color: var(--heading); }
+.addrow-dups ul { margin: 6px 0; padding-left: 20px; }
+.addrow-dups p { margin: 0; }
+.addrow-dups .row { margin-top: 8px; }
+.addrow-dups-title { font-weight: 600; }
+.addrow-checks { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.addrow-template-row { margin: 0; }
+.addrow-pane > button { align-self: flex-start; }
+.addrow-hand th, .addrow-hand td { padding: 6px; }
+.addrow-hand input { width: 100%; min-width: 0; }
+.addrow-hand td.addrow-row-actions { width: 1%; white-space: nowrap; }
+@media (max-width: 699px) {
+  .addrow-switch > button { flex: 1 1 0; min-width: 0; }
+  .addrow-pane > button { align-self: stretch; }
+  .addrow-fee { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .addrow-fee > label:first-of-type, .addrow-fee > .addrow-remove { grid-column: 1 / -1; }
+  .addrow-hand tr { padding: 8px 0; }
+  .addrow-hand td.addrow-row-actions { width: 100%; }
+  .addrow-hand td.addrow-row-actions::before { content: none; }
+}
