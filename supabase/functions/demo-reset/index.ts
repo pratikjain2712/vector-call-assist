@@ -8,7 +8,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 const DEMO_OWNER = "owner.sunrise@example.com";
 // Pinned to a commit so a later push cannot change what this function runs.
 const SEED_URL =
-  "https://raw.githubusercontent.com/pratikjain2712/vector-call-assist/29c6f34/supabase/demo/demo_seed.sql";
+  "https://raw.githubusercontent.com/pratikjain2712/vector-call-assist/7a27f4a/supabase/demo/demo_seed.sql";
 
 // The seed is written for psql: drop its backslash commands and fill in its three variables.
 function plainSql(text: string): string {

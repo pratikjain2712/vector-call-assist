@@ -252,6 +252,6 @@ person's amount due is their student's balance, so "Due now" is what is still ow
 
 The project has a server function `demo-reset` (supabase/functions/demo-reset). Signed in as the demo owner, a POST to
 `https://ehkjtowrcsplidjjjjca.supabase.co/functions/v1/demo-reset` rebuilds the demo institute with today's dates
-(about a minute). It refuses every other login. It runs the seed pinned to commit 29c6f34 (the Phase A.2 demo:
+(about a minute). It refuses every other login. It runs the seed pinned to commit 7a27f4a (the Phase A.2 demo with fee plans and Autopilot:
 ledger, Accounts login, open campaigns). After changing demo_seed.sql, push it, update SEED_URL in the function to
 that commit and deploy the function again. The 8 demo logins must exist first.
