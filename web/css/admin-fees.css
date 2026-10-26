@@ -124,3 +124,98 @@
   .tab-fees .fees-actions > * { flex: 1 1 100%; }
   .tab-fees .fees-actions > button { width: 100%; }
 }
+
+/* ---------- Fees basics (js/admin/fees-basics.js): fee plan, discounts, today's collection ----------
+   Same type scale and control sizes as the rest of the admin app (admin.css); kept plain: one main button per
+   screen, rare options behind "More options". */
+.tab-fees td.fees-disc { color: var(--ok); }
+.tab-fees .fees-r-account { margin-top: 10px; border-top: 2px solid var(--line); padding-top: 6px; }
+.tab-fees #fees-r-discount { color: var(--ok); font-weight: 600; }
+.tab-fees #fees-r-left { font-weight: 700; }
+
+/* the Fees header: title on the left, "Today's collection" on the right */
+.tab-fees .fees-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.tab-fees .button-link.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
+.tab-fees .button-link.primary:hover { background: var(--accent-hover); color: var(--on-accent); }
+
+/* steps */
+.tab-fees .fb-wizard { display: flex; flex-direction: column; gap: 12px; }
+.tab-fees .fb-step-no { margin: 0; font-size: 13px; font-weight: 600; color: var(--muted); }
+.tab-fees .fb-step h3 { margin: 2px 0 0; }
+.tab-fees .fb-step h3:focus, .tab-fees .fb-intro h2:focus, .tab-fees .fb-day-head h2:focus { outline: none; }
+.tab-fees .fb-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 10px 14px; }
+.tab-fees .fb-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.tab-fees .fb-field input, .tab-fees .fb-field select { width: 100%; }
+.tab-fees .fb-help { font-size: 13px; color: var(--muted); margin: 0; font-weight: 400; }
+.tab-fees .fb-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.tab-fees .fb-sub { margin: 8px 0 0; }
+.tab-fees .fb-lead { margin: 0; color: var(--heading); }
+.tab-fees .fb-more summary { cursor: pointer; color: var(--accent); font-size: 14px; padding: 4px 0; }
+.tab-fees .fb-more[open] > summary { margin-bottom: 10px; }
+.tab-fees .fb-sentence { font-weight: 600; color: var(--heading); background: var(--accent-soft); border-radius: var(--radius-button);
+  padding: 10px 14px; margin: 0; }
+.tab-fees .fb-done { color: var(--heading); background: var(--ok-soft); border-radius: var(--radius-button); padding: 10px 14px; margin: 0; }
+.tab-fees .fb-callout { color: var(--warn); font-weight: 600; margin: 8px 0; }
+.tab-fees .fb-ok { color: var(--ok); margin: 8px 0; }
+.tab-fees .fb-radios, .tab-fees .fb-fee-ticks { display: flex; flex-direction: column; gap: 6px; }
+.tab-fees .fb-remove { align-self: end; justify-self: start; color: var(--danger); border-color: transparent; background: transparent; }
+
+/* fee plan cards and fee lines */
+.tab-fees .fb-plans { display: flex; flex-direction: column; gap: var(--gap); }
+.tab-fees .fb-plan-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.tab-fees .fb-plan-head h3 { margin: 0; }
+.tab-fees .fb-plan-count { margin: 0; color: var(--muted); }
+.tab-fees .fb-fee-list, .tab-fees .fb-pv-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.tab-fees .fb-fee-list li, .tab-fees .fb-pv-list li { display: grid; grid-template-columns: 1fr auto; gap: 0 12px; padding: 6px 0; border-bottom: 1px solid var(--line-soft); }
+.tab-fees .fb-fee-name { font-weight: 600; color: var(--heading); overflow-wrap: anywhere; }
+.tab-fees .fb-fee-amt { font-weight: 600; color: var(--heading); font-variant-numeric: tabular-nums; text-align: right; }
+.tab-fees .fb-fee-sub { grid-column: 1 / -1; color: var(--muted); font-size: 13px; }
+.tab-fees .fb-pv-list li { grid-template-columns: 1fr; }
+.tab-fees .fb-plan-total, .tab-fees .fb-plan-rules { margin: 8px 0 0; }
+.tab-fees .fb-fees, .tab-fees .fb-rules { display: flex; flex-direction: column; gap: 10px; }
+.tab-fees .fb-fee { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 10px 14px; align-items: end;
+  border: 1px solid var(--line); border-radius: var(--radius-button); padding: 10px 14px 14px; margin: 0; min-width: 0; }
+.tab-fees .fb-fee legend { font-weight: 600; font-size: 13px; padding: 0 4px; color: var(--heading); }
+.tab-fees .fb-tick-table td.fb-tick { text-align: center; }
+.tab-fees .fb-tick-table .check { justify-content: center; }
+.tab-fees .fb-tick-scroll { max-height: 480px; overflow: auto; }
+
+/* today's collection */
+.tab-fees .fb-day-bar { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; justify-content: space-between; }
+.tab-fees .fb-sheet { display: flex; flex-direction: column; gap: var(--gap); }
+.tab-fees .fb-sheet-inst { margin: 0; font-family: var(--font-display); font-weight: 800; color: var(--heading); }
+.tab-fees .fb-sheet-head h3 { margin: 2px 0 10px; color: var(--muted); }
+.tab-fees .fb-grand { border: 1px solid var(--line); border-radius: var(--radius-card); padding: 14px 16px; }
+.tab-fees .fb-grand-label { font-size: 13px; color: var(--muted); }
+.tab-fees .fb-grand-value { font-family: var(--font-display); font-weight: 800; font-size: 26px; color: var(--ok);
+  font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.tab-fees .fb-grand-words { color: var(--heading); }
+.tab-fees .fb-grand-sub { font-size: 13px; color: var(--muted); }
+.tab-fees .fb-modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 6px; }
+.tab-fees .fb-mode { border: 1px solid var(--line); border-radius: var(--radius-button); padding: 10px 12px; }
+.tab-fees .fb-mode.empty { opacity: .6; }
+.tab-fees .fb-mode-label { font-size: 13px; color: var(--muted); }
+.tab-fees .fb-mode-value { font-weight: 700; font-size: 17px; color: var(--heading); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.tab-fees .fb-mode-sub { font-size: 13px; color: var(--muted); }
+.tab-fees .fb-total-line { font-weight: 600; margin: 8px 0 0; color: var(--heading); }
+.tab-fees .fb-sign { margin: 4px 0 0; color: var(--muted); }
+.tab-fees .fb-day-table tr.reversed td { color: var(--muted); }
+.tab-fees .fb-day-table tr.reversed td.num { text-decoration: line-through; }
+
+@media (max-width: 699px) {
+  .tab-fees .fees-head > * { flex: 1 1 100%; }
+  .tab-fees .fees-head > .button-link { text-align: center; }
+  .tab-fees .fb-actions > button, .tab-fees .fb-actions > .button-link { flex: 1 1 100%; width: 100%; }
+  .tab-fees .fb-modes { grid-template-columns: 1fr 1fr; }
+  .tab-fees .fb-tick-scroll { max-height: none; }
+  .tab-fees #fs-discounts .fees-head-row > button { width: 100%; }
+}
+
+/* Printing the day closing: fees-basics.js puts fees-printing-day on <body> for the print. */
+@media print {
+  body.fees-printing-day * { visibility: hidden; }
+  body.fees-printing-day .tab-fees #dc-sheet, body.fees-printing-day .tab-fees #dc-sheet * { visibility: visible; }
+  body.fees-printing-day .tab-fees #dc-sheet { position: absolute; left: 0; top: 0; width: 100%; background: #fff; color: #000; }
+  body.fees-printing-day .tab-fees #dc-sheet .panel { border: 0; padding: 6px 0; }
+  body.fees-printing-day .tab-fees #dc-sheet * { color: #000 !important; background: #fff !important; }
+}

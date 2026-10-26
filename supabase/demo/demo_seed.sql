@@ -622,6 +622,11 @@ end $$;
 -- 6 days (Class 8). Some students take the school bus (a bus fee per term). Payments after the import come
 -- from the calls (section 9b) and, for Class 8, from parents paying early. Everything here is a formula of the
 -- student's number, so the ledger is the same on every load (dates shifted to today).
+-- Fees basics: the fees come from three fee plans (Class 8 CBSE, Class 9 ICSE, Class 10 CBSE: Term 1 and Term 2
+-- tuition for everyone, the bus fee per term for students who use the bus), each fee item linked to its plan
+-- item, so the Fee plan screen shows nothing left to apply and applying it adds nothing. A few discounts: the
+-- Class 8 twins' second child has the plan's "Sibling 10% on tuition"; three teachers' children (Class 9 and 10)
+-- have "Staff child 50% on tuition", approved by the owner. Opening balances pay Term 1 net of the discount.
 
 create temp table demo_st (
   cls       int not null,
@@ -655,9 +660,30 @@ declare
   nm  text; par text; ph text; sec text;
   pd  date;
   md  text;
+  pct numeric;
+  gid uuid;
+  plan uuid;
+  sib_rule uuid := '5a1e0000-0000-4000-8000-000000000511';
 begin
   perform setseed(current_setting('demo.seed')::float8 / 2);
+  -- The three fee plans, made by Kavita just before the import.
+  insert into public.fee_plans (id, institute_id, academic_year, class_label, board, auto_apply, created_by, created_at, updated_at) values
+    ('5a1e0000-0000-4000-8000-000000000501', inst, '2026-27', '8th', 'CBSE', true, kavita, imp_t - interval '25 minutes', imp_t - interval '25 minutes'),
+    ('5a1e0000-0000-4000-8000-000000000502', inst, '2026-27', '9th', 'ICSE', true, kavita, imp_t - interval '20 minutes', imp_t - interval '20 minutes'),
+    ('5a1e0000-0000-4000-8000-000000000503', inst, '2026-27', '10th', 'CBSE', true, kavita, imp_t - interval '15 minutes', imp_t - interval '15 minutes');
+  insert into public.fee_plan_items (institute_id, plan_id, head, amount, due_date, who, sort_order, created_at, updated_at)
+  select inst, p.id, x.head, x.amt, x.due, x.who, x.ord, imp_t - interval '15 minutes', imp_t - interval '15 minutes'
+  from (values (8, '5a1e0000-0000-4000-8000-000000000501'::uuid, 14000, 5500, today + 6),
+               (9, '5a1e0000-0000-4000-8000-000000000502'::uuid, 15000, 5500, today - 40),
+               (10, '5a1e0000-0000-4000-8000-000000000503'::uuid, 18000, 6000, today - 15)) p(c, id, tu, bu, due2)
+  cross join lateral (values ('Term 1 tuition', p.tu, t1_due, 'all', 1), ('Term 2 tuition', p.tu, p.due2, 'all', 2),
+                             ('Bus fee – Term 1', p.bu, t1_due, 'bus', 3), ('Bus fee – Term 2', p.bu, p.due2, 'bus', 4)) x(head, amt, due, who, ord);
+  insert into public.fee_plan_rules (id, institute_id, plan_id, reason, percent, heads, created_at)
+    values (sib_rule, inst, '5a1e0000-0000-4000-8000-000000000501', 'sibling', 10,
+            array['Term 1 tuition', 'Term 2 tuition'], imp_t - interval '15 minutes');
   for c in select unnest(array[10, 9, 8]) loop
+    plan := case c when 8 then '5a1e0000-0000-4000-8000-000000000501'::uuid when 9 then '5a1e0000-0000-4000-8000-000000000502'::uuid
+                   else '5a1e0000-0000-4000-8000-000000000503'::uuid end;
     n := case c when 10 then 240 when 9 then 150 else 180 end;
     t1 := case c when 10 then 18000 when 9 then 15000 else 14000 end;
     t2 := t1;
@@ -696,18 +722,33 @@ begin
         values (c, i, make_date(yr, 4, 1) + (i * 13) % 70, t2_due)
         returning * into st;
       insert into public.students (id, institute_id, admission_no, name, class_label, section, board, academic_year,
-                                   parent_name, phone, status, source, created_by, created_at, updated_at)
+                                   parent_name, phone, status, source, created_by, created_at, updated_at, uses_bus)
         values (st.id, inst, 'SCA/' || yr || '/' || lpad((300 + seq)::text, 4, '0'), nm, c || 'th', sec,
                 case when c = 9 then 'ICSE' else 'CBSE' end, '2026-27', par, ph,
-                case when c = 8 and i in (45, 160) then 'left' else 'active' end, 'import', kavita, imp_t, imp_t);
-      insert into public.fee_items (institute_id, student_id, head, amount, due_date, academic_year, created_by, created_at)
-        select inst, st.id, x.head, x.amt, x.due, '2026-27', kavita, imp_t
+                case when c = 8 and i in (45, 160) then 'left' else 'active' end, 'import', kavita, imp_t, imp_t, has_bus);
+      insert into public.fee_items (institute_id, student_id, head, amount, due_date, academic_year, created_by, created_at, plan_item_id)
+        select inst, st.id, x.head, x.amt, x.due, '2026-27', kavita, imp_t,
+               (select pi.id from public.fee_plan_items pi where pi.plan_id = plan and pi.head = x.head)
         from (values ('Term 1 tuition', t1, t1_due, true), ('Term 2 tuition', t2, t2_due, true),
                      ('Bus fee – Term 1', bus, t1_due, has_bus), ('Bus fee – Term 2', bus, t2_due, has_bus)) x(head, amt, due, keep)
         where x.keep;
+      -- Discounts on tuition: the twins' second child (the plan's sibling rule) and three teachers' children.
+      pct := case when c = 8 and i in (23, 67, 143) then 10 when (c = 10 and i in (6, 18)) or (c = 9 and i = 8) then 50 else 0 end;
+      if pct > 0 then
+        gid := gen_random_uuid();
+        insert into public.discounts (institute_id, student_id, fee_item_id, grant_id, amount, percent, scope, reason, note,
+                                      approved_by, plan_rule_id, created_by, created_at)
+          select inst, st.id, fi.id, gid, round(fi.amount * pct / 100, 2), pct, 'fees',
+                 case when c = 8 then 'sibling' else 'staff_child' end,
+                 case when c = 8 then 'Twin: the elder one pays the full fee' else 'Mother teaches Class 6' end,
+                 case when c = 8 then 'Kavita Joshi' else 'Anita Sharma (owner)' end,
+                 case when c = 8 then sib_rule end, kavita, imp_t
+          from public.fee_items fi
+          where fi.student_id = st.id and fi.head in ('Term 1 tuition', 'Term 2 tuition');
+      end if;
       -- The opening balance: Term 1 (and its bus fee) paid before the import, less what some still owe.
       insert into public.payments (institute_id, student_id, amount, paid_on, mode, note, recorded_by, created_at, opening)
-        values (inst, st.id, t1 + case when has_bus then bus else 0 end - arr, today - 58, 'other',
+        values (inst, st.id, t1 + case when has_bus then bus else 0 end - arr - round(t1 * pct / 100, 2), today - 58, 'other',
                 'Opening balance import', kavita, imp_t, true);
 
       -- Paid early, after the import (before any call): half of Term 2 for every 4th Class 10 parent (dated
@@ -1649,6 +1690,33 @@ begin
             neha, false, pg_temp.ist(today - 1, 17 * 3600 + 1500));
   insert into public.audit_log (institute_id, actor_id, action, target, created_at)
     values (inst, owner_u, 'leads.added', c_sale::text || ':1', pg_temp.ist(today - 1, 17 * 3600 + 1500));
+
+  -- 8b. Today's collection: Class 8 parents who came to the office this morning to pay Term 2 before its due
+  --     date (cash, UPI and a cheque to bank), one taken by the owner, and a cash payment typed with the
+  --     wrong amount and reversed. Their Term 2 leads close as accounts_record_payment closes them.
+  i := 0;
+  for r in
+    select st.id as student_id, b.balance_total
+    from demo_st st
+    join public.students s on s.id = st.id and s.status = 'active' and s.phone is not null
+    cross join lateral public.student_balance_rows(inst, st.id) b
+    where st.cls = 8 and st.i % 4 = 0 and b.balance_total > 0
+    order by st.i
+    limit 5
+  loop
+    i := i + 1;
+    t := least(now() - interval '25 minutes' + i * interval '3 minutes', pg_temp.ist(today, 9 * 3600 + 1800 + i * 1500));
+    perform pg_temp.add_payment(r.student_id, r.balance_total, today, (array['cash', 'upi', 'cheque', 'cash', 'upi'])[i],
+                                case i when 3 then 'Cheque for the bank on Monday' end, t,
+                                case when i = 4 then '5a1e0000-0000-4000-8000-000000000101'::uuid
+                                     else '5a1e0000-0000-4000-8000-000000000108'::uuid end);
+    if i = 2 then
+      wid := pg_temp.add_payment(r.student_id, 5000, today, 'cash', null, t + interval '1 minute',
+                                 '5a1e0000-0000-4000-8000-000000000108'::uuid);
+      perform pg_temp.reverse_payment(wid, 'Wrong amount typed; the parent paid by UPI.', t + interval '6 minutes');
+    end if;
+    perform public.ledger_sync_student(r.student_id);
+  end loop;
 
   -- 9. The walkthrough's parent: one of Ravi's promises due today becomes "Sunita Bhosale" (student Riya
   --    Bhosale, 10-A), promising exactly her balance. Kavita records her UPI payment in the demo and the lead

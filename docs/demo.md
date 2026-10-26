@@ -133,7 +133,14 @@ On a phone the tabs are a bar at the bottom of the screen.
   wrong student, a cash payment typed twice). **Collection report** (next to Students): the fees collection
   report for any dates (this month by default) with collected by mode and by day, the promises due this week
   against what the office recorded, "Send these back to callers", and Download Excel. Its four cards are the
-  same numbers as the Fees cards for the same dates. **Import from Excel** and **+ Add student** sit side by side
+  same numbers as the Fees cards for the same dates. **Fee plan** (next to Students): Class 8 (CBSE), Class 9 (ICSE) and Class 10 (CBSE)
+  for 2026-27, each with Term 1 and Term 2 tuition and a bus fee per term for bus students; every student already
+  has them, so "Apply" says "Nothing to add" (Class 8 also has the rule "Sibling 10% on tuition"). Six students
+  have a **discount**: the Class 8 twins' second child (Sibling 10%, by Kavita) and three teachers' children in
+  Class 9 and 10 (Staff child 50% on tuition, approved by Anita). **Today's collection** (the button at the top of
+  Fees): this morning's payments at the office (cash, UPI, a cheque to bank, one taken by Anita, a cash entry
+  typed wrong and reversed) plus the payments from today's calls, by mode and by person, in figures and words,
+  with Print and Download Excel. **Import from Excel** and **+ Add student** sit side by side
   (one student by hand, with fees and "paid so far"; it warns about the same admission number or the same name and
   phone first), and **Edit details** is on each student's page. Every calling list has **Import from Excel** and
   **+ Add lead**, and New calling list can take leads typed **by hand**. Each import has **Download a ready Excel

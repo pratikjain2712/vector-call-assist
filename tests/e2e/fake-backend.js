@@ -1272,13 +1272,16 @@ function createFakeBackend(world) {
       const items = F.items.filter((f) => f.student_id === st.id && !f.is_void);
       const pays = F.payments.filter((p) => p.student_id === st.id);
       const paid = pays.filter((p) => !p.reverses_id).reduce((t, p) => t + p.amount, 0) - pays.filter((p) => p.reverses_id).reduce((t, p) => t + p.amount, 0);
-      const total = items.reduce((t, f) => t + f.amount, 0);
-      const due = items.filter((f) => f.due_date <= at).reduce((t, f) => t + f.amount, 0);
+      // fees basics: each fee net of its live discounts (20261026110000_fee_plans_discounts.sql)
+      const net = (f) => f.amount - Math.min(f.amount, (F.discounts || []).filter((d) => d.fee_item_id === f.id && !d.is_removed).reduce((t, d) => t + d.amount, 0));
+      const total = items.reduce((t, f) => t + net(f), 0);
+      const due = items.filter((f) => f.due_date <= at).reduce((t, f) => t + net(f), 0);
       const last = pays.filter(live).sort((a, b) => (b.paid_on + b.created_at).localeCompare(a.paid_on + a.created_at))[0] || null;
       return { total_fees: total, total_due_to_date: due, paid, balance_due_now: due - paid, balance_total: total - paid,
-        last_payment_amount: last ? last.amount : null, last_payment_on: last ? last.paid_on : null, last_payment_mode: last ? last.mode : null };
+        last_payment_amount: last ? last.amount : null, last_payment_on: last ? last.paid_on : null, last_payment_mode: last ? last.mode : null,
+        discounts: items.reduce((t, f) => t + f.amount - net(f), 0) };
     }
-    const hide = (b, money) => (money ? b : { ...b, total_fees: null, total_due_to_date: null, paid: null, balance_due_now: null, balance_total: null, last_payment_amount: null });
+    const hide = (b, money) => (money ? b : { ...b, total_fees: null, total_due_to_date: null, paid: null, balance_due_now: null, balance_total: null, last_payment_amount: null, discounts: null });
     // Open fees leads of the student follow the balance; nothing due closes them.
     function syncLeads(st) {
       (db.leads || []).filter((l) => l.student_id === st.id && ['new', 'callback', 'promised'].includes(l.status)).forEach((l) => {
@@ -1334,9 +1337,9 @@ function createFakeBackend(world) {
     addPayment(kiran, { amount: 3000, paid_on: shift(-1), mode: 'cash', reverses_id: wrong.id, note: 'Entered twice', recorded_by: world.seats.admin });
     addPayment(kiran, { amount: 1000, paid_on: shift(0), mode: 'upi', reference: 'UTR000303', recorded_by: world.seats.admin });
 
-    const studentRow = (st, money) => ({ student_id: st.id, admission_no: st.admission_no, name: st.name, class_label: st.class_label, section: st.section,
+    const studentRow = (st, money) => { const b = hide(balance(st), money); delete b.discounts; return { student_id: st.id, admission_no: st.admission_no, name: st.name, class_label: st.class_label, section: st.section,
       board: st.board, academic_year: st.academic_year, parent_name: st.parent_name, phone: st.phone, alt_phone: st.alt_phone, status: st.status,
-      source: st.source, ...hide(balance(st), money), money_hidden: !money });
+      source: st.source, ...b, money_hidden: !money }; };
     const label = (seatId) => (db.seats.find((x) => x.id === seatId) || {}).label || null;
 
     const pvpReports = RPC.promises_vs_payments;
@@ -1609,7 +1612,7 @@ function createFakeBackend(world) {
     }
     return {
       route,
-      aarav, diya,
+      aarav, diya, syncLeads, newStudent, addPayment, today,
       // An Accounts login for institute A: { email }. Its password is the world's.
       addAccounts() {
         const email = 'e2e-accounts' + world.users.admin.email.slice(world.users.admin.email.indexOf('@'));
@@ -1698,6 +1701,363 @@ function createFakeBackend(world) {
     return { route };
   })();
   // end add row
+
+  // fees basics
+  // Fee plans, discounts and the day closing (20261026110000_fee_plans_discounts.sql) on the fees block's students:
+  // fee_plans_list / fee_plan_save / fee_plan_preview / fee_plan_apply / fee_plan_undo / fee_plan_apply_student,
+  // accounts_set_uses_bus, accounts_import_students with p_apply_plans, accounts_give_discount /
+  // accounts_remove_discount (discounts in db.fees.discounts lower the balance in the fees block), the discount
+  // keys of accounts_student_detail, and ledger_day_closing. Same people as the SQL: Accounts and owners change
+  // plans; owners, Accounts and managers who see money give discounts; readers read. Data in db.feesBasics.
+  const feesBasics = (() => {
+    const F = db.fees;
+    F.discounts = [];
+    const P = { plans: [], items: [], rules: [], applies: [], calls: [] };
+    db.feesBasics = P;
+    const LABELS = { sibling: 'Sibling', staff_child: 'Staff child', merit: 'Merit', financial_help: 'Financial help', other: 'Other' };
+    const seat = (u) => u && seatOf(u.id);
+    const isReader = (s) => !!s && (s.role === 'admin' || s.role === 'accounts');
+    const isManager = (s) => !!s && (s.role === 'accounts' || (s.role === 'admin' && (s.access_role || 'owner') === 'owner'));
+    const money = (s) => !!s && (s.role === 'accounts' || !!db.reports.money);
+    const canDiscount = (s) => isManager(s) || (!!s && s.role === 'admin' && s.access_role === 'manager' && !!db.reports.money);
+    const bad = (m) => pgErr(400, '22023', m);
+    const notManager = () => pgErr(403, '42501', 'only accounts or an owner can change the fee ledger');
+    const lc = (v) => String(v || '').trim().toLowerCase();
+    const r2 = (n) => Math.round(n * 100) / 100;
+    const left = (fi) => (fi.is_void ? 0 : Math.max(0, fi.amount - F.discounts.filter((d) => d.fee_item_id === fi.id && !d.is_removed).reduce((t, d) => t + d.amount, 0)));
+    const label = (id) => (db.seats.find((x) => x.id === id) || {}).label || null;
+    const studentsOf = (p) => F.students.filter((st) => st.institute_id === p.institute_id && st.status === 'active' && lc(st.class_label) === lc(p.class_label)
+      && (!p.board || st.board === p.board) && (!p.section || lc(st.section) === lc(p.section)) && (!st.academic_year || st.academic_year === p.academic_year));
+    const liveItems = (p) => P.items.filter((it) => it.plan_id === p.id && !it.removed_at).sort((a, b) => a.sort_order - b.sort_order);
+    const undone = (fi) => fi.is_void && P.applies.some((a) => a.id === fi.plan_apply_id && a.undone_at);
+    function rows(p, only) {
+      const out = [];
+      studentsOf(p).filter((st) => !only || st.id === only).forEach((st) => liveItems(p).forEach((it) => {
+        const lk = F.items.filter((fi) => fi.student_id === st.id && fi.plan_item_id === it.id && !undone(fi))
+          .sort((a, b) => (a.is_void - b.is_void) || b.created_at.localeCompare(a.created_at))[0];
+        const hm = F.items.filter((fi) => fi.student_id === st.id && !fi.is_void && !fi.plan_item_id && lc(fi.head) === lc(it.head))
+          .sort((a, b) => ((b.amount === it.amount && b.due_date === it.due_date) - (a.amount === it.amount && a.due_date === it.due_date)))[0];
+        let state = 'missing';
+        if (lk) state = lk.is_void ? 'cancelled' : (lk.head === it.head && lk.amount === it.amount && lk.due_date === it.due_date ? 'has' : 'change');
+        else if (hm) state = hm.amount === it.amount && hm.due_date === it.due_date ? 'same' : 'other';
+        out.push({ student: st, item: it, state, fee: lk || hm || null });
+      }));
+      return out;
+    }
+    const removedRows = (p) => P.items.filter((it) => it.plan_id === p.id && it.removed_at).flatMap((it) =>
+      F.items.filter((fi) => fi.plan_item_id === it.id && !fi.is_void && (F.students.find((st) => st.id === fi.student_id) || {}).status === 'active').map((fi) => ({ item: it, fee: fi })));
+    const planOf = (s, id, write) => {
+      const p = P.plans.find((x) => x.id === id && s && x.institute_id === s.institute_id);
+      return p && (write ? isManager(s) : isReader(s)) ? p : null;
+    };
+    const itemOut = (it, m) => ({ id: it.id, head: it.head, amount: m ? it.amount : null, due_date: it.due_date, who: it.who });
+    const ruleOut = (ru) => ({ id: ru.id, reason: ru.reason, reason_label: LABELS[ru.reason], note: ru.note || null, percent: ru.percent, amount: null, heads: ru.heads });
+    function giveRows(st, items, kind, value, extra) {
+      const list = items.filter((fi) => left(fi) > 0).sort((a, b) => a.due_date.localeCompare(b.due_date));
+      const lefts = r2(list.reduce((t, fi) => t + left(fi), 0));
+      if (!list.length) return 0;
+      if (kind === 'amount' && value > lefts) throw new Error('the discount is more than what is left to pay on these fees');
+      let given = 0;
+      list.forEach((fi, i) => {
+        const l = left(fi);
+        const a = kind === 'percent' ? Math.min(r2(fi.amount * value / 100), l) : i === list.length - 1 ? Math.min(r2(value - given), l) : Math.min(r2(value * l / lefts), l);
+        if (a > 0) {
+          F.discounts.push({ id: crypto.randomUUID(), institute_id: st.institute_id, student_id: st.id, fee_item_id: fi.id, amount: a,
+            percent: kind === 'percent' ? value : null, is_removed: false, created_at: new Date().toISOString(), ...extra });
+          given = r2(given + a);
+        }
+      });
+      return given;
+    }
+    function applyCore(p, s, only, chosen, ruleTicks, remove) {
+      const aid = crypto.randomUUID();
+      const a = { id: aid, plan_id: p.id, undone_at: null, added: 0, linked: 0, changed: 0, removed: 0, discounts: 0 };
+      P.applies.push(a);
+      const touched = new Set();
+      const add = (st, it) => {
+        const fi = { id: crypto.randomUUID(), institute_id: p.institute_id, student_id: st.id, head: it.head, amount: it.amount, due_date: it.due_date,
+          academic_year: p.academic_year, is_void: false, void_reason: null, voided_at: null, created_at: new Date().toISOString(), plan_item_id: it.id, plan_apply_id: aid };
+        F.items.push(fi);
+        return fi;
+      };
+      rows(p, only).forEach((r) => {
+        if (r.state === 'same') { r.fee.plan_item_id = r.item.id; a.linked++; return; }
+        if (r.state === 'missing') {
+          const c = (chosen || {})[r.item.id];
+          const ticked = r.item.who === 'all' || (c ? c.includes(r.student.id) : r.item.who === 'bus' && !!r.student.uses_bus);
+          if (!ticked) return;
+          add(r.student, r.item);
+          if (r.item.who === 'bus') r.student.uses_bus = true;
+          a.added++; touched.add(r.student);
+          return;
+        }
+        if (r.state === 'change') {
+          Object.assign(r.fee, { is_void: true, void_reason: 'The fee plan changed', voided_at: new Date().toISOString() });
+          const nf = add(r.student, r.item);
+          F.discounts.filter((d) => d.fee_item_id === r.fee.id && !d.is_removed).forEach((d) => {
+            giveRows(r.student, [nf], d.percent ? 'percent' : 'amount', d.percent || Math.min(d.amount, nf.amount), { grant_id: d.grant_id, reason: d.reason, note: d.note,
+              approved_by: d.approved_by, scope: d.scope, plan_rule_id: d.plan_rule_id, plan_apply_id: aid, created_by: s.id });
+          });
+          a.changed++; touched.add(r.student);
+        }
+      });
+      if (remove) {
+        removedRows(p).forEach((r) => {
+          Object.assign(r.fee, { is_void: true, void_reason: 'Removed from the fee plan', voided_at: new Date().toISOString() });
+          a.removed++; touched.add(F.students.find((st) => st.id === r.fee.student_id));
+        });
+      }
+      P.rules.filter((ru) => ru.plan_id === p.id && !ru.removed_at).forEach((ru) => {
+        ((ruleTicks || {})[ru.id] || []).forEach((sid) => {
+          const st = studentsOf(p).find((x) => x.id === sid);
+          if (!st || (only && sid !== only)) return;
+          const items = F.items.filter((fi) => fi.student_id === sid && !fi.is_void && P.items.some((it) => it.id === fi.plan_item_id && it.plan_id === p.id && !it.removed_at
+            && (ru.heads.length ? ru.heads.map(lc).includes(lc(it.head)) : it.who === 'all')) && !F.discounts.some((d) => d.fee_item_id === fi.id && d.plan_rule_id === ru.id && !d.is_removed));
+          if (!items.length) return;
+          if (giveRows(st, items, 'percent', ru.percent, { grant_id: crypto.randomUUID(), reason: ru.reason, note: ru.note || null, approved_by: s.label || 'Fees office',
+            scope: 'fees', plan_rule_id: ru.id, plan_apply_id: aid, created_by: s.id }) > 0) { a.discounts++; touched.add(st); }
+        });
+      });
+      touched.forEach((st) => fees.syncLeads(st));
+      a.students = touched.size;
+      return { apply_id: aid, plan_id: p.id, students: touched.size, added: a.added, linked: a.linked, changed: a.changed, removed: a.removed, discounts: a.discounts,
+        leads_updated: 0, can_undo: !a.changed && !a.removed && a.added + a.discounts > 0 };
+    }
+    Object.assign(RPC, {
+      fee_plans_list: (u) => {
+        const s = seat(u);
+        if (!isReader(s)) return pgErr(403, '42501', 'only accounts, owners and managers can see fee plans');
+        const m = money(s);
+        return json(200, P.plans.filter((p) => p.institute_id === s.institute_id).map((p) => {
+          const rs = rows(p);
+          const pendAll = rs.filter((r) => (r.state === 'missing' && r.item.who === 'all') || r.state === 'change');
+          const removed = removedRows(p);
+          return { id: p.id, academic_year: p.academic_year, class_label: p.class_label, board: p.board, section: p.section, auto_apply: p.auto_apply,
+            money_hidden: !m, students: studentsOf(p).length, items: liveItems(p).map((it) => itemOut(it, m)),
+            rules: P.rules.filter((ru) => ru.plan_id === p.id && !ru.removed_at).map(ruleOut),
+            pending: { add: rs.filter((r) => r.state === 'missing' && r.item.who === 'all').length, change: rs.filter((r) => r.state === 'change').length,
+              remove: removed.length, students: new Set(pendAll.map((r) => r.student.id).concat(removed.map((r) => r.fee.student_id))).size } };
+        }));
+      },
+      fee_plan_save: (u, a) => {
+        const s = seat(u);
+        if (!isManager(s)) return notManager();
+        const d = a.p_data || {};
+        P.calls.push({ fn: 'fee_plan_save', args: a });
+        let p = a.p_plan ? planOf(s, a.p_plan, true) : null;
+        if (a.p_plan && !p) return pgErr(403, '42501', 'fee plan not found');
+        const year = String(d.academic_year || '').trim();
+        const cls = String(d.class_label || '').trim();
+        if (!cls) return bad('pick the class');
+        if (!/^\d{4}-\d{2}$/.test(year)) return bad('academic year must look like 2026-27');
+        const board = d.board ? (String(d.board).toUpperCase() === 'STATE' ? 'State' : String(d.board).toUpperCase()) : null;
+        if (P.plans.some((x) => x !== p && x.institute_id === s.institute_id && x.academic_year === year && lc(x.class_label) === lc(cls) && (x.board || '') === (board || '') && lc(x.section) === lc(d.section))) {
+          return pgErr(409, '23505', 'there is already a fee plan for this class and year: open it and change it');
+        }
+        const items = Array.isArray(d.items) ? d.items : [];
+        if (!items.length || items.length > 30) return bad('a fee plan needs 1 to 30 fees');
+        for (const it of items) if (!String(it.head || '').trim() || !(Number(it.amount) > 0) || !it.due_date) return bad('each fee needs a name, an amount and a due date');
+        if (!p) { p = { id: crypto.randomUUID(), institute_id: s.institute_id, created_at: new Date().toISOString() }; P.plans.push(p); }
+        Object.assign(p, { academic_year: year, class_label: cls, board, section: String(d.section || '').trim() || null, auto_apply: d.auto_apply !== false });
+        const keep = new Set(items.map((it) => it.id).filter(Boolean));
+        P.items.filter((it) => it.plan_id === p.id && !it.removed_at && !keep.has(it.id)).forEach((it) => { it.removed_at = new Date().toISOString(); });
+        items.forEach((x, i) => {
+          let it = x.id && P.items.find((y) => y.id === x.id && y.plan_id === p.id && !y.removed_at);
+          if (!it) { it = { id: crypto.randomUUID(), plan_id: p.id, removed_at: null }; P.items.push(it); }
+          Object.assign(it, { head: String(x.head).trim(), amount: Number(x.amount), due_date: x.due_date, who: x.who || 'all', sort_order: i + 1 });
+        });
+        const keepR = new Set((d.rules || []).map((r) => r.id).filter(Boolean));
+        P.rules.filter((ru) => ru.plan_id === p.id && !ru.removed_at && !keepR.has(ru.id)).forEach((ru) => { ru.removed_at = new Date().toISOString(); });
+        (d.rules || []).forEach((x) => {
+          let ru = x.id && P.rules.find((y) => y.id === x.id && y.plan_id === p.id && !y.removed_at);
+          if (!ru) { ru = { id: crypto.randomUUID(), plan_id: p.id, removed_at: null }; P.rules.push(ru); }
+          Object.assign(ru, { reason: x.reason, note: x.note || null, percent: Number(x.percent), heads: x.heads || [] });
+        });
+        return json(200, p.id);
+      },
+      fee_plan_preview: (u, a) => {
+        const s = seat(u);
+        const p = planOf(s, a.p_plan, false);
+        if (!p) return pgErr(403, '42501', 'fee plan not found');
+        const m = money(s);
+        const rs = rows(p);
+        const n = (it, st) => rs.filter((r) => r.item.id === it.id && r.state === st).length;
+        return json(200, {
+          plan: { id: p.id, academic_year: p.academic_year, class_label: p.class_label, board: p.board, section: p.section, auto_apply: p.auto_apply },
+          money_hidden: !m, students: studentsOf(p).length,
+          items: liveItems(p).map((it) => ({ ...itemOut(it, m), missing: n(it, 'missing'), same: n(it, 'same'), has: n(it, 'has'), change: n(it, 'change'),
+            other: n(it, 'other'), cancelled: n(it, 'cancelled'),
+            ticked: rs.filter((r) => r.item.id === it.id && r.state === 'missing' && (it.who === 'all' || (it.who === 'bus' && r.student.uses_bus))).length })),
+          removed: Object.values(removedRows(p).reduce((o, r) => { (o[r.item.id] = o[r.item.id] || { id: r.item.id, head: r.item.head, students: 0 }).students++; return o; }, {})),
+          rules: P.rules.filter((ru) => ru.plan_id === p.id && !ru.removed_at).map((ru) => ({ ...ruleOut(ru),
+            given: new Set(F.discounts.filter((d) => d.plan_rule_id === ru.id && !d.is_removed).map((d) => d.student_id)).size })),
+          rows: studentsOf(p).sort((x, y) => String(x.section).localeCompare(String(y.section)) || x.name.localeCompare(y.name)).map((st) => ({
+            student_id: st.id, name: st.name, admission_no: st.admission_no, section: st.section, board: st.board, uses_bus: !!st.uses_bus,
+            items: Object.fromEntries(rs.filter((r) => r.student.id === st.id).map((r) => [r.item.id, r.state])),
+            rules: [...new Set(F.discounts.filter((d) => d.student_id === st.id && !d.is_removed && P.rules.some((ru) => ru.id === d.plan_rule_id && ru.plan_id === p.id)).map((d) => d.plan_rule_id))] })),
+        });
+      },
+      fee_plan_apply: (u, a) => {
+        const s = seat(u);
+        const p = planOf(s, a.p_plan, true);
+        if (!p) return pgErr(403, '42501', 'fee plan not found');
+        P.calls.push({ fn: 'fee_plan_apply', args: a });
+        return json(200, applyCore(p, s, null, a.p_chosen, a.p_rules, true));
+      },
+      fee_plan_undo: (u, a) => {
+        const s = seat(u);
+        const ap = P.applies.find((x) => x.id === a.p_apply);
+        if (!isManager(s) || !ap) return pgErr(403, '42501', 'not found');
+        if (ap.undone_at) return bad('this was already undone');
+        if (ap.changed || ap.removed) return bad('this change cannot be undone: it changed fees students already had');
+        ap.undone_at = new Date().toISOString();
+        let nf = 0; let nd = 0;
+        F.discounts.filter((d) => d.plan_apply_id === ap.id && !d.is_removed).forEach((d) => { Object.assign(d, { is_removed: true, removed_reason: 'Undo' }); nd++; });
+        F.items.filter((fi) => fi.plan_apply_id === ap.id && !fi.is_void).forEach((fi) => { Object.assign(fi, { is_void: true, void_reason: 'Undo', voided_at: new Date().toISOString() }); nf++; });
+        F.students.forEach((st) => fees.syncLeads(st));
+        return json(200, { fees_cancelled: nf, discounts_removed: nd });
+      },
+      fee_plan_apply_student: (u, a) => {
+        const s = seat(u);
+        if (!isManager(s)) return notManager();
+        const st = F.students.find((x) => x.id === a.p_student && x.institute_id === s.institute_id);
+        if (!st) return pgErr(403, '42501', 'student not found');
+        P.calls.push({ fn: 'fee_plan_apply_student', args: a });
+        let added = 0; let plans = 0; const heads = [];
+        P.plans.filter((p) => p.institute_id === s.institute_id && p.auto_apply && studentsOf(p).includes(st)).forEach((p) => {
+          const res = applyCore(p, s, st.id, null, null, false);
+          plans++; added += res.added;
+          F.items.filter((fi) => fi.plan_apply_id === res.apply_id).forEach((fi) => heads.push(fi.head));
+        });
+        return json(200, { plans, added, heads });
+      },
+      accounts_set_uses_bus: (u, a) => {
+        const s = seat(u);
+        if (!isManager(s)) return notManager();
+        const st = F.students.find((x) => x.id === a.p_student && x.institute_id === s.institute_id);
+        if (!st) return pgErr(403, '42501', 'student not found');
+        st.uses_bus = !!a.p_uses_bus;
+        return json(200, null);
+      },
+      accounts_give_discount: (u, a) => {
+        const s = seat(u);
+        const st = s && F.students.find((x) => x.id === a.p_student && x.institute_id === s.institute_id);
+        if (!st || !canDiscount(s)) return pgErr(403, '42501', 'student not found');
+        const d = a.p_data || {};
+        P.calls.push({ fn: 'accounts_give_discount', args: a });
+        const v = Number(d.value);
+        if (!['amount', 'percent'].includes(d.kind)) return bad('pick an amount or a percent');
+        if (!(v > 0)) return bad('enter the discount');
+        if (d.kind === 'percent' && v > 100) return bad('a percent discount can be at most 100');
+        if (!LABELS[d.reason]) return bad('pick the reason');
+        if (d.reason === 'other' && !String(d.note || '').trim()) return bad('write what the discount is for');
+        const items = F.items.filter((fi) => fi.student_id === st.id && !fi.is_void && (d.whole_year || (d.fee_items || []).includes(fi.id)));
+        if (!items.length) return bad('this student has no fees to give a discount on');
+        const gid = crypto.randomUUID();
+        let total;
+        try {
+          total = giveRows(st, items, d.kind, v, { grant_id: gid, reason: d.reason, note: d.note || null, approved_by: String(d.approved_by || '').trim() || s.label || 'Fees office',
+            scope: d.whole_year ? 'year' : 'fees', plan_rule_id: null, plan_apply_id: null, created_by: s.id });
+        } catch (err) { return bad(err.message); }
+        fees.syncLeads(st);
+        return json(200, { grant_id: gid, amount: total, fees: F.discounts.filter((x) => x.grant_id === gid).length });
+      },
+      accounts_remove_discount: (u, a) => {
+        const s = seat(u);
+        const rowsOf = F.discounts.filter((d) => d.grant_id === a.p_grant && s && d.institute_id === s.institute_id);
+        if (!rowsOf.length || !canDiscount(s)) return pgErr(403, '42501', 'discount not found');
+        if (rowsOf.every((d) => d.is_removed)) return bad('this discount is already removed');
+        const why = String(a.p_reason || '').trim();
+        if (!why) return bad('give a reason (up to 300 characters)');
+        rowsOf.filter((d) => !d.is_removed).forEach((d) => Object.assign(d, { is_removed: true, removed_reason: why, removed_at: new Date().toISOString(), removed_by: s.id }));
+        fees.syncLeads(F.students.find((st) => st.id === rowsOf[0].student_id));
+        return json(200, rowsOf.length);
+      },
+      ledger_day_closing: (u, a) => {
+        const s = seat(u);
+        if (!isReader(s) || s.institute_id !== a.p_institute) return pgErr(403, '42501', 'only accounts, owners and managers can see collections');
+        const m = money(s);
+        const dy = a.p_day || fees.today();
+        const am = (v) => (m ? v : null);
+        const stOf = (id) => F.students.find((st) => st.id === id) || {};
+        const pays = F.payments.filter((p) => p.institute_id === s.institute_id && p.paid_on === dy && !p.reverses_id && !p.opening)
+          .map((p) => { const r = F.payments.find((x) => x.reverses_id === p.id); return { ...p, live: !r, rev: r ? r.note : null }; })
+          .sort((x, y) => x.created_at.localeCompare(y.created_at));
+        const live = pays.filter((p) => p.live);
+        const sum = (list) => list.reduce((t, p) => t + p.amount, 0);
+        const persons = {};
+        live.forEach((p) => {
+          const k = p.recorded_by || 'none';
+          persons[k] = persons[k] || { seat_id: p.recorded_by, label: label(p.recorded_by) || 'Unknown', payments: 0, amount: 0 };
+          persons[k].payments++; persons[k].amount += p.amount;
+        });
+        const revs = F.payments.filter((r) => r.institute_id === s.institute_id && r.reverses_id && !r.opening && (r.paid_on === dy || r.created_at.slice(0, 10) === dy));
+        const cheq = live.filter((p) => p.mode === 'cheque');
+        return json(200, {
+          day: dy, today: fees.today(), money_hidden: !m,
+          totals: { payments: live.length, amount: am(sum(live)), reversed: pays.length - live.length, reversed_amount: am(sum(pays.filter((p) => !p.live))),
+            cheques: cheq.length, cheque_amount: am(sum(cheq)) },
+          by_mode: ['cash', 'upi', 'cheque', 'card', 'bank', 'other'].map((md) => ({ mode: md, payments: live.filter((p) => p.mode === md).length, amount: am(sum(live.filter((p) => p.mode === md))) })),
+          by_person: Object.values(persons).sort((x, y) => y.amount - x.amount).map((p) => ({ ...p, amount: am(p.amount) })),
+          payments: pays.map((p) => { const st = stOf(p.student_id); return { id: p.id, at: p.created_at, student_id: p.student_id, student: st.name, class_label: st.class_label, section: st.section,
+            admission_no: st.admission_no, amount: am(p.amount), mode: p.mode, reference: p.reference, note: p.note, recorded_by_label: label(p.recorded_by), reversed: !p.live, reversed_reason: p.rev }; }),
+          cheques: cheq.map((p) => { const st = stOf(p.student_id); return { id: p.id, at: p.created_at, student_id: p.student_id, student: st.name, class_label: st.class_label, section: st.section,
+            amount: am(p.amount), reference: p.reference, note: p.note, recorded_by_label: label(p.recorded_by) }; }),
+          reversals: revs.map((r) => { const st = stOf(r.student_id); return { id: r.id, of_id: r.reverses_id, at: r.created_at, student_id: r.student_id, student: st.name, class_label: st.class_label,
+            section: st.section, amount: am(r.amount), mode: r.mode, reason: r.note, recorded_by_label: label(r.recorded_by), paid_on: r.paid_on }; }),
+        });
+      },
+    });
+    // The student page: discounts, the discount total and each fee's discount.
+    const detailBefore = RPC.accounts_student_detail;
+    RPC.accounts_student_detail = (u, a) => {
+      const res = detailBefore(u, a);
+      if (res.status !== 200) return res;
+      const s = seat(u);
+      const m = money(s);
+      const out = JSON.parse(res.body);
+      const st = F.students.find((x) => x.id === a.p_student);
+      out.can_discount = canDiscount(s);
+      out.balance.discounts = m ? fees.balance(st).discounts : null;
+      out.student.uses_bus = !!st.uses_bus;
+      out.fee_items = out.fee_items.map((f) => {
+        const fi = F.items.find((x) => x.id === f.id);
+        return { ...f, plan_item_id: fi.plan_item_id || null, discount: m ? F.discounts.filter((d) => d.fee_item_id === f.id && !d.is_removed).reduce((t, d) => t + d.amount, 0) : null };
+      });
+      const groups = {};
+      F.discounts.filter((d) => d.student_id === st.id).forEach((d) => { const k = d.grant_id + ':' + d.is_removed; (groups[k] = groups[k] || []).push(d); });
+      out.discounts = Object.values(groups).map((g) => {
+        const d = g[0];
+        const fis = g.map((x) => F.items.find((fi) => fi.id === x.fee_item_id));
+        return { grant_id: d.grant_id, reason: d.reason, reason_label: LABELS[d.reason], note: d.note, percent: d.percent, scope: d.scope, approved_by: d.approved_by,
+          amount: m ? g.filter((x, i) => !fis[i].is_void).reduce((t, x) => t + x.amount, 0) : null,
+          fees: g.map((x, i) => ({ fee_item_id: x.fee_item_id, head: fis[i].head, amount: m ? x.amount : null, fee_cancelled: fis[i].is_void })),
+          plan_rule_id: d.plan_rule_id, created_at: d.created_at, created_by_label: label(d.created_by), is_removed: d.is_removed,
+          removed_reason: d.removed_reason || null, removed_at: d.removed_at || null, removed_by_label: label(d.removed_by) };
+      }).sort((x, y) => y.created_at.localeCompare(x.created_at));
+      return json(200, out);
+    };
+    // The import with fee plans: new students of a class with a plan get its fees.
+    const importBefore = RPC.accounts_import_students;
+    RPC.accounts_import_students = (u, a) => {
+      const before = new Set(F.students.map((st) => st.id));
+      const res = importBefore(u, { p_rows: a.p_rows });
+      if (res.status !== 200) return res;
+      const out = JSON.parse(res.body);
+      let n = 0;
+      if (a.p_apply_plans) {
+        const s = seat(u);
+        F.students.filter((st) => !before.has(st.id)).forEach((st) => {
+          P.plans.filter((p) => p.institute_id === s.institute_id && p.auto_apply && studentsOf(p).includes(st)).forEach((p) => { n += applyCore(p, s, st.id, null, null, false).added; });
+        });
+      }
+      out.plan_fee_items_added = n;
+      P.calls.push({ fn: 'accounts_import_students', args: a });
+      return json(200, out);
+    };
+    return { P };
+  })();
+  // end fees basics
 
   // presence
   // The call state on the caller screen (20261025190000_presence_call_state.sql): report_presence with the call
@@ -1886,6 +2246,7 @@ function createFakeBackend(world) {
     WA_LEADS,
     // end Phase A: whatsapp
     fees,   // Phase A.2: fees (addAccounts, aarav, diya, balance; data in db.fees)
+    feesBasics,   // fees basics (plans, applies, calls in db.feesBasics; discounts in db.fees.discounts)
     presence,   // presence (statusOf; reports in db.presenceReports, rows in db.seatPresence)
   };
 }

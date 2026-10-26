@@ -430,12 +430,14 @@
     collectedByMode, campaignName,
   };
   if (inNode) { module.exports = helpers; return; }
+  window.VectorFeesHelpers = helpers;   // for js/admin/fees-basics.js
 
   // ---------- the page (browser only) ----------
 
   const el = S.el;
   const say = S.say;
   const AR = window.VectorAddRow;
+  let FB = null;   // fee plan, discounts, today's collection (js/admin/fees-basics.js, loaded after this file)
   const $ = (id) => document.getElementById(id);
   const XLSX_URL = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
   const XLSX_SRI = 'sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw';
@@ -449,6 +451,7 @@
   let studentId = null;
   let wantPay = false;     // #fees?student=<id>&pay=1: focus the payment form once the student is shown
   let pendingNote = '';    // said on the student's page once it is shown (after "+ Add student")
+  let lastGrant = null;    // the discount just given on this page (it gets an Undo button)
   let feesTypeId = null;
   let imp = null;          // { sheet, map, file, built }
   let xlsxLoading = null;
@@ -467,12 +470,16 @@
 
   function build() {
     const manage = canManage(ctx.seat);
-    box.appendChild(el('div', { className: 'tab-head' }, [
-      el('h1', { text: 'Fees' }),
-      el('p', { className: 'muted', text: 'Students, their fees and the payments your fees office recorded.' }),
+    box.appendChild(el('div', { className: 'tab-head fees-head' }, [
+      el('div', null, [
+        el('h1', { text: 'Fees' }),
+        el('p', { className: 'muted', text: 'Students, their fees and the payments your fees office recorded.' }),
+      ]),
+      el('a', { href: '#fees/today', id: 'fees-today-open', className: 'button-link primary', text: 'Today\'s collection' }),
     ]));
     box.appendChild(el('nav', { className: 'subnav', id: 'fees-subnav', 'aria-label': 'Fees' }, [
       el('a', { href: '#fees', id: 'fees-view-students', text: 'Students' }),
+      el('a', { href: '#fees/plans', id: 'fees-view-plans', text: 'Fee plan' }),
       el('a', { href: '#fees/report', id: 'fees-view-report', text: 'Collection report' }),
     ]));
 
@@ -533,6 +540,9 @@
     box.appendChild(el('div', { className: 'panel fees-receipt', id: 'fees-receipt', hidden: true, role: 'region', 'aria-labelledby': 'fees-r-title' }));
     // The fees collection report (js/admin/reports.js, the same code as Today's Reports), with its dates and Excel.
     box.appendChild(el('div', { id: 'fees-report', hidden: true }));
+    // Fee plan and Today's collection (js/admin/fees-basics.js).
+    box.appendChild(el('div', { id: 'fees-plans', hidden: true }));
+    box.appendChild(el('div', { id: 'fees-today', hidden: true }));
   }
 
   function wire() {
@@ -572,14 +582,27 @@
     const id = params && params.student;
     closeReceipt();
     const report = sub === 'report';
-    const listView = !id && !report;
-    $('fees-view-students').toggleAttribute('aria-current', !report);
-    if (!report) $('fees-view-students').setAttribute('aria-current', 'page');
-    if (report) $('fees-view-report').setAttribute('aria-current', 'page'); else $('fees-view-report').removeAttribute('aria-current');
+    const plansView = sub === 'plans';
+    const todayView = sub === 'today';
+    const other = report || plansView || todayView;
+    const listView = !id && !other;
+    const current = (node, on) => { if (on) node.setAttribute('aria-current', 'page'); else node.removeAttribute('aria-current'); };
+    current($('fees-view-students'), !other);
+    current($('fees-view-plans'), plansView);
+    current($('fees-view-report'), report);
+    $('fees-today-open').hidden = todayView;
     ['fees-summary', 'fees-actions', 'fees-list'].forEach((x) => { $(x).hidden = !listView; });
     if (!listView) { Object.keys(PANELS).forEach((x) => { $(x).hidden = true; }); syncOpeners(); }
-    $('fees-student').hidden = !id || report;
+    $('fees-student').hidden = !id || other;
     $('fees-report').hidden = !report;
+    $('fees-plans').hidden = !plansView;
+    $('fees-today').hidden = !todayView;
+    if (plansView || todayView) {
+      const part = plansView ? 'fee-plans' : 'day-closing';
+      ctx.part(part, $(plansView ? 'fees-plans' : 'fees-today'));
+      ctx.showPart(part, params || {});
+      return;
+    }
     if (report) {
       ctx.part('reports', $('fees-report'));
       const rep = S.tab('reports');
@@ -832,7 +855,7 @@
     const cards = el('div', { className: 'fees-cards', id: 'fs-cards' }, [
       card('Due now', hidden ? '—' : rupees2(b.balance_due_now || 0), 'fees due till today, minus paid', Number(b.balance_due_now) > 0 ? 'bad' : 'good', 'fs-due'),
       card('Paid', hidden ? '—' : rupees2(b.paid || 0), RECORDED_IN_LEDGER, 'good', 'fs-paid'),
-      card('Total fees', hidden ? '—' : rupees2(b.total_fees || 0), 'all fee items', '', 'fs-total'),
+      card('Total fees', hidden ? '—' : rupees2(b.total_fees || 0), Number(b.discounts) > 0 && !hidden ? 'after ' + rupees2(b.discounts) + ' discount' : 'all fees of the year', '', 'fs-total'),
       card('Left to pay (year)', hidden ? '—' : rupees2(b.balance_total || 0), 'including fees not due yet', '', 'fs-left'),
     ]);
     wrap.appendChild(el('div', { className: 'panel' }, [
@@ -845,6 +868,7 @@
     if (manage) wrap.appendChild(paymentForm());
     wrap.appendChild(paymentsPanel(manage, hidden));
     wrap.appendChild(feeItemsPanel(manage, hidden));
+    wrap.appendChild(discountsPanel(hidden));
     wrap.appendChild(callsPanel(hidden));
     const h = $('fs-name');
     if (h) h.focus({ preventScroll: false });
@@ -973,21 +997,23 @@
     const body = el('tbody', { id: 'fs-fee-body' });
     items.forEach((f) => {
       const acts = el('td', { 'data-label': 'Actions', className: 'actions' });
+      const disc = Number(f.discount) || 0;
       const tr = el('tr', { className: f.is_void ? 'void' : null }, [
         cell(f.head, '', 'Fee'),
         cell(hidden ? '—' : money(f.amount), 'num', 'Amount'),
+        cell(hidden || f.is_void || !disc ? '' : '−' + money(disc), 'num fees-disc', 'Discount'),
         cell(S.formatDate(f.due_date), '', 'Due date'),
         cell(f.academic_year || '', '', 'Year'),
-        cell(f.is_void ? 'Void: ' + (f.void_reason || '') : 'Active', 'status', 'Status'),
+        cell(f.is_void ? 'Cancelled: ' + (f.void_reason || '') : 'To pay', 'status', 'Status'),
         acts,
       ]);
       if (manage && !f.is_void) {
-        const v = el('button', { type: 'button', className: 'danger', text: 'Void', 'aria-label': 'Void ' + f.head });
+        const v = el('button', { type: 'button', className: 'danger', text: 'Cancel this fee', 'aria-label': 'Cancel the fee ' + f.head });
         v.addEventListener('click', () => {
           if (tr.nextSibling && tr.nextSibling.classList && tr.nextSibling.classList.contains('fees-reason')) return;
-          tr.after(reasonRow(6, 'fs-void', 'Void this fee', async (reason) => {
+          tr.after(reasonRow(7, 'fs-void', 'Cancel this fee', async (reason) => {
             await ctx.rpc('accounts_void_fee_item', { p_fee_item: f.id, p_reason: reason });
-            await reloadStudent('Fee "' + f.head + '" voided.');
+            await reloadStudent('Fee "' + f.head + '" cancelled. It stays in the list, crossed out.');
           }));
         });
         acts.appendChild(v);
@@ -995,9 +1021,9 @@
       body.appendChild(tr);
     });
     const panel = el('div', { className: 'panel' }, [
-      el('h3', { text: 'Fee items' }),
+      el('h3', { text: 'Fees' }),
       items.length ? el('div', { className: 'scroll' }, [el('table', { className: 'stack', id: 'fs-fee-table' }, [
-        el('thead', null, [el('tr', null, ['Fee', 'Amount', 'Due date', 'Year', 'Status', ''].map((h, i) => el('th', { text: h, className: i === 1 ? 'num' : null })))]),
+        el('thead', null, [el('tr', null, ['Fee', 'Amount', 'Discount', 'Due date', 'Year', 'Status', ''].map((h, i) => el('th', { text: h, className: i === 1 || i === 2 ? 'num' : null })))]),
         body,
       ])]) : el('p', { className: 'muted', text: 'No fees added yet.' }),
     ]);
@@ -1008,10 +1034,10 @@
         field('Amount (₹)', el('input', { id: 'fs-fee-amount', type: 'text', inputmode: 'decimal', required: true })),
         field('Due date', el('input', { id: 'fs-fee-due', type: 'date', required: true })),
         field('Academic year', el('input', { id: 'fs-fee-year', type: 'text', placeholder: '2026-27', value: st.academic_year || '', maxlength: '7' })),
-        el('button', { type: 'submit', text: 'Add fee' }),
+        el('button', { type: 'submit', text: 'Add this fee' }),
       ]);
       form.addEventListener('submit', (e) => { e.preventDefault(); addFee(); });
-      panel.appendChild(el('h4', { text: 'Add a fee' }));
+      panel.appendChild(el('h4', { text: 'Add one more fee for this student' }));
       panel.appendChild(form);
       panel.appendChild(msg('fs-fee-msg'));
     }
@@ -1031,6 +1057,75 @@
       await ctx.rpc('accounts_add_fee_item', { p_student: studentId, p_head: head, p_amount: amount, p_due_date: due, p_academic_year: year || null });
       await reloadStudent('Fee "' + head + '" of ' + rupees2(amount) + ' added.');
     } catch (err) { say('fs-fee-msg', 'Not added: ' + errText(err), true); }
+  }
+
+  // Discounts: each one given (reason, on which fees, how much, who approved), "Give a discount" (three steps,
+  // js/admin/fees-basics.js) and Remove with a reason. A removed discount stays, crossed out, with its reason.
+  function discountsPanel(hidden) {
+    const list = detail.discounts || [];
+    const can = !!detail.can_discount;
+    const panel = el('div', { className: 'panel', id: 'fs-discounts' }, [
+      el('div', { className: 'fees-head-row' }, [el('h3', { text: 'Discounts' })]),
+    ]);
+    if (can) {
+      const give = el('button', { type: 'button', id: 'fs-disc-open', text: 'Give a discount', 'aria-expanded': 'false' });
+      give.addEventListener('click', () => {
+        const open = $('fd-panel');
+        if (open) { open.remove(); give.setAttribute('aria-expanded', 'false'); return; }
+        const p = FB.discountPanel(ctx, detail, async (text, grant) => {
+          lastGrant = grant || null;
+          await reloadStudent(text);
+        });
+        panel.appendChild(p);
+        give.setAttribute('aria-expanded', 'true');
+        const h = p.querySelector('h3');
+        if (h) h.focus();
+      });
+      panel.querySelector('.fees-head-row').appendChild(give);
+    }
+    if (!list.length) {
+      panel.appendChild(el('p', { className: 'muted', id: 'fs-disc-empty', text: 'No discount for this student.' }));
+      return panel;
+    }
+    const body = el('tbody', { id: 'fs-disc-body' });
+    list.forEach((g) => {
+      const acts = el('td', { 'data-label': '', className: 'actions' });
+      const tr = el('tr', { className: g.is_removed ? 'void' : null, 'data-grant': g.grant_id }, [
+        cell(FB.discountText(g), '', 'Discount'),
+        cell(hidden || g.amount === null ? '' : '−' + money(g.amount), 'num', 'Amount'),
+        cell(g.approved_by || '', '', 'Approved by'),
+        cell(S.formatDate(g.created_at), '', 'Given on'),
+        cell(g.is_removed ? 'Removed: ' + (g.removed_reason || '') : 'Counted', 'status', 'Status'),
+        acts,
+      ]);
+      if (can && !g.is_removed) {
+        if (lastGrant === g.grant_id) {
+          const undo = el('button', { type: 'button', id: 'fs-disc-undo', text: 'Undo' });
+          undo.addEventListener('click', async () => {
+            undo.disabled = true;
+            try { await ctx.rpc('accounts_remove_discount', { p_grant: g.grant_id, p_reason: 'Undo: given by mistake' }); lastGrant = null; await reloadStudent('Discount taken back.'); }
+            catch (err) { undo.disabled = false; say('fs-msg', errText(err), true); }
+          });
+          acts.appendChild(undo);
+        }
+        const rm = el('button', { type: 'button', className: 'danger', text: 'Remove', 'aria-label': 'Remove the discount ' + FB.discountText(g) });
+        rm.addEventListener('click', () => {
+          if (tr.nextSibling && tr.nextSibling.classList && tr.nextSibling.classList.contains('fees-reason')) return;
+          tr.after(reasonRow(6, 'fs-disc-rm', 'Remove this discount', async (reason) => {
+            await ctx.rpc('accounts_remove_discount', { p_grant: g.grant_id, p_reason: reason });
+            lastGrant = null;
+            await reloadStudent('Discount removed. It stays in the list with the reason.');
+          }));
+        });
+        acts.appendChild(rm);
+      }
+      body.appendChild(tr);
+    });
+    panel.appendChild(el('div', { className: 'scroll' }, [el('table', { className: 'stack', id: 'fs-disc-table' }, [
+      el('thead', null, [el('tr', null, ['Discount', 'Amount', 'Approved by', 'Given on', 'Status', ''].map((h, i) => el('th', { text: h, className: i === 1 ? 'num' : null })))]),
+      body,
+    ])]));
+    return panel;
   }
 
   function callsPanel(hidden) {
@@ -1080,6 +1175,17 @@
       p.note ? line('Note', p.note) : null,
       line('Received by', p.recorded_by_label),
     ]));
+    // The year's account on the receipt: fees, discount (when there is one), paid so far, left to pay.
+    const b = detail.balance || {};
+    if (!detail.money_hidden && b.total_fees !== null && b.total_fees !== undefined) {
+      const disc = Number(b.discounts) || 0;
+      r.appendChild(el('dl', { className: 'fees-r-lines fees-r-account', id: 'fees-r-account' }, [
+        line('Fees for the year', rupees2(Number(b.total_fees) + disc), 'fees-r-fees'),
+        disc ? line('Discount', '−' + rupees2(disc) + ' (' + (detail.discounts || []).filter((g) => !g.is_removed).map((g) => g.reason_label).join(', ') + ')', 'fees-r-discount') : null,
+        line('Paid so far', rupees2(b.paid || 0), 'fees-r-paid'),
+        line('Left to pay', rupees2(b.balance_total || 0), 'fees-r-left'),
+      ]));
+    }
     r.appendChild(el('p', { className: 'fees-r-foot muted small', text: 'Paid (office): recorded by the fees office. This is a computer-made receipt.' }));
     const print = el('button', { type: 'button', className: 'primary', id: 'fees-r-print', text: 'Print' });
     const close = el('button', { type: 'button', id: 'fees-r-close', text: 'Close' });
@@ -1165,7 +1271,9 @@
         ]),
       ]));
       addFeeLine(prefix, lines);
+      form.appendChild(el('label', { className: 'check' }, [el('input', { type: 'checkbox', id: id('plan'), checked: true }), ' Add the fees of the class\'s fee plan']));
     }
+    form.appendChild(el('label', { className: 'check' }, [el('input', { type: 'checkbox', id: id('bus'), checked: !!x.uses_bus }), ' Uses the school bus']));
     form.appendChild(el('div', { id: id('dups'), className: 'addrow-dups', role: 'alert', hidden: true }));
     form.appendChild(el('div', { className: 'row' }, [el('button', { type: 'submit', id: id('save'), text: submitText })]));
     form.appendChild(msg(id('msg')));
@@ -1289,6 +1397,18 @@
     for (const fee of fees) {
       try { await ctx.rpc('accounts_add_fee_item', Object.assign({ p_student: id }, fee)); added++; } catch (err) { failed.push('fee "' + fee.p_head + '": ' + errText(err)); }
     }
+    const wantBus = $('fsa-bus') && $('fsa-bus').checked;
+    const wantPlan = $('fsa-plan') && $('fsa-plan').checked;
+    let planText = '';
+    if (wantBus) {
+      try { await ctx.rpc('accounts_set_uses_bus', { p_student: id, p_uses_bus: true }); } catch (err) { failed.push('uses the bus: ' + errText(err)); }
+    }
+    if (wantPlan) {
+      try {
+        const res = (await ctx.rpc('fee_plan_apply_student', { p_student: id })) || {};
+        planText = Number(res.added) ? ' Fee plan added: ' + (res.heads || []).join(', ') + '.' : '';
+      } catch (err) { failed.push('fee plan: ' + errText(err)); }
+    }
     let paidText = '';
     if (pay) {
       try {
@@ -1298,7 +1418,7 @@
     }
     saving = false;
     if (!ctx) return;
-    pendingNote = AR.studentData(f).name + ' added' + (added ? ' with ' + plural(added, 'fee', 'fees') : '') + '.' + paidText +
+    pendingNote = AR.studentData(f).name + ' added' + (added ? ' with ' + plural(added, 'fee', 'fees') : '') + '.' + planText + paidText +
       (failed.length ? ' Not saved: ' + failed.join('; ') + '. Add it below.' : '');
     $('fees-add').hidden = true;
     $('fees-add').textContent = '';
@@ -1336,6 +1456,8 @@
     say('fse-msg', 'Saving…');
     try {
       await ctx.rpc('accounts_save_student', { p_student: studentId, p_data: AR.studentData(f) });
+      const bus = $('fse-bus');
+      if (bus && bus.checked !== !!st.uses_bus) await ctx.rpc('accounts_set_uses_bus', { p_student: studentId, p_uses_bus: bus.checked });
       saving = false;
       await reloadStudent('Details saved.');
     } catch (err) {
@@ -1364,6 +1486,8 @@
       el('span', { className: 'muted small', text: 'First row: column names.' }),
       input,
     ]));
+    p.appendChild(el('label', { className: 'check' }, [el('input', { type: 'checkbox', id: 'fees-imp-plan', checked: true }),
+      ' Give new students the fee plan of their class']));
     p.appendChild(el('div', { id: 'fees-imp-map', hidden: true }));
     p.appendChild(el('div', { id: 'fees-imp-preview' }));
     p.appendChild(msg('fees-imp-msg'));
@@ -1513,11 +1637,14 @@
     go.disabled = true;
     say('fees-imp-msg', 'Importing…');
     let total = {};
+    let planAdded = 0;
     const skips = [];
     try {
       for (let i = 0; i < built.rows.length; i += IMPORT_CHUNK) {
         const part = built.rows.slice(i, i + IMPORT_CHUNK);
-        const res = (await ctx.rpc('accounts_import_students', { p_rows: part })) || {};
+        const withPlan = $('fees-imp-plan') && $('fees-imp-plan').checked;
+        const res = (await ctx.rpc('accounts_import_students', withPlan ? { p_rows: part, p_apply_plans: true } : { p_rows: part })) || {};
+        planAdded += Number(res.plan_fee_items_added) || 0;
         total = addImportCounts(total, res);
         serverSkips(res, built.sheetRows.slice(i, i + IMPORT_CHUNK)).forEach((s) => skips.push(s));
       }
@@ -1529,7 +1656,8 @@
     say('fees-imp-msg', '');
     const res = $('fees-imp-result');
     res.textContent = '';
-    res.appendChild(el('p', { id: 'fees-imp-done', className: 'fees-done', text: importSummary(total) }));
+    res.appendChild(el('p', { id: 'fees-imp-done', className: 'fees-done', text: importSummary(total) +
+      (planAdded ? ' ' + plural(planAdded, 'fee', 'fees') + ' added from the fee plans.' : '') }));
     if (skips.length) {
       res.appendChild(el('h4', { text: 'Skipped by the server' }));
       res.appendChild(el('ul', { className: 'fees-problems' }, skips.slice(0, 50).map((s) => el('li', { text: 'Row ' + s.row + ': ' + s.reason }))));
@@ -1630,6 +1758,11 @@
       build();
       wire();
       window.addEventListener('afterprint', afterPrint);
+      FB = window.VectorFeesBasics || null;
+      if (FB) {
+        FB.hooks.classes = () => choices(allRows, 'class_label');
+        FB.hooks.changed = () => { if (ctx) { loadAll(); loadList(); loadSummary(); } };
+      }
       loadAll();
       loadList();
       loadSummary();
@@ -1640,7 +1773,7 @@
       clearTimeout(searchTimer);
       Object.keys(seq).forEach((k) => { seq[k]++; });
       ctx = null; box = null; allRows = []; listRows = []; detail = null; studentId = null; feesTypeId = null;
-      imp = null; summary = null; wantPay = false; page = 1; pendingNote = ''; saving = false;
+      imp = null; summary = null; wantPay = false; page = 1; pendingNote = ''; saving = false; lastGrant = null;
     },
   });
 })();
