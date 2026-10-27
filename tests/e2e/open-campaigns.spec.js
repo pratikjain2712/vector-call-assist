@@ -105,8 +105,8 @@ test('a caller filters open campaigns by class 8th and Fees, gets a pool lead wi
   await help.locator('.help-q', { hasText: 'Do not call me again' }).click();
   await expect(page.locator('#help-save')).toHaveText('Save as Do not call again');
   await page.locator('#help-save').click();
-  await expect(page.locator('#sheet-msg')).toHaveText('Saved: Do not call again for Sunita Sharma.');
-  await expect.poll(() => backend.db.saved.length).toBe(1);
+  await expect(page.locator('#camp-undo')).toContainText('Saved: Do not call again for Sunita Sharma.');   // with an Undo for a few seconds
+  await expect.poll(() => backend.db.saved.length, { timeout: 20000 }).toBe(1);
   expect(backend.db.saved[0].p_result_key).toBe('do_not_call');
   expect(backend.db.saved[0].campaign_id).toBe(fees8.id);
   await expect(card).toContainText('Kavita Rao');

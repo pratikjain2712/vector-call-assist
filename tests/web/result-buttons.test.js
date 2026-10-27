@@ -71,3 +71,49 @@ test("call back later with a time is sent as India time", () => {
   assert.equal(args.p_next_call_at, "2026-10-28T11:00:00.000Z");
   assert.equal(RB.callAt("2026-10-28", ""), null);
 });
+
+test("keys 1 to 9 follow the buttons on screen: the call type's results, then the common ones", () => {
+  assert.deepEqual(RB.ordered(FEES).map((r) => r.key), ["paid", "will_pay_on", "refused", "no_answer", "call_back_later", "do_not_call"]);
+  assert.deepEqual(RB.ordered(null), []);
+});
+
+test("one tap: results that ask for nothing else have no fields", () => {
+  assert.deepEqual(["no_answer", "do_not_call"].map((k) => RB.fields(byKey(k)).length), [0, 0]);
+  assert.deepEqual(RB.fields(byKey("paid")), ["amount"]);
+});
+
+test("the amount due is filled in only when this caller is shown it", () => {
+  assert.equal(RB.defaultAmount({ amount_due: 18000 }), 18000);
+  assert.equal(RB.defaultAmount({ amount_due: "9000.50" }), 9000.5);
+  assert.equal(RB.defaultAmount({ amount_due: 18000, money_hidden: true }), null);
+  assert.equal(RB.defaultAmount({ amount_due: 0 }), null);
+  assert.equal(RB.defaultAmount({ amount_due: null }), null);
+  assert.equal(RB.defaultAmount({ loading: true }), null);
+  assert.equal(RB.defaultAmount(null), null);
+});
+
+test("promise dates are worked out in India time: tomorrow, +3 days, the coming Saturday, the 1st", () => {
+  // Tuesday 27 Oct 2026, 23:30 India time (18:00 UTC): India's date, not UTC's.
+  const tue = Date.parse("2026-10-27T18:00:00Z");
+  assert.deepEqual(RB.promiseDates(tue).map((d) => d.key + " " + d.date),
+    ["tomorrow 2026-10-28", "in3 2026-10-30", "sat 2026-10-31", "first 2026-11-01"]);
+  // 31 Dec, a Thursday, just after midnight India time: the year and month roll over.
+  assert.deepEqual(RB.promiseDates(Date.parse("2026-12-30T18:40:00Z")).map((d) => d.date), ["2027-01-01", "2027-01-03", "2027-01-02", "2027-01-01"]);
+  // On a Saturday, "Sat" is next week's.
+  assert.equal(RB.promiseDates(Date.parse("2026-10-31T06:00:00Z"))[2].date, "2026-11-07");
+});
+
+test("call back times: in 1 hour, 6 pm today (before 6 pm only), tomorrow at the same time", () => {
+  const morning = Date.parse("2026-10-27T05:00:00Z");   // 10:30 India time
+  assert.deepEqual(RB.callbackTimes(morning), [
+    { key: "hour", date: "2026-10-27", time: "11:30" },
+    { key: "evening", date: "2026-10-27", time: "18:00" },
+    { key: "tomorrow", date: "2026-10-28", time: "10:30" },
+  ]);
+  const late = Date.parse("2026-10-27T18:00:00Z");      // 23:30 India time: in 1 hour is tomorrow
+  assert.deepEqual(RB.callbackTimes(late), [
+    { key: "hour", date: "2026-10-28", time: "00:30" },
+    { key: "tomorrow", date: "2026-10-28", time: "23:30" },
+  ]);
+  RB.callbackTimes(morning).forEach((t) => assert.ok(RB.callAt(t.date, t.time) > morning));
+});

@@ -109,8 +109,7 @@ test('Home follows the phone: on a call with its time, wrap-up after hanging up,
   await expect(status).toHaveText(/^Wrap-up · 0:0\d$/);
 
   // Save the result: ready.
-  await page.locator('#res-no_answer').click();
-  await page.locator('#res-save').click();
+  await page.locator('#res-no_answer').click();   // one tap saves it
   await expect.poll(() => lastState(backend)).toBe('none');
   await refresh(admin);
   await expect(status).toHaveText('Ready');

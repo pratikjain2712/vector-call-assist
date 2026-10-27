@@ -311,6 +311,16 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
 .rating span { display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: pointer; font-weight: 700; }
 .rating input:checked + span { border: 2px solid var(--accent); color: var(--accent); }
 .rating input:focus-visible + span { outline: 3px solid var(--accent); outline-offset: 2px; }
+.resbtn kbd, .quick kbd { font-family: var(--util); font-size: 0.72rem; font-weight: 500; opacity: 0.7; margin-left: 8px; }
+.resultpanel.keysoff .resbtn kbd { visibility: hidden; }
+.quick { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 100%; }
+.quick button { font: inherit; font-size: 0.92rem; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; min-height: 36px; }
+.quick button[aria-pressed="true"] { border: 2px solid var(--accent); padding: 5px 9px; }
+.quick button:focus-visible, .resbtn:focus-visible, .undoline button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.resfields .field.choice { flex: 1 1 100%; }
+.undoline { margin: 0; padding: 8px 20px; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; border-top: 1px solid var(--line); background: var(--yes-bg); font-size: 0.92rem; }
+.undoline button { font: inherit; font-weight: 700; color: var(--accent); background: transparent; border: 1px solid var(--accent); border-radius: 6px; padding: 4px 12px; }
+.modal-wrap.lock { background: var(--bg); }
 .resactions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; align-items: center; }
 .resactions .primary, .resactions .plain { padding: 11px 16px; border-radius: 8px; }
 .reported { color: var(--muted); font-size: 0.85rem; }
@@ -512,6 +522,7 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
         <label class="plain filebtn" for="sheet-file">Load lead sheet</label>
       </div>
       <div class="callhead camplead" id="camp-lead" hidden></div>
+      <p class="undoline" id="camp-undo" role="status" hidden></p>
       <section class="callpanel" id="call-panel" hidden></section>
       <div class="callmode" id="call-mode" role="group" aria-label="Call type">
         <button type="button" data-mode="intro" aria-pressed="true"><b>Intro call</b> <span>2 to 5 min</span></button>
@@ -587,7 +598,7 @@ textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outl
   </div>
 </div>
 
-<div class="modal-wrap" id="still-there" hidden>
+<div class="modal-wrap lock" id="still-there" hidden>
   <section class="modal" role="alertdialog" aria-modal="true" aria-labelledby="still-title" aria-describedby="still-text">
     <h2 id="still-title" data-i18n="timeout.title">Still there?</h2>
     <p id="still-text"></p>

@@ -262,6 +262,9 @@ const camp = {
   // only, like money); common: the common answers (js/common-answers.js), the static copy until the database
   // answers; filter: the picker's purpose, class and board; pickerOpen: the campaign picker is showing.
   institute: "", ledger: Object.create(null), common: [], commonFrom: "", filter: { purpose: "", class_label: "", board: "" }, pickerOpen: false,
+  // Fewer taps. undo: the one-tap result just saved, held back from the server while its Undo shows
+  // ({ id, leadId, lead, key, label, name, until, callId, prevRec }); scriptPick: the result the script's ending picked.
+  undo: null, scriptPick: null,
 };
 function refreshPhoneFlags() { phoneCheck = sheet ? ImportCheck.checkPhones(sheet.rows.map((r) => r[sheet.cols.phone])) : null; }
 /* Sheets saved before the callback column existed get it here, so the cell index is never undefined. */
@@ -375,8 +378,16 @@ function go(to, pick) {
   state.history.push({ node: state.node, trail: state.trail.length });
   if (pick && pick.k !== "next") state.trail.push(pick);
   state.node = to; state.objection = null;
-  // Phase A: caller. A campaign call is saved with the result buttons, not at the script's end card.
-  if (FLOW[to].end && campOn()) { startClock(); render(); return; }
+  // Phase A: caller. A campaign call is saved with the result buttons, not at the script's end card. An ending
+  // that names its result picks it, so the caller only checks it and saves.
+  if (FLOW[to].end && campOn()) {
+    startClock();
+    const key = FLOW[to].end.result;
+    if (key && campResult(key) && !camp.pick && !state.practice) { camp.pick = key; camp.scriptPick = key; }
+    render();
+    if (camp.scriptPick && $("res-save")) $("res-save").focus();
+    return;
+  }
   if (FLOW[to].end) {
     stopClock();
     if (state.practice) { render(); return; }   // practice: the end card shows and nothing is written
@@ -437,12 +448,14 @@ function logEntry(action, extra) {
 function back() {
   if (state.objection != null) { state.objection = null; render(); return; }
   if (!state.history.length) return;
+  if (camp.scriptPick && camp.pick === camp.scriptPick) camp.pick = null;   // the ending's pick goes with the ending
+  camp.scriptPick = null;
   const h = state.history.pop(); state.node = h.node; state.trail.length = h.trail;
   if (state.history.length) startClock();
   render();
 }
 function resetCall() { campResetCall(); stopClock(); state.callId = null; state.node = ACTIVE.start; state.history = []; state.trail = []; state.objs = []; state.objection = null; state.elapsed = 0; tick(); presenceChanged(); }
-function restart() { lastOutcome = null; camp.pick = null; camp.values = {}; resetCall(); if (!sheet) $("lead-name").value = ""; render(); }
+function restart() { lastOutcome = null; camp.pick = null; camp.scriptPick = null; camp.values = campFreshValues(); resetCall(); if (!sheet) $("lead-name").value = ""; render(); }
 function loadLead(i) {
   if (state.practice) { note(leaveMessage()); return; }
   lastOutcome = null; sheet.idx = i; $("lead-name").value = leadName(); resetCall(); persist(); render(); window.scrollTo({ top: 0, behavior: "auto" }); }
@@ -1264,7 +1277,7 @@ function render() {
     card.appendChild(el("p", "noscript", campHasScripts() ? I18n.t("camp.noScript") : I18n.t("camp.noScriptPlan")));
   } else if (node.end && campOn()) {
     card.appendChild(el("span", "outcome mid", I18n.t("camp.scriptDone", { label: node.end.label })));
-    card.appendChild(el("p", "heard", I18n.t("camp.pickBelow")));
+    card.appendChild(el("p", "heard", I18n.t(camp.pick && camp.pick === camp.scriptPick ? "camp.confirmBelow" : "camp.pickBelow")));
   } else if (node.end) {
     const e = node.end;
     card.appendChild(el("span", "outcome " + e.tone, "Call ended: " + e.label));
@@ -1320,6 +1333,7 @@ function render() {
     card.appendChild(wrap);
   }
   stage.appendChild(card);
+  $("result-panel").classList.toggle("keysoff", !!card.querySelector(".ans"));   // 1 to 3 answer the script here
   $("back").disabled = !state.history.length && state.objection == null;
   // The objection chips jump to built-in steps, so they are off while a published script is in use.
   $("obj-section").hidden = !!node.end || ACTIVE !== BUILTIN;
@@ -1595,8 +1609,19 @@ document.addEventListener("keydown", (ev) => {
     if (!$("help-col").hidden) { ev.preventDefault(); $("help-search").focus(); $("help-search").select(); }
     return;
   }
-  if (tag === "INPUT" || tag === "TEXTAREA" || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  // Enter in a result field saves (Save and call next). Other keys type as usual.
+  if (ev.key === "Enter" && (tag === "INPUT" || tag === "SELECT") && ev.target.closest(".resfields") && !ev.metaKey && !ev.ctrlKey && !ev.altKey) {
+    ev.preventDefault(); campSave(); return;
+  }
+  if (typing || ev.metaKey || ev.ctrlKey || ev.altKey) return;
   const k = ev.key.toLowerCase();
+  // The result buttons take 1 to 9 when no script answer is on screen: the script's end, or no script.
+  if (/^[1-9]$/.test(ev.key) && campResultKeys()) {
+    const b = $("result-panel").querySelectorAll(".resgrid .resbtn, .rescommon .resbtn")[Number(ev.key) - 1];
+    if (b) { ev.preventDefault(); b.click(); }
+    return;
+  }
+  if (k === "enter" && tag !== "BUTTON" && tag !== "A" && !$("ans-next") && campResultKeys() && camp.pick) { ev.preventDefault(); campSave(); return; }
   const map = { "1": "yes", "2": "no", "3": "maybe" };
   if ((ev.key === "ArrowLeft" || ev.key === "ArrowRight") && sheet && !campOn()) {
     if (leaveBlocked()) { note(leaveMessage()); return; }
@@ -1763,6 +1788,15 @@ function campLead() {
   return campView().find((l) => l.id === camp.lead.id) || camp.lead;
 }
 function campResult(key) { const c = campCurrent(); return c && Array.isArray(c.results) ? c.results.find((r) => r.key === key) || null : null; }
+/* The result buttons take the number keys: a lead on the card and no script answer on screen. */
+function campResultKeys() { return campOn() && !!campLead() && !$("result-panel").hidden && !$("stage").querySelector(".ans"); }
+
+/* "Also send from the institute's WhatsApp" is remembered per caller on this browser (a convenience only). */
+const WA_TICK_KEY = "vca2-wa-app:";
+function campWaTick() { try { return localStorage.getItem(WA_TICK_KEY + camp.seat) === "1"; } catch (e) { return false; } }
+function campSetWaTick(on) { try { localStorage.setItem(WA_TICK_KEY + camp.seat, on ? "1" : "0"); } catch (e) {} }
+/* The values a new result starts with. */
+function campFreshValues() { return { waApp: campWaTick() }; }
 
 function campResetCall() { camp.begun = false; camp.beganAt = 0; camp.clock.reset(); }
 /* The call has started (dialled, or the first answer tapped): the call timer and the step clock run. */
@@ -1936,7 +1970,7 @@ function campPick(id) {
   try { localStorage.setItem(CAMP_KEY, id); } catch (e) {}
   const wasOpen = camp.pickerOpen;   // Phase A.2: caller: picked in the campaign picker
   camp.pickerOpen = false;
-  camp.id = id; camp.lead = null; camp.leads = []; camp.info = null; camp.pick = null; camp.values = {}; camp.msg = "";
+  camp.id = id; camp.lead = null; camp.leads = []; camp.info = null; camp.pick = null; camp.scriptPick = null; camp.values = campFreshValues(); camp.msg = "";
   note("");
   resetCall();
   render();
@@ -2048,7 +2082,7 @@ function campShow(lead) {
   const was = camp.lead ? camp.lead.id : null;
   camp.lead = Object.assign({}, lead);
   camp.shownAt = Date.now();
-  camp.pick = null; camp.values = {};
+  camp.pick = null; camp.scriptPick = null; camp.values = campFreshValues();
   resetCall();
   campMoney(lead.id);
   if (lead.student_id) campLedger(lead.id);   // Phase A.2: caller
@@ -2121,9 +2155,9 @@ function campQuickResult(key) {
   const r = campResult(key);
   if (!r || !campLead() || state.practice) return;
   camp.pick = key;
-  camp.values = {};
+  camp.values = campFreshValues();
   renderResults();
-  if (!ResultButtons.problems(r, camp.values).length) { campSave(); return; }
+  if (!ResultButtons.fields(r).length) { campSave({ undo: true }); return; }
   $("res-msg").textContent = I18n.t("a2.fillThenSave");
   const f = $("result-panel").querySelector(".resfields input, .resfields select");
   if (f) { f.scrollIntoView({ block: "center" }); f.focus(); }
@@ -2269,13 +2303,26 @@ loadStaticCommon();
 
 /* ---- Saving ---- */
 
-async function campSave() {
+/* Saves the picked result and shows the next lead with its Call button focused. opts.undo: a one-tap result
+   (it asks for nothing else). It is held back from the server for UNDO_MS while an Undo line shows. */
+const UNDO_MS = 10000;
+async function campSave(opts) {
+  const o = opts || {};
   if (state.practice) { $("res-msg").textContent = I18n.t("practice.blocked"); return; }
   const c = campCurrent(), l = campLead();
-  if (!c || !l) return;
+  if (!c || !l || camp.saving) return;
   const result = campResult(camp.pick);
   const probs = ResultButtons.problems(result, camp.values);
   if (probs.length) { $("res-msg").textContent = probs.join(" "); return; }
+  camp.saving = true;
+  try { await campStore(c, l, result, o); } finally { camp.saving = false; }
+  await campSync();
+  if (!camp.lead) await campEnsureLead(true);
+  render();
+  campFocusCall();
+  campPresence();
+}
+async function campStore(c, l, result, o) {
   const now = Date.now();
   const steps = ACTIVE === NO_SCRIPT ? { times: {}, reached: null } : camp.clock.result(now);
   const rec = state.callId ? CallRecords.get(state.callId) : null;
@@ -2295,28 +2342,76 @@ async function campSave() {
       connectedSeconds: rec ? rec.connectedSeconds : null, phoneSessionId: rec ? rec.sessionId : null,
     }),
   };
+  // A new save ends the last one's Undo: that result goes to the server with this one.
+  camp.undo = null;
   // On this device first: the result is never lost, whatever the network does next.
   camp.outbox = OfflineStore.add(camp.outbox, item);
   await OfflineStore.set(OfflineStore.keys.outbox(camp.seat), camp.outbox);
+  const prevRec = rec ? { outcome: rec.outcome || "", outcomeCode: rec.outcomeCode || "", outcomeAtMs: rec.outcomeAtMs || 0, saveStatus: rec.saveStatus, notes: rec.notes || "" } : null;
   if (rec) CallRecords.update(rec.sessionId, { outcome: result.label, outcomeCode: result.key, outcomeAtMs: now, saveStatus: "campaign", notes: item.values.note });
   logEntry("campaign-result", { result: result.key });   // no names or numbers
   const savedId = l.id;
-  camp.pick = null; camp.values = {};
+  camp.pick = null; camp.scriptPick = null; camp.values = campFreshValues();
   resetCall();
   camp.lead = null;
   const next = CampaignQueue.nextLead(campView(), Date.now(), savedId);
   if (next) campShow(next);
-  note(I18n.t("camp.saved", { result: result.label, name: l.name }));
+  if (o.undo) {
+    camp.undo = { id: id, leadId: l.id, lead: Object.assign({}, l), key: result.key, label: result.label, name: l.name,
+      until: now + UNDO_MS, callId: rec ? rec.sessionId : null, prevRec: prevRec };
+    note("");
+    setTimeout(() => { campRenderUndo(); campSync(); }, UNDO_MS + 100);
+  } else note(I18n.t("camp.saved", { result: result.label, name: l.name }));
   render();
   window.scrollTo({ top: 0, behavior: "auto" });
-  await campSync();
-  if (!camp.lead) await campEnsureLead(true);
+}
+
+/* The Undo line under the lead card, for the one-tap result just saved. */
+function campUndoLive() { return camp.undo && Date.now() < camp.undo.until && campOn() ? camp.undo : null; }
+function campRenderUndo() {
+  const box = $("camp-undo");
+  const u = campUndoLive();
+  box.hidden = !u;
+  if (box.dataset.id === (u ? u.id : "")) return;
+  box.dataset.id = u ? u.id : "";
+  box.textContent = "";
+  if (!u) return;
+  box.appendChild(el("span", "", I18n.t("camp.saved", { result: u.label, name: u.name })));
+  const b = el("button", "", I18n.t("camp.undo")); b.type = "button"; b.id = "camp-undo-btn";
+  b.addEventListener("click", campUndo);
+  box.appendChild(b);
+}
+/* Undo: the result leaves the outbox before it reaches the server, and the lead is back on the card. */
+async function campUndo() {
+  const u = campUndoLive();
+  if (!u) { camp.undo = null; campRenderUndo(); return; }
+  if (leaveBlocked()) { note(leaveMessage()); return; }
+  camp.undo = null;
+  if (!camp.outbox.some((i) => i.id === u.id)) { campRenderUndo(); note(I18n.t("camp.undoLate")); return; }
+  camp.outbox = camp.outbox.filter((i) => i.id !== u.id);
+  await OfflineStore.set(OfflineStore.keys.outbox(camp.seat), camp.outbox);
+  if (u.callId && u.prevRec && CallRecords.get(u.callId)) CallRecords.update(u.callId, u.prevRec);
+  logEntry("campaign-result-undone", { result: u.key });   // no names or numbers
+  campShow(campView().find((x) => x.id === u.leadId) || u.lead);
+  note(I18n.t("camp.undone", { name: u.name }));
   render();
+  const first = $("result-panel").querySelector(".resbtn");
+  if (first) first.focus();
   campPresence();
 }
 
-/* A laptop call's result waits up to 2 minutes for the phone's call log, so the connected time goes with it. */
+/* After a save: the next lead's Call button has the focus, so Enter (or C) calls. */
+function campFocusCall() {
+  if (!campOn() || !camp.lead) return;
+  const b = $("call-laptop") || $("call-link");
+  if (b && !b.disabled) b.focus({ preventScroll: true });
+}
+
+/* A laptop call's result waits up to 2 minutes for the phone's call log, so the connected time goes with it.
+   A one-tap result waits while its Undo shows. */
 function campReady(item) {
+  const u = campUndoLive();
+  if (u && u.id === item.id) return null;
   if (!item.callId) return item;
   const rec = CallRecords.get(item.callId);
   if (rec && !CALL_FINAL[rec.callStatus] && Date.now() - item.savedAt < 120000) return null;
@@ -2393,6 +2488,7 @@ function renderCampaign() {
   $("queue-panel").hidden = !on; $("camp-lead").hidden = !on; $("result-panel").hidden = !on;
   const today = $("camp-today");
   today.hidden = !on || !camp.info;
+  campRenderUndo();
   if (!on) { camp.resultsSig = ""; return; }
   if (camp.info) {
     const mineToday = (camp.info.my_calls_today || 0) + campPending().filter((i) => i.savedAt >= (camp.info.at || 0)).length;
@@ -2410,7 +2506,12 @@ function renderCampaign() {
 
 function renderCampLead() {
   const box = $("camp-lead");
+  // Drawn again on every render: the Call button keeps the focus it had (after a save it has it).
+  const had = document.activeElement && box.contains(document.activeElement) ? document.activeElement.id : "";
   box.textContent = "";
+  try { renderCampLeadInto(box); } finally { if (had && $(had)) $(had).focus({ preventScroll: true }); }
+}
+function renderCampLeadInto(box) {
   const c = campCurrent(), l = campLead();
   const who = el("div", "who");
   if (!l) {
@@ -2503,6 +2604,17 @@ function renderQueue() {
   }
 }
 
+/* A result button. One that asks for nothing else (No answer, Busy, Wrong number…) saves at once, with an Undo;
+   the others show their fields, filled in as far as they can be. */
+function campTap(r) {
+  if (!ResultButtons.fields(r).length && !state.practice) { camp.pick = r.key; campSave({ undo: true }); return; }
+  camp.pick = camp.pick === r.key ? null : r.key;
+  $("res-msg").textContent = "";
+  renderResults();
+  const again = $("res-" + r.key);
+  if (again) again.focus();
+}
+
 /* The result buttons and their fields. Drawn again only when the campaign, lead or picked result changes, so
    typing in a field is never interrupted; the WhatsApp link and the message line update in place. */
 function renderResults() {
@@ -2516,10 +2628,13 @@ function renderResults() {
   const h = el("h2", "", I18n.t("camp.howEnded")); h.id = "result-title";
   panel.appendChild(h);
   const s = ResultButtons.split(c.results);
+  const keys = ResultButtons.ordered(c.results).map((r) => r.key);
   const btn = (r) => {
     const b = el("button", "resbtn " + ResultButtons.tone(r), r.label); b.type = "button"; b.id = "res-" + r.key;
     b.setAttribute("aria-pressed", String(camp.pick === r.key));
-    b.addEventListener("click", () => { camp.pick = camp.pick === r.key ? null : r.key; $("res-msg").textContent = ""; renderResults(); const again = $("res-" + r.key); if (again) again.focus(); });
+    const n = keys.indexOf(r.key) + 1;
+    if (!TOUCH && n >= 1 && n <= 9) b.appendChild(el("kbd", "", String(n))).setAttribute("aria-hidden", "true");   // key n picks it
+    b.addEventListener("click", () => campTap(r));
     return b;
   };
   const grid = el("div", "resgrid"); grid.setAttribute("role", "group"); grid.setAttribute("aria-labelledby", "result-title");
@@ -2545,7 +2660,7 @@ function renderResults() {
   // In-app WhatsApp from the institute's number (connected in Settings), next to the wa.me link.
   const waApp = el("label", "wa-app"); waApp.id = "res-wa-app-row"; waApp.hidden = true;
   const waBox = el("input"); waBox.type = "checkbox"; waBox.id = "res-wa-app"; waBox.checked = !!camp.values.waApp;
-  waBox.addEventListener("change", () => { camp.values.waApp = waBox.checked; });
+  waBox.addEventListener("change", () => { camp.values.waApp = waBox.checked; campSetWaTick(waBox.checked); });
   waApp.appendChild(waBox);
   waApp.appendChild(el("span", "", "")).id = "res-wa-app-label";
   actions.appendChild(waApp);
@@ -2573,32 +2688,65 @@ function campFields(r, l) {
     i.addEventListener("input", () => { onInput(i.value); campUpdateActions(); });
     return i;
   };
+  /* A row of buttons, one pressed at a time: [{ id, text, on (pressed?), pick() }]. */
+  const quickRow = (items, labelledBy) => {
+    const row = el("div", "quick"); row.setAttribute("role", "group");
+    if (labelledBy) row.setAttribute("aria-labelledby", labelledBy);
+    items.forEach((q) => {
+      const b = el("button", "", q.text); b.type = "button"; b.id = q.id;
+      b.setAttribute("aria-pressed", String(!!q.on));
+      b.addEventListener("click", () => {
+        if (q.pick() !== false) row.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+        campUpdateActions();
+      });
+      row.appendChild(b);
+    });
+    return row;
+  };
   if (r.needs_date) {
-    const d = input("res-date", "date", v.date, (x) => { v.date = x; });
+    const callback = r.key === "call_back_later";
+    const d = input("res-date", "date", v.date, (x) => { v.date = x; syncQuick(); });
     d.min = todayIsoIndia();
-    field(r.needs_amount ? I18n.t("camp.promisedDate") : r.key === "call_back_later" ? I18n.t("camp.callBackOn") : I18n.t("camp.date"), d);
-    if (r.key === "call_back_later") field(I18n.t("camp.timeOptional"), input("res-time", "time", v.time, (x) => { v.time = x; }));
+    field(r.needs_amount ? I18n.t("camp.promisedDate") : callback ? I18n.t("camp.callBackOn") : I18n.t("camp.date"), d).parentNode.querySelector(".label").id = "res-date-label";
+    const t = callback ? field(I18n.t("camp.timeOptional"), input("res-time", "time", v.time, (x) => { v.time = x; syncQuick(); })) : null;
+    // Quick picks: a promise (Tomorrow, +3 days, Sat, 1st) or a call back (In 1 hr, 6 pm today, Tomorrow same time).
+    const now = Date.now();
+    const picks = callback
+      ? ResultButtons.callbackTimes(now).map((q) => ({ id: "res-q-" + q.key, date: q.date, time: q.time, text: I18n.t({ hour: "camp.qHour", evening: "camp.qEvening", tomorrow: "camp.qSameTime" }[q.key]) }))
+      : ResultButtons.promiseDates(now).map((q) => ({ id: "res-q-" + q.key, date: q.date, text: q.key === "sat" ? I18n.t("camp.qSat") : q.key === "first" ? I18n.t("camp.qFirst") : I18n.t(q.key === "in3" ? "camp.qIn3" : "camp.qTomorrow") }));
+    const same = (q) => q.date === (v.date || "") && (!callback || q.time === (v.time || ""));
+    picks.forEach((q) => {
+      q.on = same(q);
+      q.pick = () => { v.date = q.date; d.value = q.date; if (t) { v.time = q.time; t.value = q.time; } };
+    });
+    picks.push({ id: "res-q-pick", text: I18n.t("camp.qPick"), pick: () => { try { d.showPicker(); } catch (e) { d.focus(); } return false; } });
+    const row = quickRow(picks, "res-date-label");
+    box.appendChild(row);
+    const syncQuick = () => picks.forEach((q) => { if (q.date) $(q.id).setAttribute("aria-pressed", String(same(q))); });
   }
   if (r.needs_amount) {
+    // The amount due is filled in when this caller is shown it: Paid, or a promise of the full amount, is then just Save.
+    const m = camp.money[l.id];
+    const due = ResultButtons.defaultAmount(m);
+    if (v.amount === undefined && due != null) v.amount = due.toLocaleString("en-IN", { maximumFractionDigits: 2 });
     const a = input("res-amount", "text", v.amount, (x) => { v.amount = x; });
     a.inputMode = "decimal";
-    const m = camp.money[l.id];
-    if (m && m.amount_due != null) a.placeholder = WaLink.rupees(m.amount_due).replace("₹", "");
+    if (m && m.amount_due != null && !m.money_hidden) a.placeholder = WaLink.rupees(m.amount_due).replace("₹", "");
     field(r.needs_date ? I18n.t("camp.amount") : I18n.t("camp.amountPaid"), a);
   }
   if (r.needs_reason || (r.reason_choices && r.reason_choices.length)) {
-    let ri;
     if (Array.isArray(r.reason_choices) && r.reason_choices.length) {
-      ri = el("select"); ri.id = "res-reason";
-      ri.appendChild(new Option(I18n.t("camp.pickReason"), ""));
-      r.reason_choices.forEach((x) => ri.appendChild(new Option(x, x)));
-      ri.value = v.reason || "";
-      ri.addEventListener("change", () => { v.reason = ri.value; campUpdateActions(); });
+      // The reasons as buttons: one tap instead of opening a list.
+      const g = el("div", "field choice"); g.id = "res-reason";
+      const lab = el("span", "label", I18n.t("camp.reason")); lab.id = "res-reason-label";
+      g.appendChild(lab);
+      g.appendChild(quickRow(r.reason_choices.map((x, i) => ({ id: "res-reason-" + i, text: x, on: v.reason === x, pick: () => { v.reason = x; } })), lab.id));
+      box.appendChild(g);
     } else {
-      ri = input("res-reason", "text", v.reason, (x) => { v.reason = x; });
+      const ri = input("res-reason", "text", v.reason, (x) => { v.reason = x; });
       ri.maxLength = 300;
+      field(I18n.t("camp.reason"), ri, true);
     }
-    field(I18n.t("camp.reason"), ri, true);
   }
   if (r.needs_rating) {
     const fs = el("fieldset", "rating");
@@ -2618,11 +2766,13 @@ function campFields(r, l) {
   const note = input("res-note", "text", v.note, (x) => { v.note = x; });
   note.maxLength = 300; note.placeholder = I18n.t("camp.notePlaceholder");
   field(I18n.t("camp.note"), note, true);
-  const wa = el("select"); wa.id = "res-wa";
-  [["", I18n.t("camp.waNotAsked")], ["yes", I18n.t("camp.waYes")], ["no", I18n.t("camp.waNo")]].forEach(([val, t]) => wa.appendChild(new Option(t, val)));
-  wa.value = v.waConsent === true ? "yes" : v.waConsent === false ? "no" : "";
-  wa.addEventListener("change", () => { v.waConsent = wa.value === "yes" ? true : wa.value === "no" ? false : undefined; campUpdateActions(); });
-  field(I18n.t("camp.waConsent"), wa);
+  // WhatsApp consent: three buttons (Not asked, Yes, No) instead of a list.
+  const wa = el("div", "field wide"); wa.id = "res-wa";
+  const waLab = el("span", "label", I18n.t("camp.waConsent")); waLab.id = "res-wa-label";
+  wa.appendChild(waLab);
+  wa.appendChild(quickRow([[undefined, "none", "camp.waNotAsked"], [true, "yes", "camp.waYes"], [false, "no", "camp.waNo"]].map(([val, id, key]) =>
+    ({ id: "res-wa-" + id, text: I18n.t(key), on: v.waConsent === val, pick: () => { v.waConsent = val; } })), waLab.id));
+  box.appendChild(wa);
   return box;
 }
 
@@ -2665,6 +2815,8 @@ function campUpdateActions() {
 }
 
 window.addEventListener("online", () => { campSync(); if (campOn()) campRefresh(); });
+// Leaving the page ends the Undo: a held result is already in the outbox (IndexedDB) and is sent now or next time.
+window.addEventListener("pagehide", () => { if (camp.undo) { camp.undo = null; campSync(); } });
 setInterval(campSync, 30000);
 setInterval(campPresence, 60000);   // Phase A: integration (admin Home "callers right now")
 setInterval(() => { if (campOn() && !document.hidden && !camp.begun && !camp.pick) campRefresh(); }, 60000);
