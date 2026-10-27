@@ -16,9 +16,14 @@
    The admin signs in by password or emailed link, like cloud.js. Reports are read with admin_* RPCs, which
    the database checks. Seat changes go through the seat-admin Edge Function (supabase/functions/seat-admin).
    Money: ctx.canSeeMoney comes from the can_see_money RPC; a database without it (or any error) gives false,
-   so ₹ stays hidden unless the server says yes. */
+   so ₹ stays hidden unless the server says yes.
+   Centres (js/admin/centres.js): when the institute has centres (centres_list), the top bar has a centre
+   switcher; ctx.centre is the picked centre ('' = all) and ctx.centres what centres_list said. Every ctx.rpc
+   gets the centre added (VectorCentres.withCentre), and a switch mounts every tab again, so every tab shows
+   that centre. Accounts on a phone get a bar at the bottom: Students · Collect · Pending. */
 (function () {
   const S = window.VectorAdminShared;
+  const C = window.VectorCentres;
   const H = window.VectorAdminHelpers || {};
   const cfg = window.VECTOR_CONFIG || {};
   const enabled = !!(cfg.supabaseUrl && cfg.supabaseAnonKey && window.supabase && window.supabase.createClient);
@@ -36,6 +41,9 @@
   let current = null;        // id of the open tab
   let userNavigated = false; // true after a click on a tab, so focus moves to the new tab (not on first load)
   const mounted = new Map(); // tab or part id -> its container, once mounted
+  let centres = null;        // VectorCentres.normalise(centres_list()), or null (no centres or an older database)
+  let centre = '';           // the picked centre id, '' = every centre the person may see
+  let signedIn = null;       // { email, institute, canSeeMoney } of this sign-in, to build ctx again on a switch
 
   const show = (section) => SECTIONS.forEach((s) => { $(s).hidden = s !== section; });
 
@@ -50,7 +58,7 @@
   const say = S.say;
 
   async function rpc(name, args) {
-    const { data, error } = await client.rpc(name, args);
+    const { data, error } = await client.rpc(name, C && centres && centres.has ? C.withCentre(name, args, centre) : args);
     if (error) {
       const err = new Error(error.message);
       err.code = error.code;   // lets a tab tell a missing function from other failures
@@ -192,8 +200,10 @@
     const row = Array.isArray(data) ? data[0] : data;
     if (!row || !row.id || !mayUseAdmin(row)) { show('notadmin'); return; }
     mySeat = row;
-    const [institute, canSeeMoney] = await Promise.all([loadInstitute(row), loadMoneyAccess(row)]);
+    const [institute, canSeeMoney] = await Promise.all([loadInstitute(row), loadMoneyAccess(row), loadCentres(session.user.email || session.user.id)]);
+    signedIn = { email: session.user.email || null, institute, canSeeMoney };
     ctx = makeContext(session.user.email || null, institute, canSeeMoney);
+    drawCentre();
     $('institute').textContent = institute.name || '';
     $('institute').hidden = !institute.name;
     $('account').hidden = false;
@@ -213,6 +223,37 @@
       if (t && t.institute_name) inst.name = String(t.institute_name);
     } catch (err) { /* the name is only shown, nothing depends on it */ }
     return inst;
+  }
+
+  // The institute's centres and batches (centres_list), and the centre this person last picked on this browser.
+  // An older database or no centres: null, and nothing about centres shows.
+  async function loadCentres(who) {
+    centres = null;
+    centre = '';
+    if (!C) return;
+    try {
+      const info = C.normalise(await rpc('centres_list'));
+      if (!info.has) return;
+      centres = info;
+      centre = C.readCentre(storage(), who, info);
+    } catch (err) { centres = null; }
+  }
+  function storage() { try { return typeof localStorage !== 'undefined' ? localStorage : null; } catch (err) { return null; } }
+
+  function drawCentre() {
+    const host = $('centre-pick');
+    if (!host || !C) return;
+    C.mountSwitch(host, centres, centre, switchCentre);
+  }
+
+  // Another centre: remembered, and every tab mounted again for it (typing in a form is lost, as on a sign-in).
+  function switchCentre(id) {
+    centre = id || '';
+    C.writeCentre(storage(), (signedIn && signedIn.email) || activeUser, centre);
+    unmountAll();
+    ctx = makeContext(signedIn.email, signedIn.institute, signedIn.canSeeMoney);
+    route();
+    say('status', centre ? 'Showing ' + C.centreName(centres, centre) + '.' : 'Showing every centre.');
   }
 
   // Whether this admin may see ₹ amounts. Only the server decides; anything but a clear true is false.
@@ -236,6 +277,8 @@
       seat: Object.freeze(Object.assign({}, mySeat)),
       institute: Object.freeze(institute),
       canSeeMoney: !!canSeeMoney,
+      centre: centres && centres.has ? centre : '',
+      centres: centres && centres.has ? centres : null,
       tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
       confirm: askConfirm,
       status: (text, isError) => say('status', text, isError),
@@ -249,7 +292,7 @@
   }
 
   // Unmounts every tab and part and clears the app, for a sign-out or a different login.
-  function signedOut() {
+  function unmountAll() {
     mounted.forEach((box, id) => {
       const def = S.tab(id);
       try { if (def && typeof def.unmount === 'function') def.unmount(); } catch (err) { /* the box is cleared anyway */ }
@@ -257,7 +300,17 @@
     });
     mounted.clear();
     current = null;
+  }
+
+  function signedOut() {
+    unmountAll();
     mySeat = null;
+    centres = null;
+    centre = '';
+    signedIn = null;
+    if ($('centre-pick')) { $('centre-pick').hidden = true; $('centre-pick').textContent = ''; }
+    if ($('quickbar')) { $('quickbar').hidden = true; $('quickbar').textContent = ''; }
+    document.body.classList.remove('has-quickbar');
     ctx = null;
     pending = null;
     $('confirm').hidden = true;
@@ -284,6 +337,30 @@
       nav.appendChild(S.el('a', { href: S.buildHash(t.id), 'data-tab': t.id, id: 'tab-link-' + t.id, text: t.label }));
     });
     nav.hidden = false;
+    drawQuickbar();
+  }
+
+  // Accounts on a phone: one tab, so instead of the tab bar a bar of Students · Collect · Pending, with Collect in
+  // the middle (css/admin-collect.css shows it only on a phone).
+  function drawQuickbar() {
+    const bar = $('quickbar');
+    if (!bar) return;
+    bar.textContent = '';
+    const on = !!ctx && isAccountsSeat(ctx.seat);
+    bar.hidden = !on;
+    document.body.classList.toggle('has-quickbar', on);
+    if (!on) return;
+    [['fees', 'Students', 'quick-students'], ['fees/collect', 'Collect', 'quick-collect'], ['fees/pending', 'Pending', 'quick-pending']]
+      .forEach(([hash, text, id]) => bar.appendChild(S.el('a', { href: '#' + hash, id, 'data-hash': hash, text,
+        className: id === 'quick-collect' ? 'quick-main' : null })));
+  }
+  function markQuickbar(r) {
+    const here = r.tab + (r.sub ? '/' + r.sub : '');
+    document.querySelectorAll('#quickbar a[data-hash]').forEach((a) => {
+      const h = a.getAttribute('data-hash');
+      const on = h === here || (h === 'fees' && r.tab === 'fees' && !r.sub);
+      if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+    });
   }
 
   // Opens a tab from code, such as a "See results" button. Adds a history entry, so Back returns. An old tab id
@@ -360,6 +437,7 @@
       if (a.getAttribute('data-tab') === id) a.setAttribute('aria-current', 'page');
       else a.removeAttribute('aria-current');
     });
+    markQuickbar(r);
     document.title = def.label + ' · ' + TITLE;
     if (current !== id) say('status', '');
     current = id;

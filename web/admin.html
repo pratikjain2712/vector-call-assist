@@ -30,6 +30,8 @@
 <!-- /Phase A: insights-extra -->
 <!-- Autopilot (Today's numbers and cards, the one-screen setup, Settings > Autopilot) and the filter bar. -->
 <link rel="stylesheet" href="css/admin-autopilot.css">
+<!-- Centres (the switcher) and Collect fee (the counter screen, Pending dues, the phone bar for Accounts). -->
+<link rel="stylesheet" href="css/admin-collect.css">
 </head>
 <body>
 <header class="top">
@@ -38,6 +40,8 @@
       <span class="mark" aria-hidden="true">V</span>
       <span class="name">Vector admin</span>
       <span id="institute" class="institute" hidden></span>
+      <!-- The centre switcher (js/admin/centres.js), only when the institute has centres. -->
+      <span id="centre-pick" class="centre-pick" hidden></span>
     </div>
     <div class="who">
       <!-- The account menu: password and "Show advanced options", next to Sign out. Filled in by js/admin/shell.js. -->
@@ -57,6 +61,8 @@
     </div>
   </div>
   <nav id="tabs" class="tabs" aria-label="Admin sections" hidden></nav>
+  <!-- Accounts on a phone: Students · Collect · Pending at the bottom (shell.js, css/admin-collect.css). -->
+  <nav id="quickbar" class="quickbar" aria-label="Fees" hidden></nav>
 </header>
 
 <main>
@@ -116,6 +122,8 @@
 <script src="js/charts.js"></script>
 <!-- /Phase A: insights -->
 <script src="js/admin/shared.js"></script>
+<!-- Centres and batches: the switcher and the centre added to every RPC (before shell.js). -->
+<script src="js/admin/centres.js"></script>
 <!-- Autopilot: the planner's maths (pure), the filter bar, and Today / Calling / Settings pieces. -->
 <script src="js/admin/autopilot-model.js"></script>
 <script src="js/admin/filter-bar.js"></script>
@@ -141,6 +149,8 @@
 <script src="js/admin/fees.js"></script>
 <!-- Fees basics: fee plan, discounts, today's collection (uses fees.js, loaded just above) -->
 <script src="js/admin/fees-basics.js"></script>
+<!-- Collect fee (#fees/collect) and Pending dues (#fees/pending): parts shown by fees.js. -->
+<script src="js/admin/collect.js"></script>
 <!-- /Phase A.2: fees -->
 <script src="js/admin/reports.js"></script>
 <script src="js/admin/settings.js"></script>

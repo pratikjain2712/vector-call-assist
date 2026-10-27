@@ -188,6 +188,22 @@ the owner calls him live. Reset the demo afterwards to put him back.
 amount due, last call), the call script step by step, answers to objections, and the result options with date
 and ₹ fields.
 
+## Centres, batches and Collect fee
+
+The demo institute has two centres, **Andheri** (Class 10 CBSE, Class 8 CBSE sections A–B, the Class 8 State Board morning
+batch) and **Borivali** (Class 9 ICSE, Class 8 CBSE section C, the evening batch), with batches per class ("8th SB Morning",
+"8th SB Evening", "10th CBSE A" …). Oct fees – Class 10 and the PTM reminder are Andheri lists, Sept fees – Class 9 is Borivali's;
+course sales and admission enquiries are for every centre. Kavita, Ravi and Amit work at Andheri, Priya and Neha at Borivali,
+Sana at both; Anita and Rahul see everything.
+- **Owner**: the top bar shows **All centres ▾**; pick Borivali and every tab shows Borivali only (the Fees cards and students,
+  calling lists, Team, Today's numbers and Autopilot cards). Autopilot asks for two lists: *Term 2 fees – Class 8 State Board ·
+  Andheri* and *· Borivali*. Settings → **Centres and batches**; Team → Edit → **Works in**. **Collect fee** is on Today too,
+  with "By you today · this month".
+- **Kavita** sees **Andheri** (no switch) and only Andheri's students. **Collect fee** (top of Fees; on a phone the middle of
+  the bar at the bottom): type "bhos", tap Riya Bhosale, the amount is already the ₹18,000 due, tap UPI and type any 12 digits,
+  Save. Then Receipt · Undo, and the search box is ready for the next parent. **Pending dues** lists who owes most, each with
+  Collect.
+
 ## A 15-minute walkthrough
 
 Eight logins: owner, manager, five callers and Accounts. Every running calling list is open to every caller and

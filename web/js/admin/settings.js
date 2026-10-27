@@ -256,6 +256,9 @@
       msg('inst-msg'),
     ]));
 
+    // Centres and batches (js/admin/centres.js): an advanced option until the institute has a centre.
+    box.appendChild(el('section', { className: 'panel adv', id: 'settings-centres', 'aria-label': 'Centres and batches' }));
+
     // Autopilot (js/admin/autopilot.js): goals, the three switches and "Pause all automation".
     box.appendChild(el('section', { className: 'panel', id: 'settings-autopilot', 'aria-label': 'Autopilot' }));
 
@@ -679,6 +682,8 @@
       loadTerms();
       loadLog(0);
       loadWhatsapp();
+      if (window.VectorCentres) window.VectorCentres.settings($('settings-centres'), ctx);
+      else $('settings-centres').hidden = true;
       if (window.VectorAutopilot) window.VectorAutopilot.settings($('settings-autopilot'), ctx);
       else $('settings-autopilot').hidden = true;
     },

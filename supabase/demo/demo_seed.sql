@@ -1931,8 +1931,72 @@ begin
      '{"text": "Gave 4 follow-ups in \"Admission follow-up\" to the next free callers."}', 80,
      pg_temp.ist(today, 9 * 3600 + 900), pg_temp.ist(today, 9 * 3600 + 900), pg_temp.ist(today, 9 * 3600 + 900));
 
+end $$;
+
+-- ---------- 10c. Centres and batches (20261027100000_centres_batches.sql) ----------
+-- Two centres: Andheri (AND) and Borivali (BOR). Class 10 CBSE (the Oct fees parents) studies at Andheri, Class
+-- 9 ICSE at Borivali; Class 8 CBSE sections A and B at Andheri, C at Borivali; the new Class 8 State Board is
+-- split between the Andheri morning batch and the Borivali evening batch. Batches per class and centre ("8th SB
+-- Morning", "8th SB Evening", "10th CBSE A" …). Fees leads follow their student; course sales and admission
+-- enquiries have no centre (every centre). Oct fees and the PTM reminder are Andheri lists, Sept fees Borivali.
+-- Who works where: Kavita (Accounts), Ravi and Amit at Andheri; Priya and Neha at Borivali; Sana at both;
+-- Anita (owner) and Rahul (manager) everywhere. Then the Autopilot plan runs, per centre: "Term 2 fees – Class 8
+-- State Board · Andheri" and "· Borivali".
+
+do $$
+declare
+  inst uuid := '5a1e0000-0000-4000-8000-000000000001';
+  ca   uuid := '5a1e0000-0000-4000-8000-000000000601';
+  cb   uuid := '5a1e0000-0000-4000-8000-000000000602';
+  b    record;
+begin
+  insert into public.centres (id, institute_id, name, short_code, active, sort_order) values
+    (ca, inst, 'Andheri', 'AND', true, 100), (cb, inst, 'Borivali', 'BOR', true, 101);
+  insert into public.batches (id, institute_id, centre_id, name, class_label, board, academic_year, timing) values
+    ('5a1e0000-0000-4000-8000-000000000611', inst, ca, '8th SB Morning', '8th', 'State', '2026-27', '7–9 am'),
+    ('5a1e0000-0000-4000-8000-000000000612', inst, cb, '8th SB Evening', '8th', 'State', '2026-27', '5–7 pm'),
+    ('5a1e0000-0000-4000-8000-000000000613', inst, ca, '8th CBSE A', '8th', 'CBSE', '2026-27', '4–6 pm'),
+    ('5a1e0000-0000-4000-8000-000000000614', inst, ca, '8th CBSE B', '8th', 'CBSE', '2026-27', '6–8 pm'),
+    ('5a1e0000-0000-4000-8000-000000000615', inst, cb, '8th CBSE C', '8th', 'CBSE', '2026-27', '4–6 pm'),
+    ('5a1e0000-0000-4000-8000-000000000616', inst, cb, '9th ICSE', '9th', 'ICSE', '2026-27', '5–7 pm'),
+    ('5a1e0000-0000-4000-8000-000000000617', inst, ca, '10th CBSE A', '10th', 'CBSE', '2026-27', '7–9 am'),
+    ('5a1e0000-0000-4000-8000-000000000618', inst, ca, '10th CBSE B', '10th', 'CBSE', '2026-27', '5–7 pm');
+
+  -- Students: the centre by class (and by number for Class 8 State Board), the batch by class, board and section.
+  update public.students s set centre_id = case
+      when s.class_label = '10th' then ca
+      when s.class_label = '9th' then cb
+      when s.class_label = '8th' and s.board = 'CBSE' then case when s.section = 'C' then cb else ca end
+      when s.class_label = '8th' and s.board = 'State' then case when right(s.admission_no, 1) ~ '[13579]' then ca else cb end
+      else case when abs(hashtext(coalesce(s.admission_no, s.name))) % 2 = 0 then ca else cb end end
+   where s.institute_id = inst;
+  for b in select * from public.batches where institute_id = inst loop
+    update public.students s set batch_id = b.id
+     where s.institute_id = inst and s.centre_id = b.centre_id and s.class_label = b.class_label and s.board = b.board
+       and (b.name not like '% A' and b.name not like '% B' and b.name not like '% C'
+            or right(b.name, 1) = coalesce(s.section, ''));
+  end loop;
+
+  -- Leads: fees leads follow their student; lists of one centre.
+  update public.leads l set centre_id = s.centre_id from public.students s
+   where l.institute_id = inst and l.student_id = s.id;
+  update public.campaigns set centre_id = ca where institute_id = inst and name in ('Oct fees – Class 10', 'PTM reminder – Nov');
+  update public.campaigns set centre_id = cb where institute_id = inst and name = 'Sept fees – Class 9';
+
+  -- Who works where.
+  update public.seats set centre_ids = array[ca] where id in ('5a1e0000-0000-4000-8000-000000000108',   -- Kavita
+                                                               '5a1e0000-0000-4000-8000-000000000103',   -- Ravi
+                                                               '5a1e0000-0000-4000-8000-000000000106');  -- Amit
+  update public.seats set centre_ids = array[cb] where id in ('5a1e0000-0000-4000-8000-000000000104',   -- Priya
+                                                               '5a1e0000-0000-4000-8000-000000000105');  -- Neha
+  update public.seats set centre_ids = array[ca, cb] where id = '5a1e0000-0000-4000-8000-000000000107';  -- Sana
+
   perform public.autopilot_plan(inst);
 end $$;
+
+select ce.name as centre, count(*) as students, count(*) filter (where s.batch_id is not null) as in_a_batch
+from public.students s join public.centres ce on ce.id = s.centre_id
+where s.institute_id = '5a1e0000-0000-4000-8000-000000000001' group by ce.name order by ce.name;
 
 select kind, status, title from public.suggestions where institute_id = '5a1e0000-0000-4000-8000-000000000001' order by status, priority;
 
