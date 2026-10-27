@@ -16,6 +16,8 @@
    migration 20261025140000_template_library.sql); a few need the institute's own facts (address, office
    landline, website, fee range, discount policy). Owners and managers fill them in with
    admin_fill_common_answer; until then callers do not see that answer.
+   Office clicks: each box starts with the standard answer and blanks (____) where the facts go; one "Save all"
+   saves the boxes that changed and have no blank left (a box still with ____ is marked, not saved).
    The pure helpers below are also loaded by tests/web/admin-settings.test.js (Node, no DOM). */
 (function () {
   const S = (typeof window !== 'undefined' && window.VectorAdminShared) || require('./shared.js');
@@ -161,8 +163,36 @@
     return list.filter((r) => r.filled).length + ' of ' + list.length + ' filled in';
   }
 
+  // The box of an answer not filled in yet starts with the standard answer and blanks (____) where the
+  // institute's facts go. Answers without a ready wording get the standard answer and one blank at the end.
+  const BLANK = '____';
+  const BLANK_ANSWERS = {
+    fee_amount: 'The fee is ₹____ for ____. I can also send the fee details on WhatsApp.',
+    discount: 'Right now {institute} offers ____ (for ____, till ____). I cannot promise anything more on the call.',
+    fraud_check: 'You are right to be careful. We will never ask for an OTP or bank details. You can check us by calling the {institute} office on ____ or on our website ____.',
+    location: 'We are at ____, near ____. I can also send the location on WhatsApp.',
+    call_back_number: 'You can call the {institute} office on ____ (____ to ____). I can send it to you on WhatsApp.',
+  };
+  function startText(r, standardText) {
+    if (r.filled) return r.answer || '';
+    return BLANK_ANSWERS[r.key] || (String(standardText || r.answer || '').trim() + ' ' + BLANK).trim();
+  }
+  const hasBlank = (text) => String(text || '').includes(BLANK);
+  // What "Save all" does with one box: 'skip' (unchanged, or never filled and left as it started), 'blank'
+  // (still has ____), 'save', or 'clear' (a filled answer emptied).
+  function answerAction(r, text, started) {
+    const v = String(text || '').trim();
+    if (r.filled) {
+      if (!v) return 'clear';
+      if (v === String(r.answer || '').trim()) return 'skip';
+      return hasBlank(v) ? 'blank' : 'save';
+    }
+    if (!v || v === String(started || '').trim()) return hasBlank(v) || !v ? 'skip' : 'save';
+    return hasBlank(v) ? 'blank' : 'save';
+  }
+
   const pure = { LOG_PAGE, AI_LIMIT, TIME_ZONES, FEATURES, zoneChoices, planText, featureRows, aiUsageText, resultNeeds,
-    checkLabel, actionText, answersToFill, fillSummary };
+    checkLabel, actionText, answersToFill, fillSummary, BLANK, BLANK_ANSWERS, startText, hasBlank, answerAction };
   if (typeof module !== 'undefined' && module.exports) { module.exports = pure; return; }
 
   // ---------- the tab (browser only) ----------
@@ -267,9 +297,10 @@
         el('h2', { text: 'Common answers' }),
         el('span', { id: 'answers-count', className: 'muted small' }),
       ]),
-      el('p', { className: 'muted small', text: 'Every script answers common questions on calls, such as "Where did you get my number?". These need your institute\'s facts. Callers see an answer only after you fill it in.' }),
+      el('p', { className: 'muted small', text: 'Every script answers common questions on calls, such as "Where did you get my number?". Write your facts in place of each ____, then Save all. Callers see an answer only after it is saved.' }),
       msg('answers-msg'),
       el('ul', { id: 'answers-list', className: 'plain answers-list' }),
+      el('div', { className: 'row' }, [el('button', { type: 'button', className: 'primary', id: 'answers-save', text: 'Save all', hidden: true })]),
     ]));
 
     box.appendChild(el('div', { className: 'panel adv', id: 'settings-money' }, [
@@ -322,6 +353,7 @@
     $('ctr-form').addEventListener('submit', (e) => { e.preventDefault(); addResult(); });
     $('inst-form').addEventListener('submit', (e) => { e.preventDefault(); saveInstitute(); });
     $('hide-money').addEventListener('change', askHideMoney);
+    $('answers-save').addEventListener('click', saveAnswers);
     $('settings-advanced-switch').addEventListener('change', () => S.setAdvanced($('settings-advanced-switch').checked));
     document.addEventListener('vector:advanced', syncAdvanced);
     $('log-newer').addEventListener('click', () => loadLog(Math.max(0, logOffset - LOG_PAGE)));
@@ -540,45 +572,66 @@
     }
   }
 
+  let answerRows = [];
   function renderAnswers(rows) {
     const list = $('answers-list');
     list.textContent = '';
     const todo = answersToFill(rows);
+    answerRows = todo;
     $('answers-count').textContent = todo.length ? fillSummary(rows) : '';
+    $('answers-save').hidden = !todo.length;
     todo.forEach((r) => {
       const id = 'answer-fill-' + r.key;
-      const box = el('textarea', { id, rows: '3', maxlength: '600', 'aria-describedby': id + '-hint',
-        placeholder: 'The whole answer, with your facts' });
-      box.value = r.filled ? r.answer : '';
-      const std = standard.get(r.key) || (r.filled ? '' : r.answer);
-      const state = el('span', { className: 'pill ' + (r.filled ? 'pill-ok' : 'pill-warn'), text: r.filled ? 'Filled in' : 'Not filled in yet' });
-      const save = el('button', { type: 'button', text: 'Save', 'aria-label': 'Save the answer to: ' + r.label });
-      const rowMsg = el('p', { className: 'msg', role: 'status', id: id + '-msg' });
-      save.addEventListener('click', () => saveAnswer(r, box, save, rowMsg));
+      const started = startText(r, standard.get(r.key));
+      const box = el('textarea', { id, rows: '3', maxlength: '600', 'aria-describedby': id + '-hint', 'data-key': r.key, 'data-start': started });
+      box.value = started;
+      const state = el('span', { className: 'pill ' + (r.filled ? 'pill-ok' : 'pill-warn'), text: r.filled ? 'Filled in' : 'Fill the blanks ____' });
+      const mark = () => box.classList.toggle('has-blank', hasBlank(box.value));
+      box.addEventListener('input', mark);
+      mark();
       list.appendChild(el('li', { className: 'answer', 'data-key': r.key }, [
-        el('div', { className: 'row between' }, [el('strong', { text: r.label }), state]),
-        std ? el('p', { className: 'muted small', text: 'Standard answer: ' + std }) : null,
-        el('label', { for: id, text: 'Your answer (callers say this)' }),
+        el('div', { className: 'row between' }, [el('label', { for: id }, [el('strong', { text: r.label })]), state]),
         box,
-        el('p', { className: 'muted small', id: id + '-hint', text: (r.check || []).join(' ') + ' Leave it empty to stop callers using this answer.' }),
-        el('div', { className: 'row' }, [save]),
-        rowMsg,
+        el('p', { className: 'muted small', id: id + '-hint', text: (r.check || []).join(' ') + ' Empty the box to stop callers using this answer.' }),
+        el('p', { className: 'msg', role: 'status', id: id + '-msg' }),
       ]));
     });
     if (!todo.length) list.appendChild(el('li', { className: 'muted', text: 'No answer needs your facts.' }));
   }
 
-  async function saveAnswer(r, box, btn, rowMsg) {
+  // Save all: every changed answer without a blank is saved (admin_fill_common_answer); a box still with ____
+  // is left and marked.
+  async function saveAnswers() {
+    const btn = $('answers-save');
     btn.disabled = true;
-    try {
-      const saved = await rpc('admin_fill_common_answer', { p_key: r.key, p_answer: box.value });
-      ctx.status(saved ? 'Saved the answer to "' + r.label + '". Callers see it now.' : 'Cleared the answer to "' + r.label + '". Callers no longer see it.');
-      await loadAnswers();
-    } catch (err) {
-      report(rowMsg, err, 'Not saved: ');
-    } finally {
-      btn.disabled = false;
+    let saved = 0;
+    let cleared = 0;
+    let blanks = 0;
+    const failed = [];
+    for (const r of answerRows) {
+      const box = $('answer-fill-' + r.key);
+      if (!box) continue;
+      const act = answerAction(r, box.value, box.getAttribute('data-start'));
+      say(box.id + '-msg', '');
+      if (act === 'skip') continue;
+      if (act === 'blank') { blanks++; say(box.id + '-msg', 'Write your facts in place of ____ first.', true); continue; }
+      try {
+        await rpc('admin_fill_common_answer', { p_key: r.key, p_answer: act === 'clear' ? '' : box.value });
+        if (act === 'clear') cleared++; else saved++;
+      } catch (err) {
+        failed.push(r.label);
+        report(box.id + '-msg', err, 'Not saved: ');
+      }
     }
+    btn.disabled = false;
+    const bits = [];
+    if (saved) bits.push(saved === 1 ? '1 answer saved. Callers see it now.' : saved + ' answers saved. Callers see them now.');
+    if (cleared) bits.push(cleared + ' cleared.');
+    if (blanks) bits.push(blanks === 1 ? '1 still has blanks ____.' : blanks + ' still have blanks ____.');
+    if (failed.length) bits.push('Not saved: ' + failed.join(', ') + '.');
+    const text = bits.join(' ') || (answerRows.some((r) => hasBlank(($('answer-fill-' + r.key) || {}).value)) ? 'Nothing to save yet: write your facts in place of each ____.' : 'Nothing changed.');
+    if (saved || cleared) { await loadAnswers(); ctx.status(text); }
+    say('answers-msg', text, !!failed.length);
   }
 
   function renderPlan() {

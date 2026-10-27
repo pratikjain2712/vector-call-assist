@@ -388,10 +388,16 @@
   const pretty = (s) => String(s).replace(/_/g, ' ');
   const pct = (share) => (share == null ? '' : (Math.round(Number(share) * 1000) / 10) + '%');
   const stageLabel = (s) => (s === 'not_recorded' ? '(not recorded)' : s);
+  // The last report, its dates (per mode) and the script of "Why calls are lost", per login in this browser.
+  const DATES_KEY = 'vector-admin-report-dates';
+  const SCRIPT_KEY = 'vector-admin-report-script';
   const storage = {
-    get() { try { return localStorage.getItem(PICK_KEY); } catch (err) { return null; } },
-    set(v) { try { localStorage.setItem(PICK_KEY, v); } catch (err) { /* only a convenience */ } },
+    get() { return ctx ? S.recall(PICK_KEY, ctx.email, null) : null; },
+    set(v) { if (ctx) S.remember(PICK_KEY, ctx.email, v); },
   };
+  function keepDates() {
+    if (ctx && mode) S.remember(DATES_KEY + ':' + mode, ctx.email, { preset: $('rp-dates').value, from: $('rp-from').value, to: $('rp-to').value });
+  }
 
   async function rpc(name, args) {
     try { return await ctx.rpc(name, args); } catch (err) {
@@ -515,9 +521,10 @@
       if (!r) { $('rp-from').focus(); return; }
       $('rp-from').value = r.from;
       $('rp-to').value = r.to;
+      keepDates();
       loadPicked();
     });
-    const toCustom = () => { $('rp-dates').value = 'custom'; };
+    const toCustom = () => { $('rp-dates').value = 'custom'; keepDates(); };
     $('rp-from').addEventListener('change', toCustom);
     $('rp-to').addEventListener('change', toCustom);
     $('rp-campaign').addEventListener('change', loadPicked);
@@ -529,7 +536,12 @@
     $('rp-fees-send').addEventListener('click', sendBack);
     $('week-form').addEventListener('submit', (e) => { e.preventDefault(); loadWeek(); });
     $('week-start').addEventListener('change', snapWeek);
-    $('sr-script').addEventListener('change', () => pickScript($('sr-script').value));
+    $('sr-script').addEventListener('change', async () => {
+      S.remember(SCRIPT_KEY, ctx.email, $('sr-script').value);
+      await pickScript($('sr-script').value);
+      if ($('sr-version').value) runScriptReport();
+    });
+    $('sr-version').addEventListener('change', runScriptReport);
     $('sr-form').addEventListener('submit', (e) => { e.preventDefault(); runScriptReport(); });
   }
 
@@ -560,8 +572,11 @@
     const want = accounts ? 'fees' : next === 'fees' ? 'fees' : 'calls';
     if (want === mode) return;
     mode = want;
-    const r = presetRange(mode === 'fees' ? 'month' : 'last7', new Date());
-    $('rp-dates').value = mode === 'fees' ? 'month' : 'last7';
+    // The dates this login used last in this mode: a preset is worked out again for today; custom dates stay.
+    const kept = S.recall(DATES_KEY + ':' + mode, ctx.email, null);
+    const preset = kept && kept.preset ? kept.preset : mode === 'fees' ? 'month' : 'last7';
+    const r = preset === 'custom' && kept.from && kept.to ? { from: kept.from, to: kept.to } : presetRange(preset, new Date()) || presetRange('last7', new Date());
+    $('rp-dates').value = preset === 'custom' || presetRange(preset, new Date()) ? preset : 'last7';
     $('rp-from').value = r.from;
     $('rp-to').value = r.to;
     pendingPick = mode === 'fees' ? 'fees' : (storage.get() || 'results');
@@ -573,7 +588,20 @@
     else if (picked === 'funnel') loadFunnel();
     else if (picked === 'results') loadResults();
     else if (picked === 'weekly') { if (!weeklyRows.length) loadWeek(); }
-    else if (picked === 'lost' && scriptsAllowed && $('sr-version').value && lost) runScriptReport();
+    else if (picked === 'lost' && scriptsAllowed) openLost();
+  }
+
+  // "Why calls are lost" runs at once: the script this login looked at last (else the first one) and its live
+  // version, unless one is already picked.
+  async function openLost() {
+    if ($('sr-version').value) { runScriptReport(); return; }
+    if (!scripts.length) await loadScripts();
+    if (!ctx || !scripts.length || $('sr-version').value) return;
+    const last = S.recall(SCRIPT_KEY, ctx.email, null);
+    const id = scripts.some((s) => s.id === last) ? last : scripts[0].id;
+    $('sr-script').value = id;
+    await pickScript(id);
+    if ($('sr-version').value) runScriptReport();
   }
 
   // The filter bar as RPC arguments, or null (with a message) when the dates are wrong.

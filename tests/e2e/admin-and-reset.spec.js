@@ -26,7 +26,7 @@ test('admin signs in with a password and sees the team\'s calls', async ({ page,
   await expect(page.locator('#tab-link-team')).toHaveAttribute('aria-current', 'page');
   const rep1 = page.locator('#seat-body tr', { hasText: 'Rep 1' });
   await expect(rep1).toBeVisible();
-  if (backend) await expect(rep1.locator('td[data-label="Today\'s calls"]')).toHaveText('1');
+  if (backend) await expect(rep1.locator('td[data-label="Today\'s calls"]')).toHaveText(/^1 of $/);   // "1 of [target box]"
 
   // Call results are in Reports (from Today), and the back button returns to Team.
   await page.locator('#tab-link-today').click();

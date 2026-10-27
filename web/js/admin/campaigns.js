@@ -17,6 +17,9 @@
    read of a few of its leads' extra (never a money column).
    Lead sheets: .xlsx through the same XLSX library as the caller app (loaded the first time it is needed),
    .csv through LeadUpload.parseCsv; phone checks through ImportCheck (js/lead-upload.js, js/import-check.js).
+   Office clicks: in step 1 the type is a row of buttons, the name fills itself in (type · class · month) until
+   it is typed, the dates are folded ("Dates: from today, no end date"), and step 2 picks the newest live script
+   of the type.
    Money: counts only, except the campaign's total amount due when the server says this admin may see money.
    The pure helpers at the top are also loaded by tests/web/campaigns.test.js (Node, no DOM). */
 (function () {
@@ -84,7 +87,7 @@
     return (scripts || [])
       .filter((s) => liveVersion(s))
       .filter((s) => !filterOn || !s.call_type_id || s.call_type_id === typeId)
-      .map((s) => ({ id: s.id, name: s.name, version: liveVersion(s).version, steps: liveVersion(s).steps || [] }))
+      .map((s) => ({ id: s.id, name: s.name, version: liveVersion(s).version, steps: liveVersion(s).steps || [], created_at: s.created_at || '' }))
       .sort((a, b) => String(a.name).localeCompare(String(b.name)));
   }
 
@@ -113,6 +116,14 @@
   // ----- Phase A.2: open campaigns and class / board tags -----
   const CLASSES = ['6th', '7th', '8th', '9th', '10th', '11th', '12th'];
   const BOARDS = ['CBSE', 'ICSE', 'State', 'IB', 'IGCSE', 'Other'];
+
+  // The name a new list starts with: 'Fees collection · Class 10 · Nov'.
+  function listName(typeLabel, cls, now) {
+    const c = String(cls || '').trim();
+    const d = now || new Date();
+    return [String(typeLabel || '').trim(), c ? (/^\d/.test(c) ? 'Class ' + c.replace(/(st|nd|rd|th)$/i, '') : c) : '',
+      ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()]].filter(Boolean).join(' · ');
+  }
 
   // The class from the chips: a chip value, the typed class for "Other class", or '' (no tag).
   function classFromChoice(choice, typed) {
@@ -147,7 +158,7 @@
     return n + ' lead' + (n === 1 ? '' : 's') + ' added.' + (parts.length ? ' ' + parts.join(', ') + ' skipped.' : '');
   }
 
-  const pure = { statusLabel, typeTone, dateRange, percent, statusActions, liveVersion, scriptChoices, formProblem,
+  const pure = { listName, statusLabel, typeTone, dateRange, percent, statusActions, liveVersion, scriptChoices, formProblem,
     addedText, SCRIPT_TYPE_FILTER, CLASSES, BOARDS, classFromChoice, tagsText, whoCanCall, releaseProblem };
   if (typeof module !== 'undefined' && module.exports) { module.exports = pure; return; }
 
@@ -973,25 +984,55 @@
     steps.textContent = '';
     say('camp-w-msg', '');
 
-    const typeSel = el('select', { id: 'camp-w-type', required: true }, types.map((t) => el('option', { value: t.id, text: t.label })));
+    // Type as buttons (the value kept in a hidden input, as the rest of the wizard reads it); the name follows
+    // type · class · month until someone types one; the dates are folded (blank: from today, no end).
+    const typeSel = el('input', { type: 'hidden', id: 'camp-w-type' });
     const fees = types.find((t) => t.key === 'fees');
-    if (fees) typeSel.value = fees.id;
+    typeSel.value = fees ? fees.id : (types[0] || {}).id || '';
+    const typeChips = el('div', { className: 'camp-w-types', id: 'camp-w-types', role: 'radiogroup', 'aria-label': 'Type' }, types.map((t) => {
+      const b = el('button', { type: 'button', role: 'radio', className: 'camp-w-typebtn', id: 'camp-w-type-' + t.key, 'data-id': t.id, text: t.label });
+      b.addEventListener('click', () => { typeSel.value = t.id; syncTypes(); typeSel.dispatchEvent(new Event('change')); });
+      return b;
+    }));
+    const syncTypes = () => typeChips.querySelectorAll('button').forEach((b) => b.setAttribute('aria-checked', String(b.getAttribute('data-id') === typeSel.value)));
+    const nameIn = el('input', { id: 'camp-w-name', type: 'text', maxlength: '120', placeholder: 'Nov fees – Class 10', required: true });
+    let named = false;
+    nameIn.addEventListener('input', () => { named = !!nameIn.value.trim(); });
     steps.appendChild(step(1, 'Details', [
-      el('label', null, ['Name', el('input', { id: 'camp-w-name', type: 'text', maxlength: '120', placeholder: 'Nov fees – Class 10', required: true })]),
-      el('label', null, ['Type', typeSel]),
-      el('div', { className: 'row two' }, [
-        el('label', null, ['Start', el('input', { id: 'camp-w-startdate', type: 'date' })]),
-        el('label', null, ['End', el('input', { id: 'camp-w-enddate', type: 'date' })]),
-      ]),
+      el('div', { className: 'camp-w-typerow' }, [el('span', { className: 'camp-w-label', text: 'Type' }), typeChips, typeSel]),
       chipGroup('camp-w-class', 'Class (callers pick calling lists by class)', [['', 'Any']].concat(CLASSES.map((x) => [x, x]), [['custom', 'Other class']])),
       el('label', { id: 'camp-w-class-other-field', hidden: true }, ['Other class', el('input', { id: 'camp-w-class-other', type: 'text', maxlength: '20', placeholder: 'Nursery, LKG, B.Com 1st year' })]),
+      el('label', null, ['Name', nameIn]),
+      el('details', { className: 'camp-w-dates', id: 'camp-w-dates' }, [
+        el('summary', { id: 'camp-w-dates-sum', text: 'Dates: from today, no end date' }),
+        el('div', { className: 'row two' }, [
+          el('label', null, ['Start', el('input', { id: 'camp-w-startdate', type: 'date' })]),
+          el('label', null, ['End', el('input', { id: 'camp-w-enddate', type: 'date' })]),
+        ]),
+      ]),
       advanced(chipGroup('camp-w-board', 'Board', [['', 'Any']].concat(BOARDS.map((b) => [b, b])))),
     ]));
+    const autoName = () => {
+      if (named) return;
+      const t = types.find((x) => x.id === typeSel.value);
+      nameIn.value = listName(t ? t.label : '', classFromChoice(picked('camp-w-class'), $('camp-w-class-other').value), new Date());
+    };
+    const datesText = () => {
+      const a = $('camp-w-startdate').value;
+      const z = $('camp-w-enddate').value;
+      $('camp-w-dates-sum').textContent = 'Dates: ' + (a ? 'from ' + S.formatDate(a, { year: false }) : 'from today') + ', ' + (z ? 'till ' + S.formatDate(z, { year: false }) : 'no end date');
+    };
+    ['camp-w-startdate', 'camp-w-enddate'].forEach((x) => $(x).addEventListener('input', datesText));
     steps.querySelectorAll('input[name="camp-w-class"]').forEach((i) => i.addEventListener('change', () => {
       const custom = $('camp-w-class-custom').checked;
       $('camp-w-class-other-field').hidden = !custom;
       if (custom) $('camp-w-class-other').focus();
+      autoName();
     }));
+    $('camp-w-class-other').addEventListener('input', autoName);
+    typeSel.addEventListener('change', autoName);
+    syncTypes();
+    autoName();
 
     const scriptSel = el('select', { id: 'camp-w-script' });
     const scriptLabel = el('span', { id: 'camp-w-script-label', text: 'Script' });
@@ -1047,7 +1088,9 @@
     sel.textContent = '';
     sel.appendChild(el('option', { value: '', text: 'No script' }));
     list.forEach((s) => sel.appendChild(el('option', { value: s.id, text: s.name + ' v' + s.version + ' (live)' })));
-    if (list.length) sel.value = list[0].id;
+    // The newest live script of the type is picked.
+    const newest = list.slice().sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))[0];
+    if (newest) sel.value = newest.id;
     $('camp-w-script-label').textContent = SCRIPT_TYPE_FILTER && t ? 'Script (' + t.label.toLowerCase() + ' scripts only)' : 'Script (live scripts only)';
     if (!$('camp-w-preview').hidden) renderPreview();
   }
@@ -1094,7 +1137,7 @@
   }
   async function loadScripts() {
     try {
-      const cols = 'id, name' + (SCRIPT_TYPE_FILTER ? ', call_type_id' : '') + ', script_versions(version, steps, published)';
+      const cols = 'id, name, created_at' + (SCRIPT_TYPE_FILTER ? ', call_type_id' : '') + ', script_versions(version, steps, published)';
       const { data, error } = await ctx.client.from('scripts').select(cols).eq('institute_id', ctx.institute.id);
       scripts = error ? [] : rows(data);
     } catch (err) { scripts = []; }

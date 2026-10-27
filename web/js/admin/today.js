@@ -195,9 +195,10 @@
     loadCollect();
   }
 
-  // Money roles who record payments (the owner): "Collect fee" and "By you today ₹ · this month ₹".
+  // Who records payments and has Today (the owner, a manager who can see money): "Collect fee" and "By you today
+  // ₹ · this month ₹".
   async function loadCollect() {
-    const on = S.seatKind(ctx.seat) === 'owner' && ctx.canSeeMoney && S.tabsFor(ctx.seat, ctx.canSeeMoney).includes('fees');
+    const on = S.canCollect(ctx.seat, ctx.canSeeMoney) && ctx.canSeeMoney && S.tabsFor(ctx.seat, ctx.canSeeMoney).includes('fees');
     $('today-collect').hidden = !on;
     if (!on) { $('today-me').hidden = true; return; }
     try {

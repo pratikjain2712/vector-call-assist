@@ -8,9 +8,10 @@
      for 133 students in Class 8. Continue?"), with ticks per student for the optional fees and the discount
      rules, then adds the fees. Applying again adds nothing; after a change it says "apply the change to N
      students". Server: fee_plans_list, fee_plan_save, fee_plan_preview, fee_plan_apply, fee_plan_undo.
-   - Give a discount (on a student's page, through VectorFeesBasics.discountPanel): how much (₹ or %), on which
-     fees (the whole year or some fees), why (Sibling, Staff child, Merit, Financial help, Other with a note) and
-     who approved it. accounts_give_discount; Remove with a reason: accounts_remove_discount (kept in the history).
+   - Give a discount (on a student's page, through VectorFeesBasics.discountPanel), on one screen: ₹ or % and
+     the value, why (Sibling, Staff child, Merit, Financial help, Other with a note; the last reason this login
+     used is picked), the whole year unless "Only some fees" is opened, who approved it (folded), the check
+     sentence, and one "Give the discount" button. accounts_give_discount; Remove with a reason: accounts_remove_discount (kept in the history).
    - Today's collection (#fees/today, part "day-closing"): the day closing sheet for a day (today first): totals
      by mode, every payment, totals per person who took the money, cheques to bank, reversals, the grand total in
      figures and words; Print and Download Excel (log_money_export 'day_closing' first). ledger_day_closing.
@@ -887,103 +888,103 @@
 
   // =========================== Give a discount (on a student's page) ===========================
 
-  // The discount panel: three steps and a check line before saving. detail: accounts_student_detail;
-  // onDone(text): called after a discount is given or undone (the page reloads the student).
+  // The discount panel, one screen: ₹ or %, the value, the reason (the last one this login used), the whole year
+  // (or "Only some fees"), the check sentence, and one button. detail: accounts_student_detail;
+  // onDone(text, grant): called after a discount is given (the page reloads the student).
+  const REASON_KEY = 'vector-discount-reason';
   function discountPanel(ctx, detail, onDone) {
     const st = detail.student || {};
     const b = detail.balance || {};
     const money = !detail.money_hidden;
     const fees = (detail.fee_items || []).filter((f) => !f.is_void)
       .map((f) => ({ id: f.id, head: f.head, amount: Number(f.amount) || 0, left: (Number(f.amount) || 0) - (Number(f.discount) || 0), due_date: f.due_date }));
-    const d = { kind: 'amount', value: '', whole_year: true, fee_items: [], reason: 'sibling', note: '', approved_by: (ctx.seat && ctx.seat.label) || '', step: 1 };
-    const box = el('div', { className: 'panel fb-wizard', id: 'fd-panel' });
+    const last = S.recall(REASON_KEY, ctx.email, 'sibling');
+    const d = { kind: 'amount', value: '', whole_year: true, fee_items: [], reason: REASONS.some((r) => r[0] === last) ? last : 'sibling',
+      note: '', approved_by: (ctx.seat && ctx.seat.label) || '' };
+    const box = el('div', { className: 'panel fb-wizard fd-one', id: 'fd-panel' });
+    const q = (sel) => box.querySelector(sel);
+    // A row of choice buttons (role radio); pick(value) on a click.
+    const choiceRow = (label, list, current, prefix, pick) => el('div', { className: 'fd-choices', role: 'radiogroup', 'aria-label': label },
+      list.map(([v, text]) => {
+        const btn = el('button', { type: 'button', role: 'radio', className: 'fd-choice', id: prefix + v, 'data-value': v, text, 'aria-checked': String(v === current) });
+        btn.addEventListener('click', () => { pick(v); sync(); });
+        return btn;
+      }));
+
+    box.appendChild(el('h3', { id: 'fd-h', tabindex: '-1', text: 'Give a discount' }));
+    const value = el('input', { id: 'fd-value', type: 'text', inputmode: 'decimal', autocomplete: 'off', 'aria-label': 'Discount' });
+    box.appendChild(el('div', { className: 'fd-how' }, [
+      choiceRow('Rupees or percent', [['amount', '₹'], ['percent', '%']], d.kind, 'fd-kind-', (v) => { d.kind = v; value.focus(); }),
+      value,
+    ]));
+    box.appendChild(el('p', { className: 'fb-label', text: 'Why' }));
+    box.appendChild(choiceRow('Reason', REASONS, d.reason, 'fd-reason-', (v) => { d.reason = v; if (v === 'other') q('#fd-note').focus(); }));
+    const note = el('input', { id: 'fd-note', type: 'text', maxlength: '200', placeholder: 'What is it for?', 'aria-label': 'Note' });
+    box.appendChild(el('label', { className: 'fd-note', id: 'fd-note-wrap', hidden: true }, [note]));
+    // Which fees: the whole year unless "Only some fees" is opened.
+    const someOpen = el('button', { type: 'button', className: 'linkish', id: 'fd-on-some', text: 'Only some fees' });
+    const ticks = el('div', { className: 'fb-fee-ticks', id: 'fd-fees', hidden: true }, fees.map((f) => el('label', { className: 'check' }, [
+      el('input', { type: 'checkbox', name: 'fd-fee', value: f.id }),
+      ' ' + f.head + (money ? ' · ' + rupees(f.amount) : '') + ' · due ' + S.formatDate(f.due_date),
+    ])));
+    const onText = el('span', { id: 'fd-on', text: 'On the whole year' });
+    someOpen.addEventListener('click', () => { d.whole_year = !d.whole_year; sync(); });
+    box.appendChild(el('p', { className: 'fd-on-row' }, [onText, ' · ', someOpen]));
+    box.appendChild(ticks);
+    box.appendChild(el('details', { className: 'fb-more' }, [el('summary', { id: 'fd-approved-sum', text: 'Approved by: ' + (d.approved_by || 'you') }),
+      bigField('Approved by', el('input', { id: 'fd-approved', type: 'text', maxlength: '80', value: d.approved_by }))]));
+    box.appendChild(el('p', { className: 'fb-sentence', id: 'fd-check' }));
+    const main = el('button', { type: 'button', className: 'primary', id: 'fd-next', text: 'Give the discount' });
+    const cancel = el('button', { type: 'button', id: 'fd-back', className: 'linkish', text: 'Cancel' });
+    main.addEventListener('click', give);
+    cancel.addEventListener('click', () => box.remove());
+    box.appendChild(el('div', { className: 'fb-actions fb-main' }, [main, cancel]));
+    box.appendChild(msg('fd-msg'));
 
     function read() {
-      const v = (id) => { const n = box.querySelector('#' + id); return n ? n.value : undefined; };
-      if (d.step === 1) {
-        const k = box.querySelector('input[name="fd-kind"]:checked');
-        if (k) d.kind = k.value;
-        d.value = v('fd-value');
-      } else if (d.step === 2) {
-        const w = box.querySelector('input[name="fd-on"]:checked');
-        d.whole_year = !w || w.value === 'year';
-        d.fee_items = Array.from(box.querySelectorAll('input[name="fd-fee"]:checked')).map((x) => x.value);
-      } else {
-        const r = box.querySelector('input[name="fd-reason"]:checked');
-        if (r) d.reason = r.value;
-        d.note = v('fd-note') || '';
-        d.approved_by = v('fd-approved') || '';
-      }
+      d.value = value.value;
+      d.note = note.value;
+      d.approved_by = q('#fd-approved').value;
+      d.fee_items = Array.from(box.querySelectorAll('input[name="fd-fee"]:checked')).map((x) => x.value);
     }
     const split = () => discountSplit(d.whole_year ? fees : fees.filter((f) => d.fee_items.includes(f.id)), d.kind, LU.parseAmount(String(d.value).replace('%', '')));
-    function stepProblem() {
-      const x = discountProblem(Object.assign({}, d, d.step < 3 ? { reason: 'sibling' } : {}, d.step < 2 ? { whole_year: true } : {}));
-      if (x) return x;
-      if (d.step >= 2) { const s = split(); if (s.problem) return s.problem; }
-      return '';
-    }
-    function render() {
-      box.textContent = '';
-      const radio = (name, value, label, checked, id) => el('label', { className: 'check' }, [el('input', { type: 'radio', name, value, checked, id: id || null }), ' ' + label]);
-      if (d.step === 1) {
-        box.appendChild(stepHead(1, 3, 'How much is the discount?', 'fd-h'));
-        box.appendChild(el('div', { className: 'fb-radios', role: 'radiogroup', 'aria-label': 'Rupees or percent' }, [
-          radio('fd-kind', 'amount', 'An amount in rupees (₹)', d.kind === 'amount', 'fd-kind-amount'),
-          radio('fd-kind', 'percent', 'A percent (%) of the fees', d.kind === 'percent', 'fd-kind-percent'),
-        ]));
-        box.appendChild(bigField('Discount', el('input', { id: 'fd-value', type: 'text', inputmode: 'decimal', value: d.value, autocomplete: 'off' }), null));
-      } else if (d.step === 2) {
-        box.appendChild(stepHead(2, 3, 'On which fees?', 'fd-h'));
-        box.appendChild(el('div', { className: 'fb-radios', role: 'radiogroup', 'aria-label': 'Which fees' }, [
-          radio('fd-on', 'year', 'The whole year (all fees)', d.whole_year, 'fd-on-year'),
-          radio('fd-on', 'some', 'Only the fees I tick', !d.whole_year, 'fd-on-some'),
-        ]));
-        const list = el('div', { className: 'fb-fee-ticks', id: 'fd-fees' }, fees.map((f) => el('label', { className: 'check' }, [
-          el('input', { type: 'checkbox', name: 'fd-fee', value: f.id, checked: d.fee_items.includes(f.id) }),
-          ' ' + f.head + (money ? ' · ' + rupees(f.amount) : '') + ' · due ' + S.formatDate(f.due_date),
-        ])));
-        list.hidden = d.whole_year;
-        box.appendChild(list);
-      } else {
-        box.appendChild(stepHead(3, 3, 'Why, and who approved it?', 'fd-h'));
-        box.appendChild(el('div', { className: 'fb-radios', role: 'radiogroup', 'aria-label': 'Reason' }, REASONS.map((r) => radio('fd-reason', r[0], r[1], d.reason === r[0], 'fd-reason-' + r[0]))));
-        box.appendChild(bigField('Note', el('input', { id: 'fd-note', type: 'text', maxlength: '200', value: d.note }), 'Needed for "Other"'));
-        box.appendChild(el('details', { className: 'fb-more' }, [el('summary', { text: 'Approved by: ' + (d.approved_by || 'you') }),
-          bigField('Approved by', el('input', { id: 'fd-approved', type: 'text', maxlength: '80', value: d.approved_by }))]));
-        const s = split();
-        const total = Number(b.balance_total);
-        box.appendChild(el('p', { className: 'fb-sentence', id: 'fd-check', text: money && !s.problem
-          ? 'The discount is ' + rupees(s.total) + '. ' + st.name + '\'s fees left for the year go from ' + rupees(total) + ' to ' + rupees(total - s.total) + '.'
-          : 'Check the discount, then save it.' }));
-      }
-      const main = el('button', { type: 'button', className: 'primary', id: 'fd-next', text: d.step < 3 ? 'Next' : 'Give the discount' });
-      const back = el('button', { type: 'button', id: 'fd-back', text: d.step > 1 ? 'Back' : 'Cancel' });
-      main.addEventListener('click', next);
-      back.addEventListener('click', () => { read(); if (d.step > 1) { d.step--; render(); focusFirst(box); } else box.remove(); });
-      box.appendChild(el('div', { className: 'fb-actions fb-main' }, [main, back]));
-      box.appendChild(msg('fd-msg'));
-    }
-    async function next() {
+    function sync() {
       read();
-      const p = stepProblem();
-      if (p) { say(box.querySelector('#fd-msg'), p, true); return; }
-      if (d.step < 3) { d.step++; render(); focusFirst(box); return; }
-      const btn = box.querySelector('#fd-next');
-      btn.disabled = true;
-      say(box.querySelector('#fd-msg'), 'Saving…');
+      box.querySelectorAll('.fd-choice').forEach((x) => {
+        const group = x.id.startsWith('fd-kind-') ? d.kind : d.reason;
+        x.setAttribute('aria-checked', String(x.getAttribute('data-value') === group));
+      });
+      value.placeholder = d.kind === 'percent' ? '10' : '2000';
+      q('#fd-note-wrap').hidden = d.reason !== 'other';
+      ticks.hidden = d.whole_year;
+      onText.textContent = d.whole_year ? 'On the whole year' : 'On the fees ticked below';
+      someOpen.textContent = d.whole_year ? 'Only some fees' : 'The whole year';
+      q('#fd-approved-sum').textContent = 'Approved by: ' + (String(d.approved_by).trim() || 'you');
+      const s = split();
+      const total = Number(b.balance_total);
+      q('#fd-check').textContent = money && !s.problem
+        ? 'The discount is ' + rupees(s.total) + '. ' + st.name + '\'s fees left for the year go from ' + rupees(total) + ' to ' + rupees(total - s.total) + '.'
+        : 'Write the discount, then check it here.';
+    }
+    async function give() {
+      read();
+      const p = discountProblem(d) || split().problem;
+      if (p) { say(q('#fd-msg'), p, true); return; }
+      main.disabled = true;
+      say(q('#fd-msg'), 'Saving…');
       try {
         const res = await ctx.rpc('accounts_give_discount', { p_student: st.id, p_data: discountData(d) });
+        S.remember(REASON_KEY, ctx.email, d.reason);
         onDone('Discount of ' + (money ? rupees((res || {}).amount) : '') + ' given to ' + st.name + '.', res && res.grant_id);
       } catch (err) {
-        btn.disabled = false;
-        say(box.querySelector('#fd-msg'), 'Not saved: ' + errText(err), true);
+        main.disabled = false;
+        say(q('#fd-msg'), 'Not saved: ' + errText(err), true);
       }
     }
-    box.addEventListener('change', (e) => {
-      const list = box.querySelector('#fd-fees');
-      if (list && e.target && e.target.name === 'fd-on') list.hidden = e.target.value === 'year';
-    });
-    render();
+    [value, note, q('#fd-approved')].forEach((x) => x.addEventListener('input', sync));
+    box.addEventListener('change', sync);
+    value.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); give(); } });
+    sync();
     return box;
   }
 

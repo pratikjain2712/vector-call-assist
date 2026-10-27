@@ -31,7 +31,7 @@ test('Accounts adds a student with a fee and paid so far, sees duplicates first,
   page.on('pageerror', (e) => errors.push(e.message));
   const { email } = backend.fees.addAccounts();
   await signIn(page, email);
-  await expect(page.locator('#fees-body tr')).toHaveCount(2);
+  await expect(page.locator('#fees-body tr')).toHaveCount(1);   // Accounts starts with "Only with dues"
 
   // Two buttons side by side: Import from Excel and + Add student.
   await expect(page.locator('#fees-import-open')).toHaveText('Import from Excel');
@@ -39,6 +39,8 @@ test('Accounts adds a student with a fee and paid so far, sees duplicates first,
   await page.locator('#fees-add-open').click();
   await expect(page.locator('#fees-add-open')).toHaveAttribute('aria-expanded', 'true');
   await expect(page.locator('#fees-add h2')).toHaveText('Add a student');
+  await expect(page.locator('#fsa-name')).toBeFocused();
+  await expect(page.locator('#fsa-adm')).toBeHidden();   // under "More"
 
   // Required fields and a bad phone are named, and the cursor goes there.
   await page.locator('#fsa-save').click();
@@ -58,6 +60,7 @@ test('Accounts adds a student with a fee and paid so far, sees duplicates first,
   await expect(page.locator('#fsa-dups a')).toHaveText('Open Aarav Shah');
   await expect(page.locator('#fsa-anyway')).toBeVisible();
   await page.locator('#fsa-name').fill('Kabir Jain');
+  await page.locator('#fsa-more summary').click();
   await page.locator('#fsa-adm').fill('a101');
   await page.locator('#fsa-save').click();
   await expect(page.locator('#fsa-dups')).toContainText('Admission number A101 is already Aarav Shah\'s.');
@@ -120,8 +123,9 @@ test('Accounts adds a student with a fee and paid so far, sees duplicates first,
   expect(kabir).toMatchObject({ section: 'C', alt_phone: '+919876500099', name: 'Kabir Jain' });
   expect(backend.db.addRow.saved.map((x) => x.added)).toEqual([true, false]);
 
-  // Back on the list, the new student is there.
+  // Back on the list (with every student, not only those with dues), the new student is there.
   await page.locator('#fs-back').click();
+  await page.locator('#fees-f-due').uncheck();
   await expect(page.locator('#fees-body')).toContainText('Kabir Jain');
   expect(errors).toEqual([]);
 });
@@ -132,7 +136,7 @@ test('a new calling list with 2 leads by hand, then + Add lead on a fees list', 
   backend.db.reports.money = true;   // this owner may see money, so a fees list offers Amount due
   await signIn(page, env().users.admin.email, '#calling?new=1');
   await page.locator('#camp-w-name').fill('E2E hand list');
-  await expect(page.locator('#camp-w-type option:checked')).toHaveText('Fees collection');
+  await expect(page.locator('#camp-w-type-fees')).toHaveAttribute('aria-checked', 'true');
 
   // Step 3: Import from Excel (picked) or + Add by hand.
   await expect(page.locator('#camp-w-mode-excel')).toHaveAttribute('aria-pressed', 'true');
@@ -208,10 +212,10 @@ test('a new calling list with 2 leads by hand, then + Add lead on a fees list', 
 test('no amount without money access, and the lead form for a sales list', async ({ page, backend }) => {
   await signIn(page, env().users.admin.email, '#calling?new=1');
   await page.locator('#camp-w-name').fill('E2E course');
-  await page.locator('#camp-w-type').selectOption({ label: 'Sales' });
+  await page.locator('#camp-w-type-sales').click();
   await page.locator('#camp-w-mode-hand').click();
   await expect(page.locator('#camp-w-hand thead th')).toHaveText(['Name', 'Phone', 'Course', '']);
-  await page.locator('#camp-w-type').selectOption({ label: 'Fees collection' });
+  await page.locator('#camp-w-type-fees').click();
   await expect(page.locator('#camp-w-hand thead th')).toHaveText(['Name', 'Phone', 'Student', 'Class', '']);   // no money access: no Amount due
   await page.locator('#camp-w-hand-name-0').fill('Priya');
   await page.locator('#camp-w-hand-phone-0').fill('9000000021');
@@ -269,6 +273,7 @@ test('on a 390px phone the add forms fit, with no sideways scroll', async ({ pag
   expect(Math.abs(both[0].y - both[1].y)).toBeLessThan(2);   // side by side
   await page.locator('#fees-add-open').click();
   await expect(page.locator('#fsa-form')).toBeVisible();
+  await page.locator('#fsa-more summary').click();
   await page.locator('#fsa-fee-add').click();
   const width = () => page.evaluate(() => document.documentElement.scrollWidth);
   expect(await width()).toBeLessThanOrEqual(390);

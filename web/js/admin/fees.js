@@ -10,9 +10,17 @@
    - One student (#fees?student=<id>): details, fee items (add, void with a reason), payments (record, reverse
      with a reason; reversals stay in the list), calls made to the parent, and a printable receipt per payment.
    - Import students and fees from Excel or CSV (the same reader as the Campaigns tab), with a preview, and a
-     ready Excel template to fill. Beside it "+ Add student": one student by hand, with fees and "paid so far"
-     (js/admin/add-row.js); "Edit details" on a student's page uses the same form.
-   - "Call parents with dues": a fees campaign made from the ledger.
+     ready Excel template to fill; when every column is matched the table folds into "N columns matched ✓ Change".
+     Beside it "+ Add student": name, class (buttons of the classes in use), section, batch, parent and phone;
+     board, year and fees come from the class's fee plan; admission no, alternate phone, fees and paid so far
+     under "More"; "Save & add another" keeps class, section, batch and centre (js/admin/add-row.js). "Edit
+     details" on a student's page has every field.
+   - "Call these N parents" over the list: a fees calling list from the list's filters (centre, class, section,
+     batch; parents with dues), confirmed in one line with the count, the script and the callers, then Start
+     (fees_call_plan / fees_call_start, 20261027110000). The class, section and batch filters are buttons; they
+     and "Only with dues" (on by default for Accounts) are remembered per login in this browser.
+   - "Collect fee" on a student's page and on each row opens the Collect screen for that student: the app has
+     one payment form (js/admin/collect.js).
    - Collect fee (#fees/collect) and Pending dues (#fees/pending): js/admin/collect.js, shown here as parts. The
      "Collect fee" button at the top opens the counter screen.
    - Centres (js/admin/centres.js): with centres, the list, cards and campaigns follow the centre picked in the
@@ -466,10 +474,10 @@
   let page = 1;
   let detail = null;       // accounts_student_detail of the open student
   let studentId = null;
-  let wantPay = false;     // #fees?student=<id>&pay=1: focus the payment form once the student is shown
+  let filt = { class_label: '', section: '', batch_id: '', only_due: false };   // remembered per login (keepFilters)
+  let callPlan = null;     // fees_call_plan of the open "Call these N parents" line
   let pendingNote = '';    // said on the student's page once it is shown (after "+ Add student")
   let lastGrant = null;    // the discount just given on this page (it gets an Undo button)
-  let feesTypeId = null;
   let imp = null;          // { sheet, map, file, built }
   let xlsxLoading = null;
   let searchTimer = null;
@@ -493,7 +501,7 @@
         el('p', { className: 'muted', text: 'Students, their fees and the payments your fees office recorded.' }),
       ]),
       el('div', { className: 'fees-head-acts' }, [
-        manage ? el('a', { href: '#fees/collect', id: 'fees-collect-open', className: 'button-link primary collect-open', text: 'Collect fee' }) : null,
+        S.canCollect(ctx.seat, ctx.canSeeMoney) ? el('a', { href: '#fees/collect', id: 'fees-collect-open', className: 'button-link primary collect-open', text: 'Collect fee' }) : null,
         el('a', { href: '#fees/today', id: 'fees-today-open', className: 'button-link', text: 'Today\'s collection' }),
       ]),
     ]));
@@ -520,25 +528,29 @@
         opener('fees-add-open', '+ Add student', 'fees-add'),
       ]));
     }
-    if (canMakeCampaign(ctx.seat, ctx.canSeeMoney)) actions.appendChild(opener('fees-camp-open', 'Call parents with dues', 'fees-camp'));
     box.appendChild(actions);
 
     box.appendChild(el('div', { className: 'panel fees-import', id: 'fees-import', hidden: true }));
     box.appendChild(el('div', { className: 'panel fees-addst', id: 'fees-add', hidden: true }));
-    box.appendChild(el('div', { className: 'panel fees-camp', id: 'fees-camp', hidden: true }));
 
     const boardSel = el('select', { id: 'fees-f-board' }, [el('option', { value: '', text: 'All boards' })]
       .concat(BOARDS.map((b) => el('option', { value: b, text: b }))));
+    const callOpen = canMakeCampaign(ctx.seat, ctx.canSeeMoney)
+      ? el('button', { type: 'button', id: 'fees-call', className: 'primary fees-call', hidden: true, 'aria-controls': 'fees-call-line' }) : null;
     box.appendChild(el('div', { className: 'panel fees-list', id: 'fees-list' }, [
-      el('h2', { text: 'Students' }),
-      el('form', { id: 'fees-filters', className: 'row fees-filters', role: 'search' }, [
-        field('Search', el('input', { id: 'fees-f-search', type: 'search', placeholder: 'Name, parent, phone or admission no', autocomplete: 'off' }), 'grow'),
-        field('Class', el('select', { id: 'fees-f-class' }, [el('option', { value: '', text: 'All classes' })])),
-        ctx.centres && window.VectorCentres && window.VectorCentres.batchesFor(ctx.centres.batches, ctx.centre).length
-          ? field('Batch', window.VectorCentres.batchPicker('fees-f-batch', ctx.centres, ctx.centre, '', null)) : null,
-        field('Board', boardSel, 'adv'),
-        field('Academic year', el('select', { id: 'fees-f-year' }, [el('option', { value: '', text: 'All years' })]), 'adv'),
-        el('label', { className: 'check' }, [el('input', { type: 'checkbox', id: 'fees-f-due' }), ' Only with dues']),
+      el('div', { className: 'fees-list-head' }, [el('h2', { text: 'Students' }), callOpen]),
+      el('div', { id: 'fees-call-line', className: 'fees-call-line', role: 'status', hidden: true }),
+      el('form', { id: 'fees-filters', className: 'fees-filters', role: 'search' }, [
+        el('div', { className: 'row fees-filter-row' }, [
+          field('Search', el('input', { id: 'fees-f-search', type: 'search', placeholder: 'Name, parent, phone or admission no', autocomplete: 'off' }), 'grow'),
+          ctx.centres && window.VectorCentres && window.VectorCentres.batchesFor(ctx.centres.batches, ctx.centre).length
+            ? field('Batch', window.VectorCentres.batchPicker('fees-f-batch', ctx.centres, ctx.centre, filt.batch_id, null)) : null,
+          field('Board', boardSel, 'adv'),
+          field('Academic year', el('select', { id: 'fees-f-year' }, [el('option', { value: '', text: 'All years' })]), 'adv'),
+          el('label', { className: 'check' }, [el('input', { type: 'checkbox', id: 'fees-f-due', checked: filt.only_due }), ' Only with dues']),
+        ]),
+        el('div', { className: 'fees-chips', id: 'fees-f-classes', role: 'group', 'aria-label': 'Class' }),
+        el('div', { className: 'fees-chips', id: 'fees-f-sections', role: 'group', 'aria-label': 'Section', hidden: true }),
       ]),
       msg('fees-list-msg'),
       el('div', { className: 'scroll' }, [el('table', { className: 'stack fees-table', id: 'fees-table' }, [
@@ -577,35 +589,40 @@
       clearTimeout(searchTimer);
       searchTimer = setTimeout(loadList, 300);
     });
-    ['fees-f-class', 'fees-f-board', 'fees-f-year', 'fees-f-due', 'fees-f-batch'].forEach((id) => { if ($(id)) $(id).addEventListener('change', loadList); });
+    ['fees-f-board', 'fees-f-year', 'fees-f-due', 'fees-f-batch'].forEach((id) => { if ($(id)) $(id).addEventListener('change', loadList); });
+    if ($('fees-call')) $('fees-call').addEventListener('click', askCall);
     $('fees-prev').addEventListener('click', () => { page--; renderList(); });
     $('fees-next').addEventListener('click', () => { page++; renderList(); });
     if ($('fees-import-open')) $('fees-import-open').addEventListener('click', () => togglePanel('fees-import', openImport));
     if ($('fees-add-open')) $('fees-add-open').addEventListener('click', () => togglePanel('fees-add', openAddStudent));
-    if ($('fees-camp-open')) $('fees-camp-open').addEventListener('click', () => togglePanel('fees-camp', openCampaign));
   }
 
-  const PANELS = { 'fees-import': 'fees-import-open', 'fees-add': 'fees-add-open', 'fees-camp': 'fees-camp-open' };
+  const PANELS = { 'fees-import': 'fees-import-open', 'fees-add': 'fees-add-open' };
   function syncOpeners() {
     Object.keys(PANELS).forEach((x) => { const b = $(PANELS[x]); if (b) b.setAttribute('aria-expanded', String(!$(x).hidden)); });
   }
-  function togglePanel(id, open) {
+  async function togglePanel(id, open) {
     const p = $(id);
     if (!p.hidden) { p.hidden = true; syncOpeners(); return; }
     Object.keys(PANELS).forEach((x) => { $(x).hidden = x !== id; });
-    open();
     p.hidden = false;
     syncOpeners();
-    const h = p.querySelector('h2');
-    if (h) { h.setAttribute('tabindex', '-1'); h.focus(); }
+    await open();
+    if (!ctx) return;
+    // + Add student starts in the name box; the import at its heading.
+    const first = p.querySelector('#fsa-name') || p.querySelector('h2');
+    if (first) { if (first.tagName === 'H2') first.setAttribute('tabindex', '-1'); first.focus(); }
   }
 
   // ---------- views ----------
 
   // #fees (students), #fees?student=<id> (one student; &pay=1 goes to the payment form), #fees/report (the fees
   // collection report).
+  let cameFrom = '';   // the view shown before this one ('student', 'list' or the sub view)
   function showView(params, sub) {
     const id = params && params.student;
+    const before = cameFrom;
+    cameFrom = id && !sub ? 'student' : sub || 'list';
     closeReceipt();
     const report = sub === 'report';
     const plansView = sub === 'plans';
@@ -631,6 +648,8 @@
     // The counter screen alone: no Fees heading or views above it.
     $('fees-head').hidden = collectView;
     $('fees-subnav').hidden = collectView;
+    // Pending dues on a phone: "← Fees" only, like Collect (css/admin-office.css).
+    box.classList.toggle('fees-on-pending', pendingView);
     if (collectView || pendingView) {
       const part = collectView ? 'collect' : 'pending';
       ctx.part(part, $(collectView ? 'fees-collect' : 'fees-pending'));
@@ -659,20 +678,13 @@
       if (params && params.add === '1' && $('fees-add-open') && $('fees-add').hidden) togglePanel('fees-add', openAddStudent);
       return;
     }
-    wantPay = params && params.pay === '1';
-    if (id !== studentId) {
+    // An old link to a student's payment form (&pay=1): the Collect screen for that student.
+    if (params && params.pay === '1' && S.canCollect(ctx.seat, ctx.canSeeMoney)) { ctx.navigate('fees/collect', { student: id, from: 'student' }); return; }
+    // A new student, or back from Collect or another view (a payment may have changed the balance): load it.
+    if (id !== studentId || before !== 'student') {
       studentId = id;
       loadStudent(id);
-    } else if (wantPay) focusPay();
-  }
-
-  // "Record payment" from the list: the payment form of the student, focused.
-  function focusPay() {
-    wantPay = false;
-    const a = $('fs-pay-amount');
-    if (!a) return;
-    a.scrollIntoView({ block: 'center' });
-    a.focus();
+    }
   }
 
   // ---------- summary ----------
@@ -699,17 +711,29 @@
       list.forEach((v) => sel.appendChild(el('option', { value: v, text: v })));
       if (keep && list.includes(keep)) sel.value = keep;
     };
-    fill('fees-f-class', choices(allRows, 'class_label'), 'All classes');
     fill('fees-f-year', choices(allRows, 'academic_year'), 'All years');
+    const classes = choices(allRows, 'class_label');
+    if (filt.class_label && !classes.includes(filt.class_label)) { filt.class_label = ''; filt.section = ''; }
+    drawChips('fees-f-classes', [['', 'All classes']].concat(classes.map((c) => [c, /^\d/.test(c) ? 'Class ' + c : c])), filt.class_label, (v) => {
+      filt.class_label = v; filt.section = ''; fillChoices(); loadList();
+    });
+    const sections = filt.class_label ? choices(allRows.filter((r) => String(r.class_label || '').trim() === filt.class_label), 'section') : [];
+    if (filt.section && !sections.includes(filt.section)) filt.section = '';
+    $('fees-f-sections').hidden = sections.length < 2;
+    drawChips('fees-f-sections', [['', 'All sections']].concat(sections.map((x) => [x, 'Section ' + x])), filt.section, (v) => {
+      filt.section = v; fillChoices(); loadList();
+    });
   }
 
-  // The id of the built-in fees call type (for the live scripts of fees calls).
-  async function feesType() {
-    if (feesTypeId) return feesTypeId;
-    const { data, error } = await ctx.client.from('call_types').select('id, key').eq('key', 'fees').is('institute_id', null);
-    if (error) throw new Error(error.message);
-    feesTypeId = data && data[0] ? data[0].id : null;
-    return feesTypeId;
+  // A row of filter buttons (one pressed). list: [[value, label]]; onPick(value).
+  function drawChips(id, list, value, onPick) {
+    const box2 = $(id);
+    box2.textContent = '';
+    list.forEach(([v, label]) => {
+      const b = el('button', { type: 'button', className: 'fees-chip', 'data-value': v, text: label, 'aria-pressed': String(v === value) });
+      b.addEventListener('click', () => onPick(v));
+      box2.appendChild(b);
+    });
   }
 
   let summary = null;   // S.loadFeeNumbers for this month: the same numbers as the collection report
@@ -755,21 +779,32 @@
 
   function currentFilters() {
     return {
-      search: $('fees-f-search').value, class_label: $('fees-f-class').value, board: $('fees-f-board').value,
+      search: $('fees-f-search').value, class_label: filt.class_label, board: $('fees-f-board').value,
       academic_year: $('fees-f-year').value, only_due: $('fees-f-due').checked,
       batch_id: $('fees-f-batch') ? $('fees-f-batch').value : '',
     };
+  }
+
+  // The class, section, batch and "Only with dues" of this login, kept in this browser.
+  const FILTER_KEY = 'vector-fees-filters';
+  function keepFilters() {
+    filt.only_due = $('fees-f-due').checked;
+    filt.batch_id = $('fees-f-batch') ? $('fees-f-batch').value : '';
+    S.remember(FILTER_KEY, ctx.email, { class_label: filt.class_label, section: filt.section, batch_id: filt.batch_id, only_due: filt.only_due });
   }
 
   async function loadList() {
     const n = ++seq.list;
     say('fees-list-msg', 'Loading…');
     try {
+      keepFilters();
       const data = rows(await ctx.rpc('accounts_students', { p_filters: filtersToRpc(currentFilters()) }));
       if (n !== seq.list || !ctx) return;
-      listRows = data;
+      // The section is picked here (accounts_students has no section filter).
+      listRows = filt.section ? data.filter((r) => String(r.section || '').trim() === filt.section) : data;
       page = 1;
       renderList();
+      drawCallButton();
       say('fees-list-msg', listRows.length >= LIST_LIMIT ? 'Showing the first ' + S.count(LIST_LIMIT) + ' students. Use the filters to narrow the list.' : '');
     } catch (err) {
       if (n === seq.list && ctx) say('fees-list-msg', 'Could not load the students: ' + errText(err), true);
@@ -797,9 +832,9 @@
         ? [money(r.last_payment_amount), S.formatDate(r.last_payment_on), modeLabel(r.last_payment_mode)].filter(Boolean).join(' · ')
         : 'None yet';
       // On a phone each row is a small card: name, class, due now and "Record payment" (css/admin-fees.css).
-      const pay = canManage(ctx.seat)
-        ? el('a', { href: S.buildHash('fees', { student: r.student_id, pay: '1' }), className: 'button-link fees-pay', text: 'Record payment',
-          'aria-label': 'Record payment for ' + r.name })
+      const pay = S.canCollect(ctx.seat, ctx.canSeeMoney)
+        ? el('a', { href: S.buildHash('fees/collect', { student: r.student_id }), className: 'button-link fees-pay', text: 'Collect fee',
+          'aria-label': 'Collect fee from ' + r.name })
         : null;
       body.appendChild(el('tr', null, [
         who, cell(cls, 'fees-class', 'Class'), parent,
@@ -843,7 +878,6 @@
       detail = d || {};
       renderStudent();
       if (pendingNote) { say('fs-msg', pendingNote); pendingNote = ''; }
-      if (wantPay) focusPay();
     } catch (err) {
       if (n !== seq.detail || !ctx) return;
       wrap.textContent = '';
@@ -901,72 +935,22 @@
       card('Total fees', hidden ? '—' : rupees2(b.total_fees || 0), Number(b.discounts) > 0 && !hidden ? 'after ' + rupees2(b.discounts) + ' discount' : 'all fees of the year', '', 'fs-total'),
       card('Left to pay (year)', hidden ? '—' : rupees2(b.balance_total || 0), 'including fees not due yet', '', 'fs-left'),
     ]);
+    const collect = S.canCollect(ctx.seat, ctx.canSeeMoney)
+      ? el('a', { href: S.buildHash('fees/collect', { student: st.id, from: 'student' }), id: 'fs-collect', className: 'button-link primary collect-open', text: 'Collect fee' })
+      : null;
     wrap.appendChild(el('div', { className: 'panel' }, [
-      el('h3', { text: 'Balance' }),
+      el('div', { className: 'fees-head-row' }, [el('h3', { text: 'Balance' }), collect]),
       cards,
       hidden ? el('p', { className: 'muted small', text: 'Amounts are hidden for you, so you see counts only.' }) : null,
       msg('fs-msg'),
     ]));
 
-    if (manage) wrap.appendChild(paymentForm());
     wrap.appendChild(paymentsPanel(manage, hidden));
     wrap.appendChild(feeItemsPanel(manage, hidden));
     wrap.appendChild(discountsPanel(hidden));
     wrap.appendChild(callsPanel(hidden));
     const h = $('fs-name');
     if (h) h.focus({ preventScroll: false });
-  }
-
-  function paymentForm() {
-    const mode = el('select', { id: 'fs-pay-mode' }, MODES.map((m) => el('option', { value: m[0], text: m[1] })));
-    const ref = el('input', { id: 'fs-pay-ref', type: 'text', maxlength: '60', autocomplete: 'off', placeholder: 'UTR or transaction no.' });
-    const refLabel = el('span', { id: 'fs-pay-ref-label', text: 'Reference (needed)' });
-    const form = el('form', { id: 'fs-pay', className: 'row fees-pay', novalidate: 'novalidate' }, [
-      field('Amount (₹)', el('input', { id: 'fs-pay-amount', type: 'text', inputmode: 'decimal', autocomplete: 'off', required: true })),
-      field('Date', el('input', { id: 'fs-pay-date', type: 'date', value: today(), max: today(), required: true })),
-      field('Mode', mode),
-      el('label', null, [refLabel, ref]),
-      field('Note', el('input', { id: 'fs-pay-note', type: 'text', maxlength: '300', autocomplete: 'off' }), 'grow'),
-      el('button', { type: 'submit', text: 'Record payment' }),
-    ]);
-    const syncRef = () => {
-      const need = needsReference(mode.value);
-      refLabel.textContent = need ? 'Reference (needed)' : 'Reference (cheque no., optional)';
-      ref.placeholder = mode.value === 'cheque' ? 'Cheque no.' : need ? 'UTR or transaction no.' : '';
-      ref.required = need;
-    };
-    mode.addEventListener('change', syncRef);
-    syncRef();
-    form.addEventListener('submit', (e) => { e.preventDefault(); recordPayment(); });
-    return el('div', { className: 'panel' }, [
-      el('h3', { text: 'Record a payment' }),
-      el('p', { className: 'muted small', text: 'Enter the UTR or cheque number as the reference. Never enter UPI IDs, card or bank account numbers.' }),
-      form,
-      msg('fs-pay-msg'),
-    ]);
-  }
-
-  async function recordPayment() {
-    const p = {
-      amount: $('fs-pay-amount').value, paid_on: $('fs-pay-date').value, mode: $('fs-pay-mode').value,
-      reference: $('fs-pay-ref').value.trim(), note: $('fs-pay-note').value.trim(),
-    };
-    const problem = paymentProblem(p, today());
-    if (problem) { say('fs-pay-msg', problem, true); return; }
-    const btn = $('fs-pay').querySelector('button[type="submit"]');
-    btn.disabled = true;
-    say('fs-pay-msg', 'Saving…');
-    const amount = LU.parseAmount(p.amount);
-    try {
-      const id = await ctx.rpc('accounts_record_payment', {
-        p_student: studentId, p_amount: amount, p_paid_on: p.paid_on, p_mode: p.mode,
-        p_reference: p.reference || null, p_note: p.note || null,
-      });
-      await reloadStudent('Payment of ' + rupees2(amount) + ' recorded. Receipt ' + receiptNo(id) + '.');
-    } catch (err) {
-      say('fs-pay-msg', 'Not saved: ' + errText(err), true);
-      btn.disabled = false;
-    }
   }
 
   // An inline "reason" row under a table row, for voiding a fee or reversing a payment.
@@ -1121,8 +1105,7 @@
         });
         panel.appendChild(p);
         give.setAttribute('aria-expanded', 'true');
-        const h = p.querySelector('h3');
-        if (h) h.focus();
+        p.querySelector('#fd-value').focus();
       });
       panel.querySelector('.fees-head-row').appendChild(give);
     }
@@ -1275,9 +1258,9 @@
     parent_name: 'parent', phone: 'phone', alt_phone: 'alt', 'paid-amount': 'paid', 'paid-paid_on': 'paid-on', 'paid-mode': 'paid-mode',
     'paid-reference': 'paid-ref', fees: 'fee-add' };
 
-  // The student form: details, and with withMoney the fees (one empty line to start) and "paid so far".
-  // prefix 'fsa' (+ Add student) or 'fse' (Edit details); st: the student to edit, or {}.
-  function studentForm(prefix, st, withMoney, submitText) {
+  // The Edit details form (prefix 'fse'): every detail of the student st. + Add student has its own shorter form
+  // (addStudentForm).
+  function studentForm(prefix, st, submitText) {
     const x = st || {};
     const id = (k) => prefix + '-' + k;
     const input = (k, props) => el('input', Object.assign({ id: id(k), type: 'text', autocomplete: 'off' }, props || {}));
@@ -1299,34 +1282,6 @@
         field('Alternate phone', input('alt', { type: 'tel', inputmode: 'tel', maxlength: '20', value: x.alt_phone || '' })),
       ].concat(centreFields(prefix, x))),
     ]);
-    if (withMoney) {
-      const lines = el('div', { id: id('fees'), className: 'addrow-fees' });
-      const addFee = el('button', { type: 'button', id: id('fee-add'), text: '+ Add a fee' });
-      addFee.addEventListener('click', () => {
-        addFeeLine(prefix);
-        const all = lines.querySelectorAll('.addrow-fee');
-        if (all.length) all[all.length - 1].querySelector('input').focus();
-      });
-      form.appendChild(el('fieldset', { className: 'addrow-set' }, [
-        el('legend', { text: 'Fees (optional)' }),
-        el('p', { className: 'muted small', text: 'Each fee with its amount and due date. You can add more later on the student\'s page.' }),
-        lines, addFee,
-      ]));
-      const mode = el('select', { id: id('paid-mode') }, MODES.map((m) => el('option', { value: m[0], text: m[1] })));
-      mode.value = 'cash';
-      form.appendChild(el('fieldset', { className: 'addrow-set' }, [
-        el('legend', { text: 'Paid so far (optional)' }),
-        el('p', { className: 'muted small', text: 'Money already paid. It is recorded as a payment, ' + RECORDED_IN_LEDGER + ', on the date you pick. A UPI, bank or card payment needs its UTR or transaction number; never a UPI ID or account number.' }),
-        el('div', { className: 'addrow-grid' }, [
-          field('Amount (₹)', input('paid', { inputmode: 'decimal' })),
-          field('Paid on', input('paid-on', { type: 'date', value: today(), max: today() })),
-          field('Mode', mode),
-          field('Reference', input('paid-ref', { maxlength: '60', placeholder: 'UTR or cheque no.' })),
-        ]),
-      ]));
-      addFeeLine(prefix, lines);
-      form.appendChild(el('label', { className: 'check' }, [el('input', { type: 'checkbox', id: id('plan'), checked: true }), ' Add the fees of the class\'s fee plan']));
-    }
     form.appendChild(el('label', { className: 'check' }, [el('input', { type: 'checkbox', id: id('bus'), checked: !!x.uses_bus }), ' Uses the school bus']));
     form.appendChild(el('div', { id: id('dups'), className: 'addrow-dups', role: 'alert', hidden: true }));
     form.appendChild(el('div', { className: 'row' }, [el('button', { type: 'submit', id: id('save'), text: submitText })]));
@@ -1402,6 +1357,8 @@
       node = line && line.querySelector('[data-k="' + fee[2] + '"]');
     } else node = $(prefix + '-' + (FIELD_IDS[problem.field] || problem.field));
     if (node) {
+      const fold = node.closest('details');
+      if (fold) fold.open = true;
       node.setAttribute('aria-invalid', 'true');
       node.focus();
       node.addEventListener('input', () => node.removeAttribute('aria-invalid'), { once: true });
@@ -1427,7 +1384,7 @@
       box2.appendChild(el('p', { className: 'small', text: 'Change the admission number, or open that student and edit it there.' }));
     } else {
       const anyway = el('button', { type: 'button', id: prefix + '-anyway', text: 'Save anyway (it is a different student)' });
-      anyway.addEventListener('click', () => (prefix === 'fsa' ? saveNewStudent(true) : saveEdit(true)));
+      anyway.addEventListener('click', () => (prefix === 'fsa' ? saveNewStudent(true, addAgain) : saveEdit(true)));
       box2.appendChild(el('div', { className: 'row' }, [anyway]));
     }
     box2.hidden = false;
@@ -1435,14 +1392,115 @@
     return false;
   }
 
-  function openAddStudent() {
+  // + Add student: the few fields a new admission needs, in order; the rest under "More". keep: the class,
+  // section, batch and centre of the student just saved ("Save & add another"), or nothing.
+  function addStudentForm(keep) {
+    const k = keep || {};
+    const id = (x) => 'fsa-' + x;
+    const input = (x, props) => el('input', Object.assign({ id: id(x), type: 'text', autocomplete: 'off' }, props || {}));
+    const boardSel = el('select', { id: id('board') }, [el('option', { value: '', text: 'Not set' })].concat(BOARDS.map((b) => el('option', { value: b, text: b }))));
+    const cls = input('class', { maxlength: '20', value: k.class_label || '', placeholder: 'Other', className: 'fsa-class-input', 'aria-label': 'Class' });
+    const chips = el('div', { className: 'fees-chips fsa-classes', id: id('classes'), role: 'group', 'aria-label': 'Class' });
+    const planNote = el('p', { className: 'muted small', id: id('plan-note') });
+    const [centreField, batchField] = centreFields('fsa', { centre_id: k.centre_id || undefined, batch_id: k.batch_id || undefined });
+    const mode = el('select', { id: id('paid-mode') }, MODES.map((m) => el('option', { value: m[0], text: m[1] })));
+    mode.value = 'cash';
+    const lines = el('div', { id: id('fees'), className: 'addrow-fees' });
+    const addFee = el('button', { type: 'button', id: id('fee-add'), text: '+ Add a fee' });
+    addFee.addEventListener('click', () => {
+      addFeeLine('fsa');
+      const all = lines.querySelectorAll('.addrow-fee');
+      if (all.length) all[all.length - 1].querySelector('input').focus();
+    });
+    const more = el('details', { className: 'fsa-more', id: id('more') }, [
+      el('summary', { text: 'More: admission no, alternate phone, fees, paid so far' }),
+      el('div', { className: 'addrow-grid' }, [
+        field('Admission no', input('adm', { maxlength: '40' })),
+        field('Alternate phone', input('alt', { type: 'tel', inputmode: 'tel', maxlength: '20' })),
+        field('Board', boardSel),
+        field('Academic year', input('year', { maxlength: '9', placeholder: '2026-27' })),
+        centreField || null,
+      ]),
+      el('label', { className: 'check' }, [el('input', { type: 'checkbox', id: id('plan'), checked: true }), ' Add the fees of the class\'s fee plan']),
+      el('fieldset', { className: 'addrow-set' }, [el('legend', { text: 'Other fees' }), lines, addFee]),
+      el('fieldset', { className: 'addrow-set' }, [
+        el('legend', { text: 'Paid so far' }),
+        el('div', { className: 'addrow-grid' }, [
+          field('Amount (₹)', input('paid', { inputmode: 'decimal' })),
+          field('Paid on', input('paid-on', { type: 'date', value: today(), max: today() })),
+          field('Mode', mode),
+          field('Reference', input('paid-ref', { maxlength: '60', placeholder: 'UTR or cheque no.' })),
+        ]),
+      ]),
+      el('label', { className: 'check' }, [el('input', { type: 'checkbox', id: id('bus') }), ' Uses the school bus']),
+    ]);
+    const form = el('form', { id: id('form'), className: 'addrow-form', novalidate: 'novalidate' }, [
+      el('div', { className: 'addrow-grid' }, [field('Student name (needed)', input('name', { maxlength: '120', required: true, 'aria-required': 'true' }))]),
+      el('div', { className: 'fsa-class-row' }, [el('span', { className: 'fsa-label', text: 'Class' }), chips, cls]),
+      planNote,
+      el('div', { className: 'addrow-grid' }, [
+        field('Section', input('section', { maxlength: '20', value: k.section || '', placeholder: 'A' })),
+        batchField || null,
+        field('Parent name', input('parent', { maxlength: '120' })),
+        field('Phone (needed)', input('phone', { type: 'tel', inputmode: 'tel', maxlength: '20', placeholder: '98765 43210', 'aria-required': 'true' })),
+      ]),
+      more,
+      el('div', { id: id('dups'), className: 'addrow-dups', role: 'alert', hidden: true }),
+      el('div', { className: 'row' }, [
+        el('button', { type: 'submit', id: id('save'), className: 'primary', text: 'Save' }),
+        el('button', { type: 'button', id: id('again'), text: 'Save & add another' }),
+      ]),
+      msg(id('msg')),
+    ]);
+    addFeeLine('fsa', lines);
+    // Board and year follow the class's fee plan until someone changes them by hand.
+    let auto = true;
+    form.querySelector('#fsa-year').addEventListener('input', () => { auto = false; });
+    boardSel.addEventListener('change', () => { auto = false; });
+    function syncClass() {
+      const v = cls.value.trim();
+      chips.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.getAttribute('data-value').toLowerCase() === v.toLowerCase())));
+      const plan = planFor(v);
+      planNote.textContent = plan ? 'Fee plan: ' + [plan.board, plan.academic_year, plural((plan.items || []).length, 'fee', 'fees')].filter(Boolean).join(' · ') : '';
+      if (auto && plan) {
+        boardSel.value = plan.board || '';
+        form.querySelector('#fsa-year').value = plan.academic_year || '';
+      }
+    }
+    const classes = choices(allRows.concat(addPlans || []), 'class_label');
+    classes.forEach((c) => {
+      const b = el('button', { type: 'button', className: 'fees-chip', 'data-value': c, text: /^\d/.test(c) ? 'Class ' + c : c });
+      b.addEventListener('click', () => { cls.value = c; syncClass(); form.querySelector('#fsa-section').focus(); });
+      chips.appendChild(b);
+    });
+    cls.addEventListener('input', syncClass);
+    syncClass();
+    return form;
+  }
+
+  // The class's fee plan (fee_plans_list, read once when the form opens): board, year and fees for a new student.
+  let addPlans = null;
+  const planFor = (cls) => {
+    const v = String(cls || '').trim().toLowerCase();
+    return v ? (addPlans || []).find((p) => String(p.class_label || '').trim().toLowerCase() === v && !p.section) || null : null;
+  };
+  async function loadAddPlans() {
+    if (addPlans) return;
+    try { addPlans = rows(await ctx.rpc('fee_plans_list')); } catch (err) { addPlans = []; }
+  }
+
+  async function openAddStudent(keep, note) {
     const p = $('fees-add');
+    await loadAddPlans();
+    if (!ctx) return;
     p.textContent = '';
     p.appendChild(el('h2', { text: 'Add a student' }));
-    p.appendChild(el('p', { className: 'muted small', text: 'One student by hand. Many students? Use Import from Excel.' }));
-    const form = studentForm('fsa', {}, true, 'Save student');
-    form.addEventListener('submit', (e) => { e.preventDefault(); saveNewStudent(false); });
+    const form = addStudentForm(keep);
+    form.addEventListener('submit', (e) => { e.preventDefault(); saveNewStudent(false, false); });
+    form.querySelector('#fsa-again').addEventListener('click', () => saveNewStudent(false, true));
     p.appendChild(form);
+    if (note) say('fsa-msg', note);
+    if (keep) $('fsa-name').focus();
   }
 
   // p_data with the centre and batch picked in the form (only when the form has them).
@@ -1454,8 +1512,10 @@
   }
 
   let saving = false;
-  async function saveNewStudent(force) {
+  let addAgain = false;   // "Save & add another" (kept for "Save anyway")
+  async function saveNewStudent(force, again) {
     if (saving) return;
+    if (again !== undefined) addAgain = !!again;
     const f = readStudentForm('fsa');
     const problem = AR.studentProblem(f, { today: today(), withMoney: true });
     if (problem) { showProblem('fsa', problem); return; }
@@ -1506,6 +1566,16 @@
     if (!ctx) return;
     pendingNote = AR.studentData(f).name + ' added' + (added ? ' with ' + plural(added, 'fee', 'fees') : '') + '.' + planText + paidText +
       (failed.length ? ' Not saved: ' + failed.join('; ') + '. Add it below.' : '');
+    if (addAgain && !failed.length) {
+      // The next student of the same class: class, section, batch and centre stay.
+      const keep = { class_label: f.class_label, section: f.section, batch_id: f.batch_id || '', centre_id: f.centre_id || '' };
+      const note = '✓ ' + pendingNote + ' Next student.';
+      pendingNote = '';
+      loadAll();
+      loadList();
+      openAddStudent(keep, note);
+      return;
+    }
     $('fees-add').hidden = true;
     $('fees-add').textContent = '';
     syncOpeners();
@@ -1519,7 +1589,7 @@
     const st = (detail && detail.student) || {};
     p.textContent = '';
     p.appendChild(el('h3', { id: 'fs-edit-h', tabindex: '-1', text: 'Edit details' }));
-    const form = studentForm('fse', st, false, 'Save details');
+    const form = studentForm('fse', st, 'Save details');
     const cancel = el('button', { type: 'button', id: 'fse-cancel', text: 'Cancel' });
     cancel.addEventListener('click', () => { toggleEdit(btn); btn.focus(); });
     form.querySelector('.row').appendChild(cancel);
@@ -1636,23 +1706,36 @@
     box2.textContent = '';
     box2.hidden = false;
     const grid = el('div', { className: 'fees-map' });
-    IMPORT_FIELDS.concat(ctx.centres ? CENTRE_FIELDS : []).forEach(([k, label]) => {
+    const fields = IMPORT_FIELDS.concat(ctx.centres ? CENTRE_FIELDS : []);
+    fields.forEach(([k, label]) => {
       const sel = colSelect('fees-imp-col-' + k, imp.map[k], k === 'name' ? 'Pick a column' : k === 'centre' && ctx.centre ? 'Not in the sheet: ' + window.VectorCentres.centreName(ctx.centres, ctx.centre) : null);
       sel.addEventListener('change', () => { imp.map[k] = Number(sel.value); renderPreview(); });
       grid.appendChild(el('label', null, [label, sel]));
     });
-    box2.appendChild(el('h3', { text: 'Match the columns' }));
-    box2.appendChild(grid);
+    const detail = el('div', { id: 'fees-imp-map-detail' });
+    detail.appendChild(el('h3', { text: 'Match the columns' }));
+    detail.appendChild(grid);
     const year = el('input', { id: 'fees-imp-year', type: 'text', placeholder: '2026-27', maxlength: '9' });
     year.addEventListener('input', renderPreview);
-    box2.appendChild(el('div', { className: 'row' }, [field('Academic year when the sheet has none', year)]));
+    detail.appendChild(el('div', { className: 'row' }, [field('Academic year when the sheet has none', year)]));
 
-    box2.appendChild(el('h3', { text: 'Fees' }));
+    detail.appendChild(el('h3', { text: 'Fees' }));
     const list = el('div', { id: 'fees-imp-fees', className: 'fees-map-fees' });
-    box2.appendChild(list);
+    detail.appendChild(list);
     const add = el('button', { type: 'button', id: 'fees-imp-addfee', text: 'Add a fee column' });
     add.addEventListener('click', () => { imp.map.fees.push({ head: '', headCol: -1, amount: -1, due: -1 }); renderFeeMap(); renderPreview(); });
-    box2.appendChild(add);
+    detail.appendChild(add);
+    // Every column of the sheet found its place (the template, or a sheet like it): one line, the table folded.
+    const used = new Set(fields.map(([k]) => imp.map[k]).concat(...imp.map.fees.map((f) => [f.headCol, f.amount, f.due])).filter((i) => i >= 0));
+    const all = imp.map.name >= 0 && imp.sheet.header.every((h, i) => used.has(i));
+    if (all) {
+      detail.hidden = true;
+      const change = el('button', { type: 'button', className: 'linkish', id: 'fees-imp-change', text: 'Change' });
+      const line = el('p', { className: 'fees-imp-matched', id: 'fees-imp-matched' }, [plural(imp.sheet.header.length, 'column', 'columns') + ' matched ✓ ', change]);
+      change.addEventListener('click', () => { detail.hidden = false; line.remove(); grid.querySelector('select').focus(); });
+      box2.appendChild(line);
+    }
+    box2.appendChild(detail);
     renderFeeMap();
     renderPreview();
   }
@@ -1754,82 +1837,77 @@
     loadList();
   }
 
-  // ---------- fees campaign ----------
+  // ---------- "Call these N parents" ----------
 
-  async function openCampaign() {
-    const p = $('fees-camp');
-    p.textContent = '';
-    const classes = choices(allRows, 'class_label');
-    const dl = el('datalist', { id: 'fees-c-classes' }, classes.map((c) => el('option', { value: c })));
-    const board = el('select', { id: 'fees-c-board' }, [el('option', { value: '', text: 'All boards' })].concat(BOARDS.map((b) => el('option', { value: b, text: b }))));
-    const script = el('select', { id: 'fees-c-script' }, [el('option', { value: '', text: 'No script' })]);
-    const name = el('input', { id: 'fees-c-name', type: 'text', maxlength: '120', required: true, value: campaignName({}) });
-    const cls = el('input', { id: 'fees-c-class', type: 'text', maxlength: '20', list: 'fees-c-classes', placeholder: 'All classes' });
-    const due = el('input', { id: 'fees-c-due', type: 'date' });
-    let named = false;
-    name.addEventListener('input', () => { named = true; });
-    const rename = () => { if (!named) name.value = campaignName({ class_label: cls.value, board: board.value, due_by: due.value }); };
-    [cls, board, due].forEach((x) => x.addEventListener('input', rename));
-    board.addEventListener('change', rename);
-    const form = el('form', { id: 'fees-c-form', className: 'fees-c-form', novalidate: 'novalidate' }, [
-      el('div', { className: 'row' }, [
-        field('Calling list name', name, 'grow'),
-        field('Class', cls), dl,
-        field('Board', board),
-      ]),
-      el('div', { className: 'row' }, [
-        field('Fees due by', due),
-        field('Call only when more than (₹) is due', el('input', { id: 'fees-c-min', type: 'text', inputmode: 'decimal', value: '0' })),
-        field('Script', script, 'grow'),
-      ]),
-      el('label', { className: 'check' }, [el('input', { type: 'checkbox', id: 'fees-c-open', checked: true }), ' Open to all callers']),
-      el('p', { className: 'muted small', text: 'Each parent with a balance gets one call. The amount on the call is the balance due by that date. When a payment is recorded here, the call list updates by itself and parents who paid are not called again.' }),
-      el('div', { className: 'row' }, [el('button', { type: 'submit', text: 'Make the calling list' })]),
-    ]);
-    form.addEventListener('submit', (e) => { e.preventDefault(); createCampaign(); });
-    p.appendChild(el('h2', { text: 'Call parents with dues' }));
-    p.appendChild(form);
-    p.appendChild(msg('fees-c-msg'));
-    p.appendChild(el('div', { id: 'fees-c-done' }));
+  // The filters of the list for fees_call_plan / fees_call_start (the search box is not one of them).
+  function callFilters() {
+    const f = currentFilters();
+    const out = {};
+    ['class_label', 'board', 'academic_year', 'batch_id'].forEach((k) => { if (String(f[k] || '').trim()) out[k] = String(f[k]).trim(); });
+    if (filt.section) out.section = filt.section;
+    if (ctx.centre) out.centre_id = ctx.centre;
+    return out;
+  }
+
+  // The button over the list: the parents (one per phone) with dues in the list. Hidden while searching (the
+  // list then shows only some of them) and when nobody is due.
+  function drawCallButton() {
+    const b = $('fees-call');
+    if (!b) return;
+    const phones = new Set(listRows.filter((r) => Number(r.balance_due_now) > 0 && r.phone).map((r) => r.phone));
+    const n = phones.size;
+    b.hidden = !n || !!$('fees-f-search').value.trim();
+    b.textContent = 'Call these ' + plural(n, 'parent', 'parents');
+    closeCall();
+  }
+  function closeCall() {
+    callPlan = null;
+    const line = $('fees-call-line');
+    if (line) { line.hidden = true; line.textContent = ''; }
+  }
+
+  // One line in place: how many, the script and who calls, then Start.
+  async function askCall() {
+    const line = $('fees-call-line');
+    line.hidden = false;
+    line.textContent = 'Getting the calling list ready…';
+    const filters = callFilters();
     try {
-      const typeId = await feesType();
-      const { data, error } = await ctx.client.from('scripts').select('id, name, call_type_id, script_versions(published)').eq('institute_id', ctx.institute.id);
-      if (error) throw new Error(error.message);
-      (data || []).filter((s) => (!s.call_type_id || s.call_type_id === typeId) && (s.script_versions || []).some((v) => v.published))
-        .sort((a, b) => String(a.name).localeCompare(String(b.name)))
-        .forEach((s) => script.appendChild(el('option', { value: s.id, text: s.name })));
+      const plan = (await ctx.rpc('fees_call_plan', { p_filters: filters })) || {};
+      if (!ctx) return;
+      callPlan = { plan, filters };
+      line.textContent = '';
+      if (!Number(plan.parents)) { line.appendChild(el('span', { text: 'Nobody here has dues and a phone number.' })); return; }
+      const bits = [plural(plan.parents, 'parent', 'parents') + (plan.amount !== null && plan.amount !== undefined ? ' · ' + rupees2(plan.amount) + ' due' : '')];
+      if (plan.script_name) bits.push('Script: ' + plan.script_name);
+      bits.push((plan.callers || []).length ? (plan.callers || []).map((c) => c.label).join(', ') + ' first, then any caller' : 'Any caller');
+      const start = el('button', { type: 'button', className: 'primary', id: 'fees-call-start', text: 'Start calling' });
+      const cancel = el('button', { type: 'button', className: 'linkish', id: 'fees-call-cancel', text: 'Cancel' });
+      start.addEventListener('click', () => startCall(start));
+      cancel.addEventListener('click', () => { closeCall(); $('fees-call').focus(); });
+      line.appendChild(el('span', { className: 'fees-call-text', id: 'fees-call-text' }, [el('strong', { text: plan.name || 'Fees' }), ': ' + bits.join(' · ')]));
+      line.appendChild(el('span', { className: 'fees-call-acts' }, [start, cancel]));
+      start.focus();
     } catch (err) {
-      say('fees-c-msg', 'Could not load the call scripts, so the calling list will have none: ' + errText(err));
+      line.textContent = 'Could not get the list ready: ' + errText(err);
     }
   }
 
-  async function createCampaign() {
-    const name = $('fees-c-name').value.trim();
-    const min = LU.parseAmount($('fees-c-min').value || '0');
-    if (!name) { say('fees-c-msg', 'Give the calling list a name.', true); return; }
-    if (min === null || Number.isNaN(min)) { say('fees-c-msg', 'The minimum due must be an amount in rupees, or 0.', true); return; }
-    const btn = $('fees-c-form').querySelector('button[type="submit"]');
+  async function startCall(btn) {
+    if (!callPlan) return;
     btn.disabled = true;
-    say('fees-c-msg', 'Making the calling list…');
+    const line = $('fees-call-line');
     try {
-      const id = await ctx.rpc('accounts_create_fees_campaign', {
-        p_name: name, p_class_label: $('fees-c-class').value.trim() || null, p_board: $('fees-c-board').value || null,
-        p_due_by: $('fees-c-due').value || null, p_min_due: min || 0, p_script: $('fees-c-script').value || null,
-        p_open_to_all: $('fees-c-open').checked, p_start: true,
-      });
-      say('fees-c-msg', '');
-      const done = $('fees-c-done');
-      done.textContent = '';
-      const open = $('fees-c-open').checked;
-      const text = open ? 'Calling list "' + name + '" is made. When it has parents to call it starts at once, and every caller can pick it.'
-        : 'Calling list "' + name + '" is made but not started. An owner or manager adds callers and starts it in Calling.';
-      done.appendChild(el('p', { id: 'fees-c-made', className: 'fees-done', text }));
-      if (!isAccounts(ctx.seat)) done.appendChild(el('p', null, [el('a', { href: S.buildHash('calling', { id }), id: 'fees-c-link', text: 'Open the calling list' })]));
+      const out = (await ctx.rpc('fees_call_start', { p_filters: callPlan.filters })) || {};
+      if (!ctx) return;
+      callPlan = null;
+      line.textContent = '';
+      line.appendChild(el('span', { id: 'fees-call-made', text: '✓ ' + (out.text || 'The calling list started.') }));
+      if (!isAccounts(ctx.seat) && out.campaign_id) line.appendChild(el('a', { href: S.buildHash('calling', { id: out.campaign_id }), id: 'fees-call-link', text: 'Open the calling list' }));
       loadSummary();
     } catch (err) {
-      say('fees-c-msg', 'Not made: ' + errText(err), true);
-    } finally {
       btn.disabled = false;
+      say(line, 'Not started: ' + errText(err), true);
     }
   }
 
@@ -1842,6 +1920,7 @@
     mount(container, c) {
       ctx = c;
       box = container;
+      filt = Object.assign({ class_label: '', section: '', batch_id: '', only_due: isAccounts(c.seat) }, S.recall(FILTER_KEY, c.email, {}) || {});
       build();
       wire();
       window.addEventListener('afterprint', afterPrint);
@@ -1859,8 +1938,8 @@
       window.removeEventListener('afterprint', afterPrint);
       clearTimeout(searchTimer);
       Object.keys(seq).forEach((k) => { seq[k]++; });
-      ctx = null; box = null; allRows = []; listRows = []; detail = null; studentId = null; feesTypeId = null;
-      imp = null; summary = null; wantPay = false; page = 1; pendingNote = ''; saving = false; lastGrant = null;
+      ctx = null; box = null; allRows = []; listRows = []; detail = null; studentId = null;
+      imp = null; summary = null; callPlan = null; page = 1; pendingNote = ''; saving = false; lastGrant = null;
     },
   });
 })();

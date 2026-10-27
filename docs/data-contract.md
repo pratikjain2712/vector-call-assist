@@ -451,7 +451,7 @@ _25 Oct 2026. Migration `20261025130000_ledger_open_campaigns.sql` (after `20261
 
 - **`seats.role = 'accounts'`, `admin_kind = 'accounts'`, `access_role = 'accounts'`.** Not `role = 'admin'`: `is_admin_of()` is false and every old check of `role = 'admin'` refuses it, so an accounts seat cannot invite or revoke seats, change roles, manage campaigns, call types or scripts, or read admin reports, Home or the audit log. Constraint `seats_admin_kind_matches_role`: `rep` ⇔ `admin_kind` null; `accounts` ⇔ `admin_kind = 'accounts'`. The `can_see_money` column stays false on accounts seats.
 - **Always sees money:** `can_see_money(inst)` is true for an active accounts seat even when `hide_money` is on (the fees office cannot work without amounts). Owners and managers still follow `hide_money`.
-- Accounts can read the ledger, record and reverse payments, add and void fee items, import students and fees, add and edit students, create fees campaigns from the ledger, and read `ledger_collected` and `promises_vs_payments`. Owners can do all of this too. Managers can read the ledger (amounts only with money access) and, with money access, create fees campaigns from the ledger. Managers cannot record payments.
+- Accounts can read the ledger, record and reverse payments, add and void fee items, import students and fees, add and edit students, create fees campaigns from the ledger, and read `ledger_collected` and `promises_vs_payments`. Owners can do all of this too. Managers can read the ledger (amounts only with money access) and, with money access, create fees campaigns from the ledger. Since 20261027110000 ("Office clicks" below) a manager with money access also records payments and undoes their own payment within 10 minutes; other ledger changes stay with owners and Accounts.
 - **Creating an accounts seat:** use `invite_seat(p_institute, p_email, p_label, 'accounts')` (owner only) or `admin_set_seat_role(p_seat, 'accounts')` (owner). The `seat-admin` Edge Function still accepts only `admin` / `rep`, so the UI agents must add `accounts` there. `my_trial_status()` returns `role 'accounts'`, `access_role 'accounts'`, `can_see_money true`. The admin page (`shell.js` `isAdminRole`, `home.js` routing) must let `access_role = 'accounts'` in and show only the Fees tab.
 
 | Helper | Returns | What |
@@ -833,3 +833,56 @@ Collect fee records with `accounts_record_payment` and undoes (10 minutes, in th
 `accounts_reverse_payment(p_payment, 'Entered by mistake')`; Receipt reuses the Fees receipt (`window.VectorFeesReceipt`); "Send
 on WhatsApp" is a wa.me link with the receipt, shown when the institute's WhatsApp is connected and a lead of the student agreed.
 <!-- end Centres and Collect -->
+
+## Office clicks (migration 20261027110000_caller_centre_scope.sql)
+<!-- Office clicks -->
+
+Fewer clicks for the fees office and the owner. Apply after 20261027100000_centres_batches.sql.
+
+**Callers limited to some centres.** `seats.centre_ids` (null = every centre) now also limits calling. A seat limited
+to some centres only gets leads whose `centre_id` is one of its centres or null (shared), and only calling lists whose
+`centre_id` is one of its centres or null.
+
+| Function | Change |
+|---|---|
+| `seat_takes_centre(p_seat, p_centre)` (internal) | The rule above, in one place. |
+| `campaign_seat_can_work(p_campaign, p_seat)` (internal) | Also false for a list of another centre. So `next_free_lead` / `my_call_queue` say "campaign not found" for it and the share functions take its leads back from that seat. |
+| `next_free_lead(p_campaign)` | The seat's own new leads and the pool, in the seat's centres only. |
+| `my_call_queue(p_campaign)`, `my_campaigns()` | Only leads (and lists) in the seat's centres; `my_leads`, `my_leads_due`, `pool_leads_due` count likewise. |
+| `campaign_share_equal`, `campaign_share_next_free` (internal) | After sharing, an open lead held by a seat that does not take its centre goes to a member who does (equal share; one uncalled lead goes the other way so the share stays equal) or back to the pool. |
+| `admin_set_seat_centres(p_seat, p_centres)` | Also sends the seat's open leads outside its new centres back to the pool. |
+
+**Payments by managers who can see money.**
+
+| Function | Returns | Who | Notes |
+|---|---|---|---|
+| `can_record_payment(inst)` | boolean | | `can_manage_ledger(inst) or (is_admin_of(inst) and can_see_money(inst))`. |
+| `accounts_record_payment(…)` | uuid | owner, Accounts, manager with money | As before; `recorded_by` is the person's seat; the centre check is unchanged (a Borivali student is "student not found" for a person limited to Andheri). |
+| `accounts_reverse_payment(p_payment, p_reason)` | uuid | owner, Accounts; a manager with money for their own payment within 10 minutes | Otherwise 42501 "a manager can undo only their own payment, within 10 minutes". |
+| `collected_by_me()` | jsonb | ledger readers | `can_collect` = `can_record_payment`. |
+
+**"Call these N parents"** (Fees list). `p_filters`: `{centre_id, batch_id, class_label, section, board, academic_year}`
+(all optional), students with dues now. Who: owner, Accounts, a manager who can see money (42501 otherwise); a centre the
+person may not see is refused (`scope_push`).
+
+| Function | Returns | Notes |
+|---|---|---|
+| `fees_call_plan(p_filters jsonb)` | jsonb `{parents, students, no_phone, amount, name, script_id, script_name, callers [{seat_id, label}]}` | `parents`: one call per phone. `amount` null without money access. `name`: `Fees · Class 8-A · Morning · 27 Oct` (batch, else centre). Script: the fees script Autopilot would pick (`ap_pick_script`); callers: Autopilot's top two for fees calls who take the list's centre. Nothing is saved. |
+| `fees_call_start(p_filters jsonb)` | jsonb `{campaign_id, leads, name, text}` | Makes the list (open to all, next free, running at once, `focus_seats` = the plan's callers, centre and batch from the filters, class and board as tags) with one lead per phone (the student with the most due). 22023 "nobody with dues and a phone in this list". Audit `campaign.created`, `leads.added`, `campaign.running`, `fees_campaign.from_ledger`. |
+
+**Away today** (Team).
+
+| Function | Returns | Who | Notes |
+|---|---|---|---|
+| `admin_away_today(p_seat)` | jsonb `{released, lead_ids}` | owner, manager | As `admin_release_leads(p_seat)` (open leads in lists not closed go to the pool), with the ids for Undo. Audit `lead.released` `<lead>:<seat>:away`. |
+| `admin_undo_away(p_seat, p_leads uuid[])` | int | owner, manager | Gives back the leads still in the pool and open, when the seat may still work them. At most 5000 ids. Audit `lead.returned`. |
+
+**Web.** One payment form: "Collect fee" on a student's page (`#fees/collect?student=<id>&from=student`) and on each list
+row opens Collect for that student (the amount is the balance due now; the mode is the one this login last saved with,
+`vector-collect-mode:<email>`); after a save "Print receipt" and "Next student". Remembered per login in localStorage
+(try/catch; only conveniences): the Fees list's class, section, batch and "Only with dues" (`vector-fees-filters`, on by
+default for Accounts), the last discount reason (`vector-discount-reason`), the last report, its dates per mode and the
+script of "Why calls are lost" (`vector-admin-report`, `vector-admin-report-dates:<mode>`, `vector-admin-report-script`).
+Common answers: each box starts with the standard wording and `____` blanks; "Save all" calls `admin_fill_common_answer`
+for each changed box without a blank.
+<!-- end Office clicks -->

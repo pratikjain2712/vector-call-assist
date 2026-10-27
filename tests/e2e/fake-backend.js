@@ -763,7 +763,9 @@ function createFakeBackend(world) {
         return json(200, db.seats.filter((x) => x.institute_id === a.p_institute).map((x) => ({
           seat_id: x.id, label: x.label, access_role: roleOf(x), can_see_money: !!x.can_see_money, status: x.status,
           campaigns: x.role === 'accounts' ? [] : campaignsOf(x.id).map((c) => ({ id: c.id, name: c.name, status: c.status })),
-          calls_today: callsToday(x.id), calls_target: null,
+          calls_today: callsToday(x.id),
+          // office clicks: the last calls target set with set_rep_target (0 = none).
+          calls_target: ((db.targets || []).filter((g) => g.seat_id === x.id && g.metric === 'calls').slice(-1)[0] || {}).daily_target || null,
           // 20261025180000: an Accounts seat is not a caller (no campaigns, no "now" status).
           now_status: x.status === 'active' && x.role !== 'accounts' ? (db.presence[x.id] || { status: 'not_started' }) : null })));
       },
@@ -1261,6 +1263,8 @@ function createFakeBackend(world) {
     const reader = (u) => { const s = u && seatOf(u.id); return s && (s.role === 'admin' || isAcc(s)) ? s : null; };
     const manager = (u) => { const s = reader(u); return s && (isAcc(s) || (s.access_role || 'owner') === 'owner') ? s : null; };
     const moneyFor = (s) => isAcc(s) || !!db.reports.money;
+    // office clicks: a manager who can see money records payments too (20261027110000_caller_centre_scope.sql).
+    const payer = (u) => { const s = reader(u); return s && (manager(u) || (s.access_role === 'manager' && db.reports.money)) ? s : null; };
     const denied = () => pgErr(403, '42501', 'only accounts and owners can change the ledger');
     const notReader = () => pgErr(403, '42501', 'only accounts, owners and managers can see the ledger');
     const bad = (m) => pgErr(400, '22023', m);
@@ -1383,8 +1387,8 @@ function createFakeBackend(world) {
         });
       },
       accounts_record_payment: (u, a) => {
-        const s = manager(u);
-        if (!s) return denied();
+        const s = payer(u);
+        if (!s) return pgErr(403, '42501', 'only accounts, an owner or a manager who can see money can record payments');
         const st = studentOf(s, a.p_student);
         if (!st) return pgErr(403, '42501', 'student not found');
         const amount = Number(a.p_amount);
@@ -1403,10 +1407,13 @@ function createFakeBackend(world) {
         return json(200, p.id);
       },
       accounts_reverse_payment: (u, a) => {
-        const s = manager(u);
+        const s = payer(u);
         if (!s) return denied();
         const p = F.payments.find((x) => x.id === a.p_payment && x.institute_id === s.institute_id);
         if (!p) return pgErr(403, '42501', 'payment not found');
+        if (!manager(u) && (p.recorded_by !== s.id || Date.now() - Date.parse(p.created_at) > 10 * 60 * 1000)) {
+          return pgErr(403, '42501', 'a manager can undo only their own payment, within 10 minutes; ask Accounts or the owner');
+        }
         if (p.reverses_id) return bad('a reversal cannot be reversed');
         if (F.payments.some((r) => r.reverses_id === p.id)) return bad('this payment is already reversed');
         const reason = String(a.p_reason || '').trim();
@@ -2453,7 +2460,8 @@ function createFakeBackend(world) {
         F.payments.filter((p) => p.institute_id === s.institute_id && !p.reverses_id && !p.opening && p.mode !== 'other').forEach((p) => { counts[p.mode] = (counts[p.mode] || 0) + 1; });
         const top = Object.keys(counts).sort((x, y) => counts[y] - counts[x] || (x === 'cash' ? -1 : y === 'cash' ? 1 : x.localeCompare(y)))[0] || 'cash';
         const sum = (l) => l.reduce((x, p) => x + p.amount, 0);
-        return json(200, { seat_id: s.id, label: s.label, today: t, month_start: m0, money_hidden: !money, can_collect: !!writer(u),
+        return json(200, { seat_id: s.id, label: s.label, today: t, month_start: m0, money_hidden: !money,
+          can_collect: !!writer(u) || (s.access_role === 'manager' && !!db.reports.money),
           today_payments: tod.length, today_amount: money ? sum(tod) : null, month_payments: mine.length, month_amount: money ? sum(mine) : null,
           top_mode: CC.topMode || top });
       },
@@ -2579,6 +2587,97 @@ function createFakeBackend(world) {
         if (st.batch_id && !st.centre_id) st.centre_id = (batchOf(st.batch_id) || {}).centre_id || null;
       }
       return res;
+    });
+
+    // office clicks (20261027110000_caller_centre_scope.sql): "Call these N parents" from the Fees list
+    // (fees_call_plan / fees_call_start: students with dues now matching the list's filters, one call per phone,
+    // the newest live fees script, two callers), and "Away today" with Undo (admin_away_today / admin_undo_away).
+    // Every call is kept in db.officeClicks.calls.
+    const OC = { calls: [] };
+    db.officeClicks = OC;
+    const feesCaller = (u) => { const s = readerSeat(u); return s && (s.role === 'accounts' || (s.access_role || 'owner') === 'owner' || (s.access_role === 'manager' && db.reports.money)) ? s : null; };
+    function callRows(s, f) {
+      const x = f || {};
+      const low = (v) => String(v || '').trim().toLowerCase();
+      return F.students.filter((st) => st.institute_id === s.institute_id && st.status === 'active' && inScope(s, st, x.centre_id || null, x.batch_id || null)
+        && (!x.class_label || low(st.class_label) === low(x.class_label)) && (!x.section || low(st.section) === low(x.section))
+        && (!x.board || st.board === x.board) && (!x.academic_year || st.academic_year === x.academic_year))
+        .map((st) => ({ st, due: fees.balance(st).balance_due_now })).filter((r) => r.due > 0);
+    }
+    function callPlan(s, f) {
+      const x = f || {};
+      const rows = callRows(s, x);
+      const phones = new Set(rows.filter((r) => r.st.phone).map((r) => r.st.phone));
+      const typeId = (CALL_TYPES.find((c) => c.key === 'fees') || {}).id;
+      const scr = (F.scripts || []).filter((y) => y.institute_id === s.institute_id && (!y.call_type_id || y.call_type_id === typeId)
+        && (y.script_versions || []).some((v) => v.published)).slice(-1)[0] || null;
+      const centre = x.centre_id || (x.batch_id ? (batchOf(x.batch_id) || {}).centre_id : null) || null;
+      const callers = db.seats.filter((y) => y.institute_id === s.institute_id && y.status === 'active' && y.role === 'rep' && allowed(y, centre)).slice(0, 2)
+        .map((y) => ({ seat_id: y.id, label: y.label }));
+      const cls = String(x.class_label || '').trim();
+      const clsText = cls ? (/^\d/.test(cls) ? 'Class ' + cls.replace(/\D.*$/, '') : cls) + (x.section ? '-' + x.section : '') : '';
+      const d = new Date();
+      const day = d.getDate() + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()];
+      const name = ['Fees', clsText, x.batch_id ? (batchOf(x.batch_id) || {}).name : '', !x.batch_id && centre ? (centreOf(centre) || {}).name : '', day].filter(Boolean).join(' · ');
+      return { rows, centre, plan: { parents: phones.size, students: rows.length, no_phone: rows.filter((r) => !r.st.phone).length,
+        amount: moneyOf(s) ? rows.reduce((t2, r) => t2 + r.due, 0) : null, name, script_id: scr ? scr.id : null, script_name: scr ? scr.name : null, callers } };
+    }
+    Object.assign(RPC, {
+      fees_call_plan: (u, a) => {
+        const s = feesCaller(u);
+        if (!s) return pgErr(403, '42501', 'only accounts, an owner or a manager who can see money can make a fees calling list');
+        const f = a.p_filters || {};
+        const bad = badCentre(s, f.centre_id, f.batch_id);
+        if (bad) return bad;
+        OC.calls.push({ name: 'fees_call_plan', args: a });
+        return json(200, callPlan(s, f).plan);
+      },
+      fees_call_start: (u, a) => {
+        const s = feesCaller(u);
+        if (!s) return pgErr(403, '42501', 'only accounts, an owner or a manager who can see money can make a fees calling list');
+        const f = a.p_filters || {};
+        const bad = badCentre(s, f.centre_id, f.batch_id);
+        if (bad) return bad;
+        OC.calls.push({ name: 'fees_call_start', args: a });
+        const { rows, plan, centre } = callPlan(s, f);
+        if (!plan.parents) return pgErr(400, '22023', 'nobody with dues and a phone in this list');
+        const c = { id: crypto.randomUUID(), institute_id: s.institute_id, name: plan.name, call_type_id: (CALL_TYPES.find((x) => x.key === 'fees') || {}).id,
+          script_id: plan.script_id, start_date: fees.today(), end_date: null, daily_target: null, share_mode: 'next_free', status: 'running', open_to_all: true,
+          class_label: f.class_label || null, board: f.board || null, fees_due_by: null, centre_id: centre, batch_id: f.batch_id || null,
+          focus_seats: plan.callers.map((x) => x.seat_id), created_at: new Date().toISOString() };
+        db.campaigns.push(c);
+        const seen = new Set();
+        rows.filter((r) => r.st.phone).sort((x, y) => y.due - x.due).forEach((r) => {
+          if (seen.has(r.st.phone)) return;
+          seen.add(r.st.phone);
+          db.leads.push({ id: crypto.randomUUID(), institute_id: s.institute_id, campaign_id: c.id, name: r.st.parent_name || r.st.name, phone: r.st.phone,
+            status: 'new', assigned_seat_id: null, amount_due: r.due, student_id: r.st.id, centre_id: r.st.centre_id || null,
+            extra: { student: r.st.name, class: r.st.class_label, section: r.st.section }, created_at: new Date().toISOString() });
+        });
+        OC.lastList = { id: c.id, leads: seen.size, filters: f };
+        return json(200, { campaign_id: c.id, leads: seen.size, name: plan.name, text: '"' + plan.name + '" started: ' + seen.size + (seen.size === 1 ? ' parent' : ' parents') + ' to call.' });
+      },
+      admin_away_today: (u, a) => {
+        const s = seatOfU(u);
+        if (!s || s.role !== 'admin') return pgErr(403, '42501', 'caller not found');
+        const from = db.seats.find((x) => x.id === a.p_seat && x.institute_id === s.institute_id);
+        if (!from) return pgErr(403, '42501', 'caller not found');
+        OC.calls.push({ name: 'admin_away_today', args: a });
+        const open = (l) => ['new', 'callback', 'promised'].includes(l.status) && !l.do_not_call;
+        const ids = [];
+        db.leads.filter((l) => l.assigned_seat_id === from.id && open(l) && (db.campaigns.find((c) => c.id === l.campaign_id) || {}).status !== 'closed')
+          .forEach((l) => { l.assigned_seat_id = null; ids.push(l.id); });
+        return json(200, { released: ids.length, lead_ids: ids });
+      },
+      admin_undo_away: (u, a) => {
+        const s = seatOfU(u);
+        if (!s || s.role !== 'admin') return pgErr(403, '42501', 'caller not found');
+        OC.calls.push({ name: 'admin_undo_away', args: a });
+        let n = 0;
+        db.leads.filter((l) => (a.p_leads || []).includes(l.id) && !l.assigned_seat_id && ['new', 'callback', 'promised'].includes(l.status))
+          .forEach((l) => { l.assigned_seat_id = a.p_seat; n++; });
+        return json(200, n);
+      },
     });
 
     function enable() {

@@ -147,12 +147,11 @@ test('Team: one table of people, with targets and notes columns only in advanced
   await expect(head.getByText('Targets')).toBeVisible();
   await expect(head.getByText('Notes today')).toBeVisible();
   await advanced(page, false);
-  // Edit: a calls target for the day, after a confirmation.
+  // Edit: a calls target for the day, saved at once (no question).
   await page.locator('#seat-body tr', { hasText: 'Rep 2' }).getByRole('button', { name: 'Edit Rep 2' }).click();
   await page.locator('#edit-target-calls').fill('40');
   await page.locator('#edit-target-save').click();
-  await expect(page.locator('#confirm')).toContainText('40 calls a day');
-  await page.locator('#confirm-go').click();
+  await expect(page.locator('#confirm')).toBeHidden();
   await expect(page.locator('#status')).toContainText('Target saved for "Rep 2": 40 calls a day.');
   // The plain words: no seats, pairing or pool.
   const text = await page.locator('#tab-team').innerText();

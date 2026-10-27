@@ -17,6 +17,10 @@
    campaign ticks in "Edit caller" are for campaigns restricted to chosen callers only); "Back to pool" per
    caller (admin_release_leads, with a confirmation that says how many leads go back); the role select has
    "Accounts" (admin_set_seat_role 'accounts': records fee payments, sees the Fees tab only).
+   Office clicks (20261027110000): each caller's row has the daily call target as a small box ("12 of [40]":
+   type and press Enter, saved at once, no question) and "Away today" (admin_away_today: their open calls go
+   to the others) with Undo (admin_undo_away) in the row. Adding a person, saving a target and "Give their
+   calls to others" run at once; the role, money access and Remove still ask first.
    Only counts, timings and the notes the supervisors wrote are shown. No money on this tab.
    The pure helpers below are also loaded by tests/web/admin-callers.test.js (Node, no DOM). */
 (function () {
@@ -260,6 +264,7 @@
           field('Calling list', el('select', { id: 'release-campaign' }), 'adv'),
           button('Give their calls to others', () => { const s = seatById(editing); if (s) askRelease(s, $('release-campaign').value || null); }, '', 'release-go'),
         ]),
+        msg('edit-release-msg'),
       ]),
       el('fieldset', { id: 'edit-campaigns', className: 'edit-block adv' }, [
         el('legend', { text: 'Calling lists for chosen callers only' }),
@@ -443,21 +448,92 @@
       }
       const targets = TARGETS.map((f) => (Number(p[f.field]) > 0 ? S.count(p[f.field]) + ' ' + f.name : '')).filter(Boolean).join(', ');
       const actions = el('td', { 'data-label': '', className: 'row-actions' });
+      if (caller && s.status === 'active') actions.appendChild(awayControl(s));
       if (s.seat_id !== ctx.seat.id && s.status !== 'revoked' && !(role === 'owner' && !iAmOwner())) {
         const b = button('Edit', () => openEdit(s.seat_id));
         b.setAttribute('aria-label', 'Edit ' + s.label);
         actions.appendChild(b);
       }
+      const callsCell = caller && s.status === 'active'
+        ? el('td', { 'data-label': 'Today\'s calls', className: 'num team-calls' }, [S.count(calls) + ' of ', targetBox(s, target)])
+        : cell(acc ? '—' : target ? S.count(calls) + ' of ' + S.count(target) : S.count(calls), 'num', 'Today\'s calls');
       body.appendChild(el('tr', { 'data-seat': s.seat_id }, [
         name,
         cell(roleLabel(s) + (role === 'manager' && s.can_see_money ? ' · sees money' : ''), '', 'Role'),
-        cell(acc ? '—' : target ? S.count(calls) + ' of ' + S.count(target) : S.count(calls), 'num', 'Today\'s calls'),
+        callsCell,
         el('td', { 'data-label': 'Status' }, [status]),
         cell(caller ? targets || 'None' : '', 'adv', 'Targets'),
         el('td', { 'data-label': 'Notes today', className: 'adv team-notes', 'data-notes': s.seat_id }),
         actions,
       ]));
     });
+  }
+
+  // The daily call target in the row: Enter saves it (set_rep_target, metric calls), Escape puts it back.
+  function targetBox(s, target) {
+    const box = el('input', { type: 'number', min: '0', max: String(T.TARGET_MAX), step: '1', inputmode: 'numeric', className: 'team-target',
+      id: 'target-' + s.seat_id, value: target ? String(target) : '', placeholder: '–', title: 'Daily target: type and press Enter', 'aria-label': 'Daily call target for ' + s.label + ' (Enter saves)' });
+    box.addEventListener('keydown', async (e) => {
+      if (e.key === 'Escape') { box.value = target ? String(target) : ''; return; }
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const r = T.parseTarget(box.value === '' ? '0' : box.value);
+      if (!r.ok) { ctx.status(r.error, true); return; }
+      box.disabled = true;
+      try {
+        await rpc('set_rep_target', { p_seat: s.seat_id, p_metric: 'calls', p_daily_target: r.value });
+        ctx.status(r.value ? 'Target saved for "' + s.label + '": ' + r.value + ' calls a day.' : 'No daily target for "' + s.label + '" now.');
+        box.classList.add('saved');
+        load();
+      } catch (err) {
+        box.disabled = false;
+        report('status', err, 'Target not saved: ');
+      }
+    });
+    return box;
+  }
+
+  // "Away today": their open calls go to the other callers at once; Undo gives back those nobody took yet.
+  const away = new Map();   // seat id -> { ids, n } given away on this page
+  function awayControl(s) {
+    const wrap = el('span', { className: 'team-away', 'data-away': s.seat_id });
+    const done = away.get(s.seat_id);
+    if (done) {
+      const undo = button('Undo', () => undoAway(s, undo), 'linkish', 'away-undo-' + s.seat_id);
+      wrap.appendChild(el('span', { className: 'muted small', text: 'Away · ' + (done.n === 1 ? '1 call' : done.n + ' calls') + ' given to others ' }));
+      wrap.appendChild(undo);
+      return wrap;
+    }
+    const b = button('Away today', () => goAway(s, b), '', 'away-' + s.seat_id);
+    b.setAttribute('aria-label', s.label + ' is away today: give their calls to others');
+    wrap.appendChild(b);
+    return wrap;
+  }
+  async function goAway(s, btn) {
+    btn.disabled = true;
+    try {
+      const out = (await ctx.rpc('admin_away_today', { p_seat: s.seat_id })) || {};
+      away.set(s.seat_id, { ids: out.lead_ids || [], n: Number(out.released) || 0 });
+      ctx.status(releasedText(s.label, out.released));
+      renderSeats();
+    } catch (err) {
+      btn.disabled = false;
+      report('team-msg', err, 'Could not give their calls: ');
+    }
+  }
+  async function undoAway(s, btn) {
+    const done = away.get(s.seat_id);
+    if (!done) return;
+    btn.disabled = true;
+    try {
+      const n = Number(await ctx.rpc('admin_undo_away', { p_seat: s.seat_id, p_leads: done.ids })) || 0;
+      away.delete(s.seat_id);
+      ctx.status(n === done.n ? 'Undone: ' + s.label + ' has their calls back.' : 'Undone: ' + n + ' of ' + done.n + ' calls back with ' + s.label + ' (the others were already taken).');
+      renderSeats();
+    } catch (err) {
+      btn.disabled = false;
+      report('team-msg', err, 'Could not undo: ');
+    }
   }
 
   // Every second: the call and wrap-up timers count on from the seconds the server sent.
@@ -608,17 +684,27 @@
     if (!label) { say('invite-msg', 'Type their name, such as Priya.', true); return; }
     if (!A.EMAIL.test(mail)) { say('invite-msg', 'Enter a valid email address.', true); return; }
     if (role === 'accounts' && !iAmOwner()) { say('invite-msg', 'Only an owner can add an Accounts person.', true); return; }
-    say('invite-msg', '');
-    ctx.confirm({
-      title: 'Add ' + label,
-      text: 'Add "' + label + '" as ' + r.label.toLowerCase() + ' with ' + mail + ': ' + inviteRoleHelp(role) + ' They join by signing in with that email. It uses one of your institute\'s places.',
-      button: 'Add person',
+    say('invite-msg', 'Adding…');
+    runNow('invite-msg', {
       run: () => ctx.seatAction({ action: 'invite', institute: ctx.institute.id, email: mail, label: label, role: role }),
-      done: (out) => '"' + label + '" added with ' + mail + '.' +
+      done: (out) => '"' + label + '" added as ' + r.label.toLowerCase() + ' with ' + mail + '.' +
         (out.email_sent === false ? ' They already have an account: they sign in with that email.' : ''),
-      after: () => { $('invite-form').reset(); $('team-invite').hidden = true; },
+      after: () => { $('invite-form').reset(); $('team-invite').hidden = true; say('invite-msg', ''); },
       reload: load,
     });
+  }
+
+  // A change that needs no question: runs it, says what happened in the status line, then reloads. A failure is
+  // said in msgId.
+  async function runNow(msgId, job) {
+    try {
+      const out = (await job.run()) || {};
+      if (job.after) job.after();
+      ctx.status(typeof job.done === 'function' ? job.done(out) : job.done);
+      if (job.reload) await job.reload();
+    } catch (err) {
+      report(msgId, err, 'Not done: ');
+    }
   }
 
   function askReassign(s) {
@@ -741,10 +827,7 @@
       ctx.status('"' + s.label + '" has nobody waiting to be called' + (camp ? ' in "' + camp.name + '"' : '') + '. Nothing to give.');
       return;
     }
-    ctx.confirm({
-      title: 'Give "' + s.label + '"\'s calls to others',
-      text: releaseText(s.label, count, camp ? camp.name : null),
-      button: 'Give their calls to others',
+    runNow('edit-release-msg', {
       run: async () => {
         try {
           return { released: await ctx.rpc('admin_release_leads', { p_seat: s.seat_id, p_campaign: campaignId }) };
@@ -794,10 +877,7 @@
     if (!changes.length) { say('edit-target-msg', 'Type a number first.', true); return; }
     say('edit-target-msg', '');
     const list = changes.map((c) => c.value + ' ' + c.name).join(', ');
-    ctx.confirm({
-      title: 'Daily target for "' + s.label + '"',
-      text: 'New daily target: ' + list + ' a day. 0 means no target.',
-      button: 'Save target',
+    runNow('edit-target-msg', {
       run: async () => {
         let saved = 0;
         for (const c of changes) {

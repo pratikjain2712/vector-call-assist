@@ -14,7 +14,10 @@
         wa.me link with the receipt), Undo for 10 minutes (accounts_reverse_payment, "Entered by mistake").
    "By you today ₹ · this month ₹" (collected_by_me) at the top. Pending dues (collect_pending): students with
    dues in the centre and batch, most due first or oldest first, each with Collect (the form for that student).
-   Who: owners and Accounts record payments (can_manage_ledger); others with the Fees tab see Pending only.
+   Who: owners, Accounts and managers who can see money record payments (can_record_payment, 20261027110000; a
+   manager's Undo works on their own payment for 10 minutes); others with the Fees tab see Pending only.
+   The mode starts at the one this login last saved with (per login in this browser), else the institute's
+   most used. "Record payment" on a student's page opens this screen for that student (one payment form).
    The pure helpers are also loaded by tests/web/collect.test.js (Node, no DOM). */
 (function () {
   const inNode = typeof window === 'undefined' && typeof module !== 'undefined' && module.exports;
@@ -183,7 +186,10 @@
     ctx: null, box: null, me: null, topMode: 'cash', batch: '', seq: 0, timer: null, results: [],
     info: null, mode: 'cash', saving: false, last: null, undoTimer: null,
   };
-  const canCollect = () => !!st.ctx && ['owner', 'accounts'].includes(S.seatKind(st.ctx.seat));
+  const canCollect = () => !!st.ctx && S.canCollect(st.ctx.seat, st.ctx.canSeeMoney);
+  // The last mode this login saved with (per login in this browser), else the institute's most used one.
+  const MODE_KEY = 'vector-collect-mode';
+  const lastMode = () => { const m = S.recall(MODE_KEY, st.ctx.email, null); return MODES.some((x) => x[0] === m) ? m : null; };
 
   function build(box) {
     const batchSel = C && st.ctx.centres ? C.batchPicker('collect-batch', st.ctx.centres, st.ctx.centre, st.batch, (v) => { st.batch = v; search(); }) : null;
@@ -322,7 +328,7 @@
       b.addEventListener('click', () => { amount.value = String(c.amount); sync(); amount.focus(); });
       chips.appendChild(b);
     });
-    st.mode = st.topMode;
+    st.mode = lastMode() || st.topMode;
     const modes = el('div', { className: 'collect-modes', role: 'radiogroup', 'aria-label': 'Paid by', id: 'collect-modes' });
     MODES.forEach((m) => {
       const b = el('button', { type: 'button', role: 'radio', className: 'collect-mode', 'data-mode': m[0], text: m[1] });
@@ -399,6 +405,7 @@
       st.last = { id, student: s, amount, mode: f.mode, reference: f.reference.trim(), paid_on: f.paid_on, at: Date.now(),
         wa: st.info.whatsapp || {}, left: st.info.money_hidden ? null : (Number(st.info.balance_total) || 0) - amount };
       st.saving = false;
+      S.remember(MODE_KEY, st.ctx.email, f.mode);
       say('collect-msg', '');
       drawDone();
       backToSearch(true);
@@ -432,9 +439,12 @@
       el('strong', { text: '✓ ' + S.rupees(x.amount) + ' received' }), ' from ' + x.student.name + ' · ' + modeLabel(x.mode) + ' · Receipt ' + receiptNo(x.id),
     ]));
     const acts = el('span', { className: 'collect-done-acts' });
-    const rec = el('button', { type: 'button', id: 'collect-receipt', text: 'Receipt' });
+    const rec = el('button', { type: 'button', id: 'collect-receipt', text: 'Print receipt' });
     rec.addEventListener('click', () => openReceipt(x));
     acts.appendChild(rec);
+    const next = el('button', { type: 'button', id: 'collect-next', className: 'primary', text: 'Next student' });
+    next.addEventListener('click', () => { $('collect-q').focus(); });
+    acts.appendChild(next);
     if (x.wa && x.wa.connected && x.wa.consent && waNumber(x.student.phone)) {
       const text = receiptMessage({ receipt: receiptNo(x.id), institute: st.ctx.institute.name, amount: x.amount, student: x.student.name,
         paid_on: x.paid_on, mode: x.mode, reference: x.reference, left: x.left });
@@ -501,6 +511,9 @@
     show(params) {
       if (!st.ctx) return;
       const p = params || {};
+      const back = $('collect-back');
+      if (p.from === 'student' && p.student) { back.href = S.buildHash('fees', { student: p.student }); back.textContent = '← Student'; }
+      else { back.href = '#fees'; back.textContent = '← Fees'; }
       if (p.student) { pick(p.student); return; }
       if (!st.info) $('collect-q').focus();
     },
@@ -522,6 +535,7 @@
     };
     const batchSel = C && pend.ctx.centres ? C.batchPicker('pending-batch', pend.ctx.centres, pend.ctx.centre, pend.batch, (v) => { pend.batch = v; loadPending(); }) : null;
     box.appendChild(el('div', { className: 'panel pending' }, [
+      el('p', { className: 'back pending-back' }, [el('a', { href: '#fees', id: 'pending-back', text: '← Fees' })]),
       el('div', { className: 'pending-head' }, [
         el('div', null, [
           el('h2', { id: 'pending-title', tabindex: '-1', text: 'Pending dues' }),
@@ -562,7 +576,7 @@
   function drawPending(rows, clear) {
     const list = $('pending-list');
     if (clear) list.textContent = '';
-    const collect = ['owner', 'accounts'].includes(S.seatKind(pend.ctx.seat));
+    const collect = S.canCollect(pend.ctx.seat, pend.ctx.canSeeMoney);
     rows.forEach((r) => {
       const since = r.oldest_due_date ? 'since ' + S.formatDate(r.oldest_due_date, { year: false }) : '';
       list.appendChild(el('li', { className: 'pending-row', 'data-student': r.student_id }, [
