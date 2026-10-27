@@ -69,15 +69,16 @@ test('a fees call: queue order, lead card, script step times, result fields, Wha
   await expect(page.locator('#camp-pick')).toBeDisabled();
   await page.waitForTimeout(1100);
 
-  // Result: Will pay on a date needs a date and an amount.
+  // Result: Will pay on a date needs a date and an amount; the amount due is filled in already.
   await page.locator('#res-will_pay_on').click();
   await expect(page.locator('#res-will_pay_on')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#res-amount')).toHaveValue('18,000');
   await page.locator('#res-save').click();
-  await expect(page.locator('#res-msg')).toHaveText('Pick the date. Enter the amount in rupees.');
+  await expect(page.locator('#res-msg')).toHaveText('Pick the date.');
   await page.locator('#res-date').fill(inDays(4));
-  await page.locator('#res-amount').fill('18,000');
   await page.locator('#res-note').fill('Will pay by UPI after salary');
-  await page.locator('#res-wa').selectOption('yes');
+  await page.locator('#res-wa-yes').click();
+  await expect(page.locator('#res-wa-yes')).toHaveAttribute('aria-pressed', 'true');
   const wa = page.locator('#res-wa-send');
   await expect(wa).toBeVisible();
   const href = await wa.getAttribute('href');
@@ -117,9 +118,8 @@ test('a result saved offline stays on the device and uploads when the connection
   await expect(page.locator('#camp-lead')).toContainText('Kavita Rao');
 
   backend.db.offline = true;
-  await page.locator('#res-no_answer').click();
-  await expect(page.locator('#res-wa-hint')).toBeVisible();   // consent not recorded: ask first
-  await page.locator('#res-save').click();
+  await page.locator('#res-no_answer').click();   // one tap: saved at once, with an Undo
+  await expect(page.locator('#camp-undo')).toContainText('Saved: No answer for Kavita Rao.');
   await expect(page.locator('#queue-panel .outboxline')).toContainText('1 result(s) saved on this device');
   // The lead moved on at once, offline.
   await expect(page.locator('#camp-lead')).toContainText('Sunita Sharma');
@@ -149,8 +149,26 @@ test('without the Scripts add-on there are no script steps; the lead sheet is st
   await expect(page.locator('#res-paid')).toBeVisible();
 
   // Refused needs a reason; do not call hides WhatsApp.
+  await page.locator('#res-refused').click();
+  await expect(page.locator('#res-wa-send')).toBeVisible();
+  await page.locator('#res-refused').click();   // tapped again: unpicked
+  // Do not call stops a lead for good: it is picked, then confirmed with Save; WhatsApp is hidden.
   await page.locator('#res-do_not_call').click();
+  await expect(page.locator('#res-do_not_call')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#res-wa-send')).toBeHidden();
+  await expect(page.locator('#res-save')).toBeFocused();
+  await expect(page.locator('#camp-lead')).toContainText('Kavita Rao');
+  await page.locator('#res-do_not_call').click();   // tapped again: unpicked
+  // No answer asks for nothing else: one tap saves it. Undo brings the lead back before anything is sent.
+  await page.locator('#res-no_answer').click();
+  await expect(page.locator('#camp-lead')).toContainText('Sunita Sharma');
+  await expect(page.locator('#camp-undo')).toContainText('Saved: No answer for Kavita Rao.');
+  await page.locator('#camp-undo-btn').click();
+  await expect(page.locator('#camp-lead')).toContainText('Kavita Rao');
+  await expect(page.locator('#camp-undo')).toBeHidden();
+  await expect(page.locator('#sheet-msg')).toContainText('Undone: Kavita Rao is back on the card.');
+  await expect(page.locator('#queue-panel .outboxline')).toHaveCount(0);
+  expect(backend.db.saved.length).toBe(0);
 
   // My lead sheet: the old page is back.
   await page.locator('#camp-pick').click();   // Phase A.2: the campaign picker
@@ -208,7 +226,7 @@ test('script test version per lead, practice link, WhatsApp from the institute n
   await page.locator('#res-date').fill(inDays(3));
   await page.locator('#res-amount').fill('18000');
   await expect(page.locator('#res-wa-app-row')).toBeHidden();   // nobody has said yes yet
-  await page.locator('#res-wa').selectOption('yes');
+  await page.locator('#res-wa-yes').click();
   await expect(page.locator('#res-wa-send')).toBeVisible();
   await expect(page.locator('#res-wa-app-row')).toBeVisible();
   await expect(page.locator('#res-wa-app-row')).toContainText('After saving, send “Promise due” from the institute\'s WhatsApp');
