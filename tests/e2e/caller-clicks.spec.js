@@ -58,7 +58,8 @@ async function countActions(page) {
   await page.addInitScript(() => {
     window.__actions = 0;
     const count = (ev) => { if (ev.isTrusted) window.__actions += 1; };
-    document.addEventListener('click', count, true);
+    // A click made by Enter or Space on a focused button (detail 0) is the same action as that key press.
+    document.addEventListener('click', (ev) => { if (ev.detail > 0) count(ev); }, true);
     document.addEventListener('keydown', count, true);
   });
 }
@@ -139,10 +140,19 @@ test('number keys pick results, Enter saves from a field, call back quick times,
   await expect(page.locator('#res-no_answer kbd')).toHaveText('4');
   await expect(page.locator('#res-do_not_call kbd')).toHaveText('6');
 
-  // Key 6: Do not call again, saved in one key press. Undo brings Sunita back, and nothing reaches the server.
+  // Key 6: Do not call again is only picked (it stops a lead for good): Save has the focus and says so.
   await page.locator('body').click({ position: { x: 5, y: 5 } });
-  await resetActions(page);
   await page.keyboard.press('6');
+  await expect(page.locator('#res-do_not_call')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#res-msg')).toHaveText('This stops all calls to this lead. Press Save to confirm.');
+  await expect(page.locator('#res-save')).toBeFocused();
+  await expect(card).toContainText('Sunita Sharma');
+  await page.keyboard.press('6');   // pressed again: unpicked
+  await expect(page.locator('#res-do_not_call')).toHaveAttribute('aria-pressed', 'false');
+
+  // Key 4: No answer, saved in one key press. Undo brings Sunita back, and nothing reaches the server.
+  await resetActions(page);
+  await page.keyboard.press('4');
   await expect(card).toContainText('Kavita Rao');
   expect(await actions(page)).toBe(1);
   await page.locator('#camp-undo-btn').click();
@@ -176,6 +186,18 @@ test('number keys pick results, Enter saves from a field, call back quick times,
   await page.locator('#res-save').click();
   await expect.poll(() => backend.db.saved.length).toBe(2);
   expect(backend.db.saved[1]).toMatchObject({ p_result_key: 'refused', p_reason: 'Left the school', p_consent_whatsapp: false });
+
+  // Do not call again: 2 actions, pick then Save (Enter on the focused Save). Sent at once, with no Undo hold.
+  await expect(card).toContainText('Meena Iyer');
+  await resetActions(page);
+  await page.locator('#res-do_not_call').click();
+  await expect(page.locator('#res-save')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(card).not.toContainText('Meena Iyer');
+  expect(await actions(page)).toBe(2);
+  await expect(page.locator('#camp-undo')).toBeHidden();
+  await expect.poll(() => backend.db.saved.length, { timeout: 5000 }).toBe(3);
+  expect(backend.db.saved[2].p_result_key).toBe('do_not_call');
   expect(errors).toEqual([]);
 });
 

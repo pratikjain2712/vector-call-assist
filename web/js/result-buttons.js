@@ -84,6 +84,11 @@
     return args;
   }
 
+  /* One tap saves a result that asks for nothing else, except Do not call again: that stops a lead for good
+     (a compliance action), so it is always picked, then confirmed with Save. */
+  const CONFIRM = { do_not_call: 1 };
+  function oneTap(result) { return !!result && !fields(result).length && !CONFIRM[result.key]; }
+
   /* The buttons in screen order (the call type's results, then the common ones): keys 1 to 9 pick them. */
   function ordered(results) { const s = split(results); return s.main.concat(s.common); }
 
@@ -124,7 +129,7 @@
     return out;
   }
 
-  const api = { split, tone, parseAmount, fields, problems, callAt, toArgs, ordered, defaultAmount, promiseDates, callbackTimes };
+  const api = { split, tone, parseAmount, fields, problems, callAt, toArgs, oneTap, ordered, defaultAmount, promiseDates, callbackTimes };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   root.ResultButtons = api;
 })(typeof window !== "undefined" ? window : globalThis);

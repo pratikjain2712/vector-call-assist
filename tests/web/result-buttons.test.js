@@ -77,9 +77,15 @@ test("keys 1 to 9 follow the buttons on screen: the call type's results, then th
   assert.deepEqual(RB.ordered(null), []);
 });
 
-test("one tap: results that ask for nothing else have no fields", () => {
+test("one tap: results that ask for nothing else, except Do not call again (always confirmed with Save)", () => {
   assert.deepEqual(["no_answer", "do_not_call"].map((k) => RB.fields(byKey(k)).length), [0, 0]);
   assert.deepEqual(RB.fields(byKey("paid")), ["amount"]);
+  assert.equal(RB.oneTap(byKey("no_answer")), true);
+  assert.equal(RB.oneTap({ key: "busy", label: "Busy", common: true }), true);
+  assert.equal(RB.oneTap(byKey("do_not_call")), false);
+  assert.equal(RB.oneTap(byKey("paid")), false);
+  assert.equal(RB.oneTap(byKey("call_back_later")), false);
+  assert.equal(RB.oneTap(null), false);
 });
 
 test("the amount due is filled in only when this caller is shown it", () => {

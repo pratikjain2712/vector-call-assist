@@ -2149,15 +2149,16 @@ async function campLoadCommon() {
   render();
 }
 
-/* "Save as …" on a common answer: picks that result; saves at once when it needs nothing else (Do not call),
-   otherwise shows its fields to fill in first (Call back later needs the date). */
+/* "Save as …" on a common answer: picks that result; saves at once when it needs nothing else, with an Undo.
+   Do not call again is picked and waits for Save; others show their fields first (Call back later needs the date). */
 function campQuickResult(key) {
   const r = campResult(key);
   if (!r || !campLead() || state.practice) return;
   camp.pick = key;
   camp.values = campFreshValues();
   renderResults();
-  if (!ResultButtons.fields(r).length) { campSave({ undo: true }); return; }
+  if (ResultButtons.oneTap(r)) { campSave({ undo: true }); return; }
+  if (!ResultButtons.fields(r).length) { campConfirmSave(); return; }
   $("res-msg").textContent = I18n.t("a2.fillThenSave");
   const f = $("result-panel").querySelector(".resfields input, .resfields select");
   if (f) { f.scrollIntoView({ block: "center" }); f.focus(); }
@@ -2605,14 +2606,21 @@ function renderQueue() {
 }
 
 /* A result button. One that asks for nothing else (No answer, Busy, Wrong number…) saves at once, with an Undo;
-   the others show their fields, filled in as far as they can be. */
+   Do not call again is only picked and needs Save; the others show their fields, filled in as far as they can be. */
 function campTap(r) {
-  if (!ResultButtons.fields(r).length && !state.practice) { camp.pick = r.key; campSave({ undo: true }); return; }
+  if (ResultButtons.oneTap(r) && !state.practice) { camp.pick = r.key; campSave({ undo: true }); return; }
   camp.pick = camp.pick === r.key ? null : r.key;
   $("res-msg").textContent = "";
   renderResults();
+  if (camp.pick && !ResultButtons.fields(r).length && !state.practice) { campConfirmSave(); return; }
   const again = $("res-" + r.key);
   if (again) again.focus();
+}
+/* A result that is confirmed with Save (Do not call again): say so and put the focus on Save. */
+function campConfirmSave() {
+  $("res-msg").textContent = I18n.t("camp.confirmDnc");
+  const s = $("res-save");
+  if (s) { s.scrollIntoView({ block: "center" }); s.focus(); }
 }
 
 /* The result buttons and their fields. Drawn again only when the campaign, lead or picked result changes, so

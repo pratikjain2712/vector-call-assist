@@ -152,10 +152,17 @@ test('without the Scripts add-on there are no script steps; the lead sheet is st
   await page.locator('#res-refused').click();
   await expect(page.locator('#res-wa-send')).toBeVisible();
   await page.locator('#res-refused').click();   // tapped again: unpicked
-  // Do not call asks for nothing else: one tap saves it. Undo brings the lead back before anything is sent.
+  // Do not call stops a lead for good: it is picked, then confirmed with Save; WhatsApp is hidden.
   await page.locator('#res-do_not_call').click();
+  await expect(page.locator('#res-do_not_call')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#res-wa-send')).toBeHidden();
+  await expect(page.locator('#res-save')).toBeFocused();
+  await expect(page.locator('#camp-lead')).toContainText('Kavita Rao');
+  await page.locator('#res-do_not_call').click();   // tapped again: unpicked
+  // No answer asks for nothing else: one tap saves it. Undo brings the lead back before anything is sent.
+  await page.locator('#res-no_answer').click();
   await expect(page.locator('#camp-lead')).toContainText('Sunita Sharma');
-  await expect(page.locator('#camp-undo')).toContainText('Saved: Do not call again for Kavita Rao.');
+  await expect(page.locator('#camp-undo')).toContainText('Saved: No answer for Kavita Rao.');
   await page.locator('#camp-undo-btn').click();
   await expect(page.locator('#camp-lead')).toContainText('Kavita Rao');
   await expect(page.locator('#camp-undo')).toBeHidden();
