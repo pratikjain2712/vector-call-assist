@@ -239,6 +239,16 @@ reset role;
 select pg_temp.val_is('the lead is Priya''s again', format($q$select (assigned_seat_id = %L)::text from leads where id = %L$q$, :'s_r2', :'lB'), 'true');
 select pg_temp.val_is('audit: lead.released :away and lead.returned', $q$select count(*) filter (where action = 'lead.released' and target like '%:away') || ':' || count(*) filter (where action = 'lead.returned') from audit_log$q$, '2:2');
 
+-- Moving leads to a caller limited to Andheri: a Borivali lead goes to the pool, not to them.
+reset role;
+update leads set assigned_seat_id = :'s_r2', status = 'new', next_call_at = null where id in (:'lB', :'lN');
+select pg_temp.as_user(:'u_o');
+set role authenticated;
+select pg_temp.val_is('admin_move_leads moves both open leads', format($q$select admin_move_leads(%L, %L, %L)::text$q$, :'s_r2', :'s_ra', :'k1'), '2');
+reset role;
+select pg_temp.val_is('the Borivali lead went to the pool', format($q$select coalesce(assigned_seat_id::text, 'pool') from leads where id = %L$q$, :'lB'), 'pool');
+select pg_temp.val_is('the shared lead went to Ravi', format($q$select (assigned_seat_id = %L)::text from leads where id = %L$q$, :'s_ra', :'lN'), 'true');
+
 reset role;
 select test, case when passed then 'PASS' else 'FAIL' end as result, detail from results order by test;
 select count(*) filter (where passed) as passed, count(*) filter (where not passed) as failed from results;

@@ -682,3 +682,63 @@ grant execute on function public.fees_call_plan(jsonb) to authenticated;
 grant execute on function public.fees_call_start(jsonb) to authenticated;
 grant execute on function public.admin_away_today(uuid) to authenticated;
 grant execute on function public.admin_undo_away(uuid, uuid[]) to authenticated;
+
+-- =====================================================================================================
+-- 5. admin_move_leads respects the target seat's centres
+-- =====================================================================================================
+
+-- As in 20261024100020; a lead the target seat may not take (its centre, or its list's centre, is not one of
+-- the seat's) goes back to the pool instead of to that seat.
+create or replace function public.admin_move_leads(p_from_seat uuid, p_to_seat uuid, p_campaign uuid default null)
+returns int
+language plpgsql security definer set search_path = public
+as $$
+declare
+  seat  public.seats;
+  inst  uuid;
+  moved int;
+begin
+  seat := public.campaign_admin_seat();
+  select s.institute_id into inst from public.seats s where s.id = p_from_seat;
+  if inst is null or not public.is_admin_of(inst) then
+    raise exception 'caller not found' using errcode = '42501';
+  end if;
+  if p_to_seat is not null then
+    if p_to_seat = p_from_seat then
+      raise exception 'pick a different caller to move the leads to' using errcode = '22023';
+    end if;
+    if not exists (select 1 from public.seats s where s.id = p_to_seat and s.institute_id = inst and s.status = 'active') then
+      raise exception 'the caller to move the leads to is not an active seat of this institute' using errcode = '22023';
+    end if;
+  end if;
+  if p_campaign is not null then
+    perform public.campaign_for_admin(p_campaign);
+    if exists (select 1 from public.campaigns k where k.id = p_campaign and (k.institute_id <> inst or k.status = 'closed')) then
+      raise exception 'leads of a closed campaign cannot be moved' using errcode = '22023';
+    end if;
+  end if;
+
+  with m as (
+    update public.leads l
+       set assigned_seat_id = case when p_to_seat is not null
+                                    and public.seat_takes_centre(p_to_seat, l.centre_id)
+                                    and public.seat_takes_centre(p_to_seat, k.centre_id)
+                                   then p_to_seat end
+    from public.campaigns k
+    where k.id = l.campaign_id and l.institute_id = inst and l.assigned_seat_id = p_from_seat
+      and k.status <> 'closed' and (p_campaign is null or l.campaign_id = p_campaign)
+      and public.lead_is_open(l.status, l.do_not_call)
+    returning l.id, l.campaign_id, l.assigned_seat_id
+  ), joined as (
+    -- The new seat joins each campaign it gets leads in.
+    insert into public.campaign_members (campaign_id, seat_id, institute_id)
+      select distinct m.campaign_id, p_to_seat, inst from m where m.assigned_seat_id is not null
+    on conflict (campaign_id, seat_id) do nothing
+    returning 1
+  )
+  select count(*) into moved from m;
+  insert into public.audit_log (institute_id, actor_id, action, target)
+    values (inst, auth.uid(), 'leads.moved',
+            p_from_seat::text || ':' || coalesce(p_to_seat::text, 'pool') || ':' || moved);
+  return moved;
+end $$;
