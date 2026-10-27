@@ -34,13 +34,16 @@ test('an admin starts a calling list from a lead sheet, then pauses and resumes 
   await expect(page.locator('#camp-w-step1 > legend')).toHaveText('1 · Details');
   await expect(page.locator('#camp-w-step4 > legend')).toHaveText('4 · Who can call');
 
-  // Starting needs a name, leads and a caller; the page says what is missing.
+  // The name fills itself in (type · month); starting needs a name, leads and a caller; the page says what is missing.
+  await expect(page.locator('#camp-w-name')).toHaveValue(/^Fees collection · [A-Z][a-z]{2}$/);
+  await page.locator('#camp-w-name').fill('');
   await page.locator('#camp-w-start').click();
   await expect(page.locator('#camp-w-msg')).toHaveText('Give the calling list a name.');
 
   // 1 · Details: the type list comes from the call types (Fees collection is picked first).
   await page.locator('#camp-w-name').fill('E2E Nov fees');
-  await expect(page.locator('#camp-w-type option:checked')).toHaveText('Fees collection');
+  await expect(page.locator('#camp-w-type-fees')).toHaveAttribute('aria-checked', 'true');
+  await page.locator('#camp-w-dates summary').click();
   await page.locator('#camp-w-startdate').fill('2026-11-01');
   await page.locator('#camp-w-enddate').fill('2026-11-20');
 

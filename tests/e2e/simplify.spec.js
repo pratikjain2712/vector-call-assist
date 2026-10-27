@@ -173,10 +173,12 @@ test('one number, one definition: Today, the Fees cards and the collection repor
   await page.locator('#tab-link-fees').click();
   await page.locator('#fees-view-students').click();
   await page.locator('#fees-body a', { hasText: 'Aarav Shah' }).click();
-  await page.locator('#fs-pay-amount').fill('2000');
-  await page.locator('#fs-pay-mode').selectOption('cash');
-  await page.locator('#fs-pay button[type="submit"]').click();
-  await expect(page.locator('#fs-msg')).toContainText('Payment of ₹2,000 recorded');
+  await page.locator('#fs-collect').click();
+  await page.locator('#collect-amount').fill('2000');
+  await page.locator('.collect-mode[data-mode="cash"]').click();
+  await page.locator('#collect-save').click();
+  await expect(page.locator('#collect-done')).toContainText('₹2,000 received');
+  await page.locator('#collect-back').click();
   await page.locator('#fs-back').click();
   await expect(page.locator('#fees-card-due .fees-card-value')).toHaveText('₹5,000');
   await page.locator('#fees-view-report').click();

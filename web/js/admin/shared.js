@@ -115,6 +115,25 @@
     return TAB_ORDER.slice();
   }
 
+  // Who records fee payments (Collect fee, Pending's Collect, the student's "Collect fee"): owners, Accounts, and
+  // managers who can see money (20261027110000_caller_centre_scope.sql, can_record_payment). The database checks.
+  function canCollect(seat, canSeeMoney) {
+    const kind = seatKind(seat);
+    return kind === 'owner' || kind === 'accounts' || (kind === 'manager' && !!canSeeMoney);
+  }
+
+  // A small choice remembered per login in this browser (a filter, the last payment mode, the last report).
+  // JSON in localStorage under '<key>:<login>'; storage that throws or is empty gives the fallback.
+  function recall(key, who, fallback) {
+    try {
+      const v = localStorage.getItem(key + ':' + String(who || '').toLowerCase());
+      return v === null ? fallback : JSON.parse(v);
+    } catch (err) { return fallback; }
+  }
+  function remember(key, who, value) {
+    try { localStorage.setItem(key + ':' + String(who || '').toLowerCase(), JSON.stringify(value)); return true; } catch (err) { return false; }
+  }
+
   // ---------- simple and advanced ----------
   // The admin app opens simple. Rarely used fields and panels carry the class "adv" and stay hidden until the
   // person turns on "Show advanced options" (Settings). Remembered per login in this browser only; storage that
@@ -374,7 +393,7 @@
   const registry = createRegistry();
   const helpers = {
     TAB_ORDER, DEFAULT_TAB, TAB_MODULE, createRegistry, parseHash, buildHash, routeHash, redirectRoute, resolveTab,
-    ADMIN_ROLES, isAdminRole, seatKind, tabsFor, ADVANCED_KEY, advancedKey, readAdvanced, writeAdvanced,
+    ADMIN_ROLES, isAdminRole, seatKind, canCollect, recall, remember, tabsFor, ADVANCED_KEY, advancedKey, readAdvanced, writeAdvanced,
     PAID_OFFICE, PARENT_SAID, REPORTED_BY_CALLER, MISSED, rupees, rupeesShort, count, feeNumbers, feeCards, periodText,
     MONTHS, ymd, parseYmd, toDate, formatDate, formatTime, formatDateTime, lastNDays, monthToDate, escapeHtml,
     // browser only

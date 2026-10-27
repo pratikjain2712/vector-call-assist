@@ -148,18 +148,15 @@ test('a sibling discount: the balance drops, the receipt shows it, Remove keeps 
   await expect(page.locator('#fs-due')).toContainText('₹7,000');
   await expect(page.locator('#fs-disc-empty')).toHaveText('No discount for this student.');
 
+  // One screen: the amount, the reason (Sibling to start), the whole year, the check sentence, one button.
   await page.locator('#fs-disc-open').click();
-  await expect(page.locator('#fd-panel .fb-step-no')).toHaveText('Step 1 of 3');
+  await expect(page.locator('#fd-value')).toBeFocused();
+  await expect(page.locator('#fd-kind-amount')).toHaveAttribute('aria-checked', 'true');
   await page.locator('#fd-next').click();
   await expect(page.locator('#fd-msg')).toContainText('Write the amount in rupees');
   await page.locator('#fd-value').fill('1000');
-  await shot(page, 'discount-step1-1440');
-  await page.locator('#fd-next').click();
-  await expect(page.locator('#fd-panel .fb-step-no')).toHaveText('Step 2 of 3');
-  await expect(page.locator('#fd-on-year')).toBeChecked();
-  await page.locator('#fd-next').click();
-  await expect(page.locator('#fd-panel .fb-step-no')).toHaveText('Step 3 of 3');
-  await expect(page.locator('#fd-reason-sibling')).toBeChecked();
+  await expect(page.locator('#fd-reason-sibling')).toHaveAttribute('aria-checked', 'true');
+  await expect(page.locator('#fd-on')).toHaveText('On the whole year');
   await expect(page.locator('#fd-approved')).toHaveValue('Fees office');
   await expect(page.locator('#fd-check')).toHaveText('The discount is ₹1,000. Aarav Shah\'s fees left for the year go from ₹17,000 to ₹16,000.');
   await shot(page, 'discount-step3-1440');
@@ -301,10 +298,8 @@ test('390px: fee plan, today\'s collection and the discount steps fit, buttons o
   await page.goto('/admin.html#fees?student=' + backend.fees.aarav.id);
   await expect(page.locator('#fs-name')).toHaveText('Aarav Shah');
   await page.locator('#fs-disc-open').click();
-  await page.locator('#fd-kind-percent').check();
+  await page.locator('#fd-kind-percent').click();
   await page.locator('#fd-value').fill('10');
-  await page.locator('#fd-next').click();
-  await page.locator('#fd-next').click();
   await expect(page.locator('#fd-check')).toContainText('The discount is ₹2,200.');
   await shot(page, 'discount-step3-390');
   await noSideScroll();

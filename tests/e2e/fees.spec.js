@@ -1,7 +1,7 @@
 // Phase A.2: the Fees tab and the Accounts role, on the fake backend (tests/e2e/fake-backend.js, block
 // "Phase A.2: fees"; the ledger SQL itself is tested in supabase/tests/ledger_test.sql). An Accounts seat sees
-// only Fees (with its collection report), records a UPI payment, sees the balance drop, prints a receipt, reverses the payment,
-// imports a small CSV and makes a fees campaign from the ledger.
+// only Fees (with its collection report), records a UPI payment from the student's page (the Collect screen), sees
+// the balance drop, prints a receipt, reverses the payment, imports a small CSV and calls the parents with dues.
 const { test, expect, env, isFake } = require('./fixtures');
 
 test.beforeEach(async ({ page }) => {
@@ -38,11 +38,12 @@ test('Accounts: only Fees; a UPI payment, its receipt, its reversal, an import a
   await expect(page.locator('#fees-card-due')).toContainText('minus paid (office)');
   // Kiran left the school: his payments this week count in Collected (the fees office recorded them).
   await expect(page.locator('#fees-card-collected')).toContainText('Collected this month');
-  await expect(page.locator('#fees-body tr')).toHaveCount(2);
-  await expect(page.locator('#fees-foot')).toContainText('₹37,000');   // total fees 22,000 + 15,000
-  await page.locator('#fees-f-due').check();
+  // Accounts starts with "Only with dues" on.
+  await expect(page.locator('#fees-f-due')).toBeChecked();
   await expect(page.locator('#fees-body tr')).toHaveCount(1);
   await page.locator('#fees-f-due').uncheck();
+  await expect(page.locator('#fees-body tr')).toHaveCount(2);
+  await expect(page.locator('#fees-foot')).toContainText('₹37,000');   // total fees 22,000 + 15,000
   await page.locator('#fees-f-search').fill('meena');
   await expect(page.locator('#fees-body tr')).toHaveCount(1);
   await expect(page.locator('#fees-body')).toContainText('Aarav Shah');
@@ -55,17 +56,22 @@ test('Accounts: only Fees; a UPI payment, its receipt, its reversal, an import a
   await expect(page.locator('#fs-calls')).toContainText('Will pay on date');
   await expect(page.locator('#fs-calls')).toContainText('parent said');
 
-  // A UPI payment needs a reference.
-  await page.locator('#fs-pay-amount').fill('2,000');
-  await page.locator('#fs-pay-mode').selectOption('upi');
-  await page.locator('#fs-pay button[type="submit"]').click();
-  await expect(page.locator('#fs-pay-msg')).toContainText('reference');
-  expect(backend.db.fees.payments.filter((p) => p.amount === 2000 && p.mode === 'upi')).toHaveLength(0);   // nothing recorded without a reference
-  await page.locator('#fs-pay-ref').fill('UTR998877665544');
-  await page.locator('#fs-pay button[type="submit"]').click();
-  await expect(page.locator('#fs-msg')).toContainText('Payment of ₹2,000 recorded');
-  await expect(page.locator('#fs-due')).toContainText('₹5,000');
+  // "Collect fee" opens the one payment form (Collect) for Aarav; a UPI payment needs a reference.
+  await page.locator('#fs-collect').click();
+  await expect(page).toHaveURL(/#fees\/collect\?student=.*&from=student$/);
+  await expect(page.locator('#collect-amount')).toHaveValue('7000');
+  await expect(page.locator('#collect-back')).toHaveText('← Student');
+  await page.locator('#collect-amount').fill('2,000');
+  await page.locator('.collect-mode[data-mode="upi"]').click();
+  await expect(page.locator('#collect-save')).toBeDisabled();   // nothing recorded without a reference
+  await page.locator('#collect-ref').fill('UTR998877665544');
+  await page.locator('#collect-ref').press('Enter');
+  await expect(page.locator('#collect-done')).toContainText('₹2,000 received from Aarav Shah · UPI');
+  await expect(page.locator('#collect-next')).toHaveText('Next student');
+  await expect(page.locator('#collect-q')).toBeFocused();
   const paid = backend.db.fees.payments.find((p) => p.reference === 'UTR998877665544');
+  await page.locator('#collect-back').click();
+  await expect(page.locator('#fs-due')).toContainText('₹5,000');
   expect(paid).toMatchObject({ amount: 2000, mode: 'upi' });
   const receipt = 'R-' + paid.id.replace(/-/g, '').slice(0, 8).toUpperCase();
 
@@ -123,20 +129,22 @@ test('Accounts: only Fees; a UPI payment, its receipt, its reversal, an import a
   });
   await expect(page.locator('#fees-body')).toContainText('Kabir Jain');
 
-  // Call parents with dues: class 8, CBSE, the live fees script, open to all callers.
-  await page.locator('#fees-camp-open').click();
-  await page.locator('#fees-c-class').fill('8');
-  await page.locator('#fees-c-board').selectOption('CBSE');
-  await expect(page.locator('#fees-c-name')).toHaveValue('Fees · 8 · CBSE');
-  await page.locator('#fees-c-script').selectOption({ label: 'Fees reminder' });
-  await page.locator('#fees-c-form button[type="submit"]').click();
-  await expect(page.locator('#fees-c-made')).toContainText('every caller can pick it');
-  await expect(page.locator('#fees-c-link')).toHaveCount(0);   // Accounts has no Calling tab
-  const made = backend.db.fees.lastCampaign;
-  expect(made.args).toMatchObject({ p_name: 'Fees · 8 · CBSE', p_class_label: '8', p_board: 'CBSE', p_open_to_all: true, p_min_due: 0 });
-  expect(made.args.p_script).toBe(backend.db.fees.scripts[0].id);
+  // Call these parents: class 8 with dues, the live fees script, open to all callers; one line, then Start.
+  await page.locator('#fees-f-classes button', { hasText: 'Class 8' }).click();
+  await page.locator('#fees-f-due').check();
+  await expect(page.locator('#fees-body tr')).toHaveCount(3);
+  await expect(page.locator('#fees-call')).toHaveText('Call these 3 parents');
+  await page.locator('#fees-call').click();
+  await expect(page.locator('#fees-call-text')).toContainText('3 parents');
+  await expect(page.locator('#fees-call-text')).toContainText('Script: Fees reminder');
+  await page.locator('#fees-call-start').click();
+  await expect(page.locator('#fees-call-made')).toContainText('started: 3 parents to call');
+  await expect(page.locator('#fees-call-link')).toHaveCount(0);   // Accounts has no Calling tab
+  const made = backend.db.officeClicks.lastList;
+  expect(made.filters).toMatchObject({ class_label: '8' });
   expect(made.leads).toBe(3);   // Aarav, Kabir and Isha
-  expect(backend.db.campaigns.find((c) => c.id === made.id).status).toBe('running');
+  const camp = backend.db.campaigns.find((c) => c.id === made.id);
+  expect(camp).toMatchObject({ status: 'running', open_to_all: true, script_id: backend.db.fees.scripts[0].id });
 
   // The collection report inside Fees: from the ledger, for every calling list and caller; Accounts gets no list
   // or caller filter (those lists are for owners and managers) and no error. Old #reports links come here too.
@@ -151,7 +159,7 @@ test('Accounts: only Fees; a UPI payment, its receipt, its reversal, an import a
   expect(errors).toEqual([]);
 });
 
-test('an owner on a phone: students as cards, Record payment opens the payment form, nothing scrolls sideways', async ({ page, backend }) => {
+test('an owner on a phone: students as cards, Collect fee opens the Collect screen, nothing scrolls sideways', async ({ page, backend }) => {
   backend.db.reports.money = true;
   await page.setViewportSize({ width: 390, height: 844 });
   await signIn(page, env().users.admin.email, '#fees');
@@ -165,16 +173,16 @@ test('an owner on a phone: students as cards, Record payment opens the payment f
   await expect(aarav.locator('td[data-label="Parent"]')).toBeHidden();
   await expect(aarav.locator('td[data-label="Total fees"]')).toBeHidden();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
-  await aarav.getByRole('link', { name: 'Record payment for Aarav Shah' }).click();
-  await expect(page).toHaveURL(/#fees\?student=.*&pay=1$/);
-  await expect(page.locator('#fs-pay')).toBeVisible();
-  await expect(page.locator('#fs-pay-amount')).toBeFocused();
-  const form = await page.locator('#fs-pay').boundingBox();
+  await aarav.getByRole('link', { name: 'Collect fee from Aarav Shah' }).click();
+  await expect(page).toHaveURL(/#fees\/collect\?student=/);
+  await expect(page.locator('#collect-pay')).toBeVisible();
+  await expect(page.locator('#collect-amount')).toBeFocused();
+  const form = await page.locator('#collect-pay').boundingBox();
   expect(form.x >= 0 && form.x + form.width <= 390).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
 
-test('a wide screen keeps the table, without the Record payment column', async ({ page }) => {
+test('a wide screen keeps the table, without the Collect fee column', async ({ page }) => {
   await signIn(page, env().users.admin.email, '#fees');
   await expect(page.locator('#fees-body tr')).toHaveCount(2);
   await expect(page.locator('#fees-body tr').first().locator('td[data-label="Parent"]')).toBeVisible();

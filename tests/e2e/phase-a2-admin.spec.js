@@ -148,18 +148,13 @@ test('Team: "Give their calls to others" says how many people go, and the role s
   await page.locator('#invite-label').fill('Fees office');
   await page.locator('#invite-role').selectOption('accounts');
   await expect(page.locator('#invite-role-help')).toContainText('An accounts person records fee payments');
-  await page.locator('#invite-form button[type="submit"]').click();
-  await expect(page.locator('#confirm-text')).toContainText('as accounts with fees.office@e2e.example.com');
-  await page.locator('#confirm-go').click();
-  await expect(page.locator('#status')).toContainText('"Fees office" added with fees.office@e2e.example.com.');
+  await page.locator('#invite-form button[type="submit"]').click();   // no question: added at once
+  await expect(page.locator('#status')).toContainText('"Fees office" added as accounts with fees.office@e2e.example.com.');
   expect(backend.db.seats.find((s) => s.label === 'Fees office')).toMatchObject({ role: 'accounts', status: 'invited', invite_email: 'fees.office@e2e.example.com' });
   await expect(page.locator('#seat-body')).toContainText('Fees office');
   await expect(page.locator('#seat-body tr', { hasText: 'Fees office' })).toContainText('Invited, not signed in yet');
   await page.locator('#seat-body tr[data-seat="' + rep1.id + '"]').getByRole('button', { name: 'Edit Rep 1' }).click();
-  await page.locator('#release-go').click();
-  await expect(page.locator('#confirm')).toBeVisible();
-  await expect(page.locator('#confirm-text')).toContainText('2 people not called yet of "Rep 1"');
-  await page.locator('#confirm-go').click();
+  await page.locator('#release-go').click();   // no question: given at once
   await expect(page.locator('#status')).toHaveText('2 people of "Rep 1" given to the other callers.');
   expect(backend.db.leads.filter((l) => l.campaign_id === campaign.id && l.assigned_seat_id === rep1.id).map((l) => l.status)).toEqual(['done']);
   expect(backend.db.leads.find((l) => l.name === 'Old lead').assigned_seat_id).toBe(rep1.id);
@@ -201,10 +196,15 @@ test('Settings: the owner fills in the common answers that need institute facts'
   await expect(card.locator('li.answer')).toHaveCount(5);
   await expect(page.locator('#answers-count')).toHaveText('0 of 5 filled in');
   const loc = card.locator('li.answer[data-key="location"]');
-  await expect(loc).toContainText('Not filled in yet');
+  await expect(loc).toContainText('Fill the blanks ____');
+  // The box starts with the standard answer and blanks where the facts go; a box with a blank is not saved.
+  await expect(loc.locator('textarea')).toHaveValue('We are at ____, near ____. I can also send the location on WhatsApp.');
+  await page.locator('#answers-save').click();
+  await expect(page.locator('#answers-msg')).toHaveText('Nothing to save yet: write your facts in place of each ____.');
+  expect(backend.db.answerFills[env().institutes.a] || {}).toEqual({});
   await loc.locator('textarea').fill('We are at 12 MG Road, near City Mall.');
-  await loc.getByRole('button', { name: 'Save the answer to: Where is the institute?' }).click();
-  await expect(page.locator('#status')).toContainText('Saved the answer to "Where is the institute?"');
+  await page.locator('#answers-save').click();
+  await expect(page.locator('#status')).toHaveText('1 answer saved. Callers see it now.');
   await expect(page.locator('#answers-count')).toHaveText('1 of 5 filled in');
   await expect(card.locator('li.answer[data-key="location"]')).toContainText('Filled in');
   expect(backend.db.answerFills[env().institutes.a].location).toBe('We are at 12 MG Road, near City Mall.');
