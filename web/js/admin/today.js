@@ -81,8 +81,13 @@
       el('div', null, [
         el('h1', { id: 'today-title', text: 'Today' }),
         el('p', { className: 'muted', id: 'today-sub', text: 'Live numbers from all callers.' }),
+        // Collect fee (js/admin/collect.js): what this person recorded today and this month.
+        el('p', { className: 'today-me', id: 'today-me', hidden: true }),
       ]),
-      el('a', { href: '#today/reports', id: 'today-reports-open', className: 'button-link', text: 'Reports' }),
+      el('div', { className: 'today-head-acts' }, [
+        el('a', { href: '#fees/collect', id: 'today-collect', className: 'button-link primary collect-open', text: 'Collect fee', hidden: true }),
+        el('a', { href: '#today/reports', id: 'today-reports-open', className: 'button-link', text: 'Reports' }),
+      ]),
     ]));
     const main = el('div', { id: 'today-main', className: 'today-main' }, [
       // Autopilot (js/admin/autopilot.js): the three numbers, Needs your OK, Vector did for you.
@@ -187,6 +192,23 @@
     if (params && (params.more || params.campaign)) $('today-details').open = true;
     loadChecklist();
     startAutopilot();
+    loadCollect();
+  }
+
+  // Money roles who record payments (the owner): "Collect fee" and "By you today ₹ · this month ₹".
+  async function loadCollect() {
+    const on = S.seatKind(ctx.seat) === 'owner' && ctx.canSeeMoney && S.tabsFor(ctx.seat, ctx.canSeeMoney).includes('fees');
+    $('today-collect').hidden = !on;
+    if (!on) { $('today-me').hidden = true; return; }
+    try {
+      const me = await ctx.rpc('collected_by_me');
+      if (!ctx) return;
+      const CO = window.VectorCollect;
+      $('today-me').textContent = me && CO ? CO.meLine(me) : '';
+      $('today-me').hidden = !(me && CO);
+    } catch (err) {
+      if (ctx) $('today-me').hidden = true;
+    }
   }
 
   function showReports(params) {

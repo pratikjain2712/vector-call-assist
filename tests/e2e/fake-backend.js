@@ -2324,6 +2324,302 @@ function createFakeBackend(world) {
   })();
   // end autopilot
 
+  // centres collect
+  // Centres, batches and Collect fee (20261027100000_centres_batches.sql), in short. Off until a test calls
+  // centres.enable() (centres_list is missing until then: every other test sees an institute without centres).
+  // enable() gives institute A two centres, Andheri and Borivali, and batches; Aarav and Kiran are in Andheri
+  // (Aarav in "8th SB Morning"), Diya in Borivali, plus Riya Bhosale (Andheri, two fees due, 6,000) and Sana Khan
+  // (Borivali, 3,000 due). A seat's centre_ids (centres.limit) limits it everywhere here, like the SQL: other
+  // centres' students cannot be listed, opened or paid. p_centre / p_batch narrow the lists and totals. The
+  // Collect functions (collect_search with the ranking of web/js/admin/collect.js, collect_student,
+  // collect_pending, collected_by_me) answer in the SQL's shapes. Every call is kept in db.centres.calls.
+  const centres = (() => {
+    const CC = { on: false, centres: [], batches: [], calls: [], whatsapp: false, consent: new Set() };
+    db.centres = CC;
+    const F = db.fees;
+    const CO = require('../../web/js/admin/collect.js');
+    const instA = world.institutes.a;
+    const missing = (name) => pgErr(404, 'PGRST202', 'fake backend has no function ' + name);
+    const lim = (s) => (s && Array.isArray(s.centre_ids) && s.centre_ids.length ? s.centre_ids : null);
+    const allowed = (s, c) => !c || !lim(s) || lim(s).includes(c);
+    const batchOf = (id) => CC.batches.find((b) => b.id === id) || null;
+    const centreOf = (id) => CC.centres.find((c) => c.id === id) || null;
+    const inScope = (s, st, centre, batch) => allowed(s, st.centre_id) && (!centre || st.centre_id === centre) && (!batch || st.batch_id === batch);
+    const seatOfU = (u) => (u ? seatOf(u.id) : null);
+    const readerSeat = (u) => { const s = seatOfU(u); return s && (s.role === 'admin' || s.role === 'accounts') ? s : null; };
+    const writer = (u) => { const s = readerSeat(u); return s && (s.role === 'accounts' || (s.access_role || 'owner') === 'owner') ? s : null; };
+    const moneyOf = (s) => !!s && (s.role === 'accounts' || !!db.reports.money);
+    const today = () => fees.today();
+    // A filter the person may not ask for: null when fine, else the error answer.
+    function badCentre(s, centre, batch) {
+      if (centre && !centreOf(centre)) return pgErr(403, '42501', 'centre not found');
+      if (centre && !allowed(s, centre)) return pgErr(403, '42501', 'you can see only your own centres');
+      if (batch && !batchOf(batch)) return pgErr(403, '42501', 'batch not found');
+      return null;
+    }
+    // Runs a read with only the students (and their payments) in scope, as the SQL's student_balance_rows does.
+    function scoped(s, centre, batch, fn) {
+      if (!CC.on || (!centre && !batch && !lim(s))) return fn();
+      const S0 = F.students, P0 = F.payments;
+      F.students = S0.filter((st) => inScope(s, st, centre, batch));
+      const keep = new Set(F.students.map((st) => st.id));
+      F.payments = P0.filter((p) => keep.has(p.student_id));
+      try { return fn(); } finally { F.students = S0; F.payments = P0; }
+    }
+    const wrap = (name, fn) => { const before = RPC[name]; RPC[name] = (u, a) => (CC.on ? fn(before, u, a || {}) : before(u, a)); };
+    const strip = (a, keys) => { const x = Object.assign({}, a); keys.forEach((k) => delete x[k]); return x; };
+    const named = (row) => {
+      const st = F.students.find((x) => x.id === row.student_id) || {};
+      return { ...row, centre_id: st.centre_id || null, batch_id: st.batch_id || null,
+        batch_name: (batchOf(st.batch_id) || {}).name || null, centre_name: (centreOf(st.centre_id) || {}).name || null };
+    };
+    // The unpaid fees of a student, oldest first (payments pay the oldest first), as collect_student.
+    function unpaid(st) {
+      const b = fees.balance(st);
+      let paid = b.paid;
+      return F.items.filter((f) => f.student_id === st.id && !f.is_void).sort((x, y) => x.due_date.localeCompare(y.due_date) || x.created_at.localeCompare(y.created_at))
+        .map((f) => { const left = Math.max(0, f.amount - Math.max(0, paid)); paid -= f.amount; return { fee_item_id: f.id, head: f.head, due_date: f.due_date, left, is_due: f.due_date <= today() }; })
+        .filter((x) => x.left > 0);
+    }
+
+    Object.assign(RPC, {
+      centres_list: (u) => {
+        if (!CC.on) return missing('centres_list');
+        const s = seatOfU(u);
+        if (!s) return pgErr(403, '42501', 'no active seat for this login');
+        const count = (k, id) => F.students.filter((st) => st[k] === id && st.status === 'active').length;
+        return json(200, { has_centres: CC.centres.some((c) => c.active), my_centre_ids: lim(s),
+          centres: CC.centres.map((c) => ({ ...c, students: count('centre_id', c.id) })),
+          batches: CC.batches.map((b) => ({ ...b, students: count('batch_id', b.id) })) });
+      },
+      collect_search: (u, a) => {
+        const s = readerSeat(u);
+        if (!s) return pgErr(403, '42501', 'only accounts, owners and managers can see the ledger');
+        const bad = badCentre(s, a.p_centre, a.p_batch);
+        if (bad) return bad;
+        CC.calls.push({ name: 'collect_search', args: a });
+        const money = moneyOf(s);
+        const pool = F.students.filter((st) => st.institute_id === s.institute_id && st.status === 'active' && inScope(s, st, a.p_centre, a.p_batch));
+        return json(200, CO.rankRows(pool, a.p_q, Number(a.p_limit) || 12).map((st) => {
+          const b = fees.balance(st);
+          return { student_id: st.id, name: st.name, admission_no: st.admission_no, class_label: st.class_label, section: st.section, board: st.board,
+            batch_id: st.batch_id || null, batch_name: (batchOf(st.batch_id) || {}).name || null, centre_id: st.centre_id || null,
+            centre_name: (centreOf(st.centre_id) || {}).name || null, parent_name: st.parent_name, phone: st.phone,
+            due_now: money ? b.balance_due_now : null, balance_total: money ? b.balance_total : null, has_dues: b.balance_due_now > 0,
+            money_hidden: !money, rank: st.rank };
+        }));
+      },
+      collect_student: (u, a) => {
+        const s = readerSeat(u);
+        const st = s && F.students.find((x) => x.id === a.p_student && x.institute_id === s.institute_id);
+        if (!st || !allowed(s, st.centre_id)) return pgErr(403, '42501', 'student not found');
+        const money = moneyOf(s);
+        const b = fees.balance(st);
+        return json(200, { student: { id: st.id, name: st.name, admission_no: st.admission_no, class_label: st.class_label, section: st.section,
+          board: st.board, parent_name: st.parent_name, phone: st.phone, centre_id: st.centre_id || null, batch_id: st.batch_id || null,
+          centre_name: (centreOf(st.centre_id) || {}).name || null, batch_name: (batchOf(st.batch_id) || {}).name || null },
+        today: today(), money_hidden: !money, due_now: money ? b.balance_due_now : null, balance_total: money ? b.balance_total : null,
+        has_dues: b.balance_due_now > 0, unpaid: unpaid(st).map((x) => ({ ...x, left: money ? x.left : null })),
+        whatsapp: { connected: !!CC.whatsapp, consent: CC.consent.has(st.id) } });
+      },
+      collect_pending: (u, a) => {
+        const s = readerSeat(u);
+        if (!s) return pgErr(403, '42501', 'only accounts, owners and managers can see the ledger');
+        const bad = badCentre(s, a.p_centre, a.p_batch);
+        if (bad) return bad;
+        CC.calls.push({ name: 'collect_pending', args: a });
+        const money = moneyOf(s);
+        const rows = F.students.filter((st) => st.institute_id === s.institute_id && st.status === 'active' && inScope(s, st, a.p_centre, a.p_batch))
+          .map((st) => ({ st, b: fees.balance(st), oldest: (unpaid(st)[0] || {}).due_date || null })).filter((x) => x.b.balance_due_now > 0)
+          .sort((x, y) => (a.p_sort === 'date' ? String(x.oldest).localeCompare(String(y.oldest)) : 0) || y.b.balance_due_now - x.b.balance_due_now || x.st.name.localeCompare(y.st.name));
+        const total = rows.reduce((t, x) => t + x.b.balance_due_now, 0);
+        const off = Number(a.p_offset) || 0;
+        return json(200, rows.slice(off, off + (Number(a.p_limit) || 200)).map(({ st, b, oldest }) => ({
+          student_id: st.id, name: st.name, admission_no: st.admission_no, class_label: st.class_label, section: st.section, board: st.board,
+          batch_name: (batchOf(st.batch_id) || {}).name || null, centre_name: (centreOf(st.centre_id) || {}).name || null,
+          parent_name: st.parent_name, phone: st.phone, due_now: money ? b.balance_due_now : null, oldest_due_date: oldest,
+          last_payment_on: b.last_payment_on, money_hidden: !money, total_rows: rows.length, total_due: money ? total : null })));
+      },
+      collected_by_me: (u) => {
+        const s = readerSeat(u);
+        if (!s) return pgErr(403, '42501', 'only accounts, owners and managers can see the ledger');
+        const money = moneyOf(s);
+        const t = today();
+        const m0 = t.slice(0, 8) + '01';
+        const live = (p) => !p.reverses_id && !p.opening && !F.payments.some((r) => r.reverses_id === p.id);
+        const mine = F.payments.filter((p) => p.institute_id === s.institute_id && p.recorded_by === s.id && live(p) && p.paid_on >= m0 && p.paid_on <= t);
+        const tod = mine.filter((p) => p.paid_on === t);
+        const counts = {};
+        F.payments.filter((p) => p.institute_id === s.institute_id && !p.reverses_id && !p.opening && p.mode !== 'other').forEach((p) => { counts[p.mode] = (counts[p.mode] || 0) + 1; });
+        const top = Object.keys(counts).sort((x, y) => counts[y] - counts[x] || (x === 'cash' ? -1 : y === 'cash' ? 1 : x.localeCompare(y)))[0] || 'cash';
+        const sum = (l) => l.reduce((x, p) => x + p.amount, 0);
+        return json(200, { seat_id: s.id, label: s.label, today: t, month_start: m0, money_hidden: !money, can_collect: !!writer(u),
+          today_payments: tod.length, today_amount: money ? sum(tod) : null, month_payments: mine.length, month_amount: money ? sum(mine) : null,
+          top_mode: CC.topMode || top });
+      },
+      admin_save_centre: (u, a) => {
+        if (!CC.on) return missing('admin_save_centre');
+        const s = seatOfU(u);
+        if (!s || s.role !== 'admin' || (s.access_role || 'owner') !== 'owner') return pgErr(403, '42501', 'only the owner can change centres');
+        const name = String(a.p_name || '').trim();
+        if (!name) return pgErr(400, '22023', 'a centre needs a name of 1 to 60 characters');
+        if (CC.centres.some((c) => c.name.toLowerCase() === name.toLowerCase() && c.id !== a.p_id)) return pgErr(409, '23505', 'a centre with this name already exists');
+        let c = a.p_id ? centreOf(a.p_id) : null;
+        if (a.p_id && !c) return pgErr(403, '42501', 'centre not found');
+        if (!c) { c = { id: crypto.randomUUID(), institute_id: s.institute_id, sort_order: 100 + CC.centres.length }; CC.centres.push(c); }
+        Object.assign(c, { name, short_code: a.p_short_code ? String(a.p_short_code).toUpperCase() : null, active: a.p_active !== false });
+        return json(200, c.id);
+      },
+      admin_save_batch: (u, a) => {
+        if (!CC.on) return missing('admin_save_batch');
+        if (!writer(u)) return pgErr(403, '42501', 'only the owner or accounts can change batches');
+        const d = a.p_data || {};
+        let b = a.p_id ? batchOf(a.p_id) : null;
+        if (!b) { b = { id: crypto.randomUUID(), institute_id: instA, active: true, centre_id: null, class_label: null, board: null, academic_year: null, timing: null }; }
+        ['name', 'class_label', 'board', 'academic_year', 'timing'].forEach((k) => { if (k in d) b[k] = String(d[k] || '').trim() || null; });
+        if ('centre_id' in d) b.centre_id = d.centre_id || null;
+        if ('active' in d) b.active = d.active !== false;
+        if (!b.name) return pgErr(400, '22023', 'a batch needs a name of 1 to 60 characters');
+        if (!CC.batches.includes(b)) CC.batches.push(b);
+        return json(200, b.id);
+      },
+      admin_set_seat_centres: (u, a) => {
+        if (!CC.on) return missing('admin_set_seat_centres');
+        const s = seatOfU(u);
+        if (!s || s.role !== 'admin' || (s.access_role || 'owner') !== 'owner') return pgErr(403, '42501', 'seat not found');
+        const x = db.seats.find((y) => y.id === a.p_seat && y.institute_id === s.institute_id);
+        if (!x) return pgErr(403, '42501', 'seat not found');
+        x.centre_ids = Array.isArray(a.p_centres) && a.p_centres.length ? a.p_centres.slice() : null;
+        return json(200, null);
+      },
+    });
+
+    // The lists and totals: the person's centres always, p_centre / p_batch when asked.
+    ['accounts_students', 'admin_fees_ledger', 'admin_home_ledger', 'admin_promises_ledger', 'ledger_day_closing', 'admin_home_summary'].forEach((name) => {
+      wrap(name, (before, u, a) => {
+        const s = seatOfU(u);
+        const f = (a.p_filters || {});
+        const centre = a.p_centre || f.centre_id || null;
+        const batch = a.p_batch || f.batch_id || null;
+        const bad = badCentre(s, centre, batch);
+        if (bad) return bad;
+        CC.calls.push({ name, args: a });
+        const args = name === 'accounts_students' ? { ...a, p_filters: strip(f, ['centre_id', 'batch_id']) } : strip(a, ['p_centre', 'p_batch']);
+        const res = scoped(s, centre, batch, () => before(u, args));
+        if (name !== 'accounts_students' || res.status !== 200) return res;
+        return json(200, JSON.parse(res.body).map(named));
+      });
+    });
+    ['autopilot_numbers', 'my_suggestions'].forEach((name) => {
+      wrap(name, (before, u, a) => {
+        const s = seatOfU(u);
+        const bad = badCentre(s, a.p_centre, a.p_batch);
+        if (bad) return bad;
+        CC.calls.push({ name, args: a });
+        const res = before(u, strip(a, ['p_centre', 'p_batch']));
+        if (name !== 'my_suggestions' || res.status !== 200) return res;
+        const out = JSON.parse(res.body);
+        const ok = (c) => { const cid = c && c.plan && c.plan.centre_id; return allowed(s, cid) && (!a.p_centre || !cid || cid === a.p_centre); };
+        out.cards = (out.cards || []).filter(ok);
+        out.feed = (out.feed || []).filter(ok);
+        return json(200, out);
+      });
+    });
+    wrap('admin_campaign_list', (before, u, a) => {
+      const s = seatOfU(u);
+      const bad = badCentre(s, a.p_centre, a.p_batch);
+      if (bad) return bad;
+      CC.calls.push({ name: 'admin_campaign_list', args: a });
+      const res = before(u, {});
+      if (res.status !== 200) return res;
+      return json(200, JSON.parse(res.body).map((r) => { const c = db.campaigns.find((x) => x.id === r.id) || {}; return { ...r, centre_id: c.centre_id || null, batch_id: c.batch_id || null }; })
+        .filter((r) => allowed(s, r.centre_id) && (!a.p_centre || !r.centre_id || r.centre_id === a.p_centre)));
+    });
+    wrap('admin_callers', (before, u, a) => {
+      const s = seatOfU(u);
+      const bad = badCentre(s, a.p_centre, null);
+      if (bad) return bad;
+      CC.calls.push({ name: 'admin_callers', args: a });
+      const res = before(u, strip(a, ['p_centre']));
+      if (res.status !== 200) return res;
+      const l = lim(s);
+      return json(200, JSON.parse(res.body).map((r) => ({ ...r, centre_ids: (db.seats.find((x) => x.id === r.seat_id) || {}).centre_ids || null }))
+        .filter((r) => (!a.p_centre || !r.centre_ids || r.centre_ids.includes(a.p_centre)) && (!l || !r.centre_ids || r.centre_ids.some((c) => l.includes(c)))));
+    });
+    // One student: not for a person of another centre.
+    ['accounts_student_detail', 'accounts_record_payment', 'accounts_add_fee_item'].forEach((name) => {
+      wrap(name, (before, u, a) => {
+        const s = seatOfU(u);
+        const st = F.students.find((x) => x.id === a.p_student);
+        if (st && !allowed(s, st.centre_id)) return pgErr(403, '42501', 'student not found');
+        return before(u, a);
+      });
+    });
+    wrap('accounts_reverse_payment', (before, u, a) => {
+      const s = seatOfU(u);
+      const p = F.payments.find((x) => x.id === a.p_payment);
+      const st = p && F.students.find((x) => x.id === p.student_id);
+      if (st && !allowed(s, st.centre_id)) return pgErr(403, '42501', 'payment not found');
+      return before(u, a);
+    });
+    // Add and edit a student with centre_id / batch_id; a new student of a person limited to one centre goes there.
+    wrap('accounts_save_student', (before, u, a) => {
+      const s = seatOfU(u);
+      const d = a.p_data || {};
+      const c = 'centre_id' in d ? d.centre_id || null : undefined;
+      const b = 'batch_id' in d ? d.batch_id || null : undefined;
+      if (c && !allowed(s, c)) return pgErr(403, '42501', 'you can add students only to your own centres');
+      const res = before(u, { ...a, p_data: strip(d, ['centre_id', 'batch_id']) });
+      if (res.status !== 200) return res;
+      const st = F.students.find((x) => x.id === JSON.parse(res.body));
+      if (st) {
+        if (c !== undefined) st.centre_id = c;
+        else if (!a.p_student && lim(s) && lim(s).length === 1) st.centre_id = lim(s)[0];
+        if (b !== undefined) st.batch_id = b;
+        if (st.batch_id && !st.centre_id) st.centre_id = (batchOf(st.batch_id) || {}).centre_id || null;
+      }
+      return res;
+    });
+
+    function enable() {
+      CC.on = true;
+      const A = { id: crypto.randomUUID(), institute_id: instA, name: 'Andheri', short_code: 'AND', active: true, sort_order: 100 };
+      const B = { id: crypto.randomUUID(), institute_id: instA, name: 'Borivali', short_code: 'BOR', active: true, sort_order: 101 };
+      CC.centres.push(A, B);
+      const morning = { id: crypto.randomUUID(), institute_id: instA, centre_id: A.id, name: '8th SB Morning', class_label: '8', board: 'State', academic_year: '2026-27', timing: '7–9 am', active: true };
+      const evening = { id: crypto.randomUUID(), institute_id: instA, centre_id: B.id, name: '8th SB Evening', class_label: '8', board: 'State', academic_year: '2026-27', timing: '5–7 pm', active: true };
+      const tenth = { id: crypto.randomUUID(), institute_id: instA, centre_id: null, name: '10th CBSE A', class_label: '10', board: 'CBSE', academic_year: '2026-27', timing: null, active: true };
+      CC.batches.push(morning, evening, tenth);
+      const at = (st, c, b) => { st.centre_id = c.id; st.batch_id = b ? b.id : null; return st; };
+      at(fees.aarav, A, morning);
+      at(fees.diya, B, null);
+      F.students.filter((st) => st.admission_no === 'A103').forEach((st) => at(st, A, null));
+      const d = (n) => { const x = new Date(); x.setDate(x.getDate() + n); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
+      const riya = at(fees.newStudent(instA, { admission_no: 'A201', name: 'Riya Bhosale', class_label: '10', section: 'A', board: 'CBSE', academic_year: '2026-27',
+        parent_name: 'Sunita Bhosale', phone: '+919999000201' }), A, tenth);
+      const add = (st, head, amount, due) => F.items.push({ id: crypto.randomUUID(), institute_id: instA, student_id: st.id, head, amount, due_date: due,
+        academic_year: '2026-27', is_void: false, void_reason: null, voided_at: null, created_at: new Date(Date.now() - F.items.length).toISOString() });
+      add(riya, 'Term 1 tuition', 4000, d(-40));
+      add(riya, 'Exam fee', 2000, d(-5));
+      add(riya, 'Term 2 tuition', 5000, d(30));
+      const sana = at(fees.newStudent(instA, { admission_no: 'B201', name: 'Sana Khan', class_label: '8', section: 'B', board: 'State', academic_year: '2026-27',
+        parent_name: 'Imran Khan', phone: '+919999000202' }), B, evening);
+      add(sana, 'Term 1 tuition', 3000, d(-20));
+      CC.ids = { andheri: A.id, borivali: B.id, morning: morning.id, evening: evening.id, tenth: tenth.id, riya: riya.id, sana: sana.id };
+      return CC.ids;
+    }
+    // Limits a login ('admin', a world key, or an email) to some centres.
+    function limit(who, ids) {
+      const email = world.users[who] ? world.users[who].email : who;
+      const user = db.users.find((x) => x.email === email);
+      const seat = user && db.seats.find((x) => x.user_id === user.id && x.status === 'active');
+      if (seat) seat.centre_ids = ids && ids.length ? ids.slice() : null;
+      return seat;
+    }
+    return { enable, limit, unpaid };
+  })();
+  // end centres collect
+
   async function handle(route) {
     const req = route.request();
     const url = new URL(req.url());
@@ -2433,6 +2729,7 @@ function createFakeBackend(world) {
     feesBasics,   // fees basics (plans, applies, calls in db.feesBasics; discounts in db.fees.discounts)
     presence,   // presence (statusOf; reports in db.presenceReports, rows in db.seatPresence)
     autopilot,   // autopilot (enable(); data in db.autopilot)
+    centres,   // centres collect (enable(), limit(who, ids); data in db.centres)
   };
 }
 

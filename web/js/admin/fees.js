@@ -13,6 +13,11 @@
      ready Excel template to fill. Beside it "+ Add student": one student by hand, with fees and "paid so far"
      (js/admin/add-row.js); "Edit details" on a student's page uses the same form.
    - "Call parents with dues": a fees campaign made from the ledger.
+   - Collect fee (#fees/collect) and Pending dues (#fees/pending): js/admin/collect.js, shown here as parts. The
+     "Collect fee" button at the top opens the counter screen.
+   - Centres (js/admin/centres.js): with centres, the list, cards and campaigns follow the centre picked in the
+     top bar (shell.js adds it to every call); a Batch picker filters the list; Add student and Edit details
+     have Centre and Batch; the import reads Centre and Batch columns (rows without one get the picked centre).
    Who sees it: owners, managers who can see money, and Accounts seats (the shell shows Accounts only Fees and
    Reports). Owners and Accounts record payments and change the ledger; managers only read it and, with money
    access, make fees campaigns. The database checks every call.
@@ -151,6 +156,8 @@
     ['board', 'Board'], ['academic_year', 'Academic year'], ['parent_name', 'Parent name'], ['phone', 'Phone'],
     ['alt_phone', 'Alternate phone'], ['paid_so_far', 'Paid so far'], ['paid_on', 'Paid on'],
   ];
+  // Read only when the institute has centres (shown in the column match then).
+  const CENTRE_FIELDS = [['centre', 'Centre'], ['batch', 'Batch']];
   const norm = (h) => String(h || '').toLowerCase().replace(/[₹().:#_]/g, ' ').replace(/\s+/g, ' ').trim();
   const PHONE_WORD = /\b(phone|mobile|mob|whatsapp|contact|cell|number|no)\b/;
 
@@ -166,6 +173,8 @@
       return -1;
     };
     const map = {};
+    map.centre = find((x) => /^(centre|center|branch|campus)( name)?$/.test(x));
+    map.batch = find((x) => /^batch( name)?$/.test(x));
     map.admission_no = find((x) => /\b(admission|adm|admn|enrol+ment|enrol+|registration|reg|gr|sr|scholar)\b/.test(x) && !/date/.test(x));
     map.paid_on = find((x) => /\b(paid|payment|received)\b.*\b(on|date)\b|\bdate of payment\b/.test(x));
     map.paid_so_far = find((x) => /\b(paid|received|collected)\b/.test(x) && !/\b(date|on|mode)\b/.test(x));
@@ -294,6 +303,12 @@
         fees.push(fee);
       }
       if (fees.length) row.fees = fees;
+      if (o.centres) {
+        const centre = cell(r, m.centre) || o.centre || '';
+        const batch = cell(r, m.batch);
+        if (centre) row.centre = centre.slice(0, 60);
+        if (batch) row.batch = batch.slice(0, 60);
+      }
       if (adm) seen.add(adm.toLowerCase());
       out.push(row);
       sheetRows.push(at);
@@ -329,7 +344,7 @@
     const out = { status: 'active', limit: LIST_LIMIT };
     const s = String(x.search || '').trim();
     if (s) out.search = s.slice(0, 80);
-    ['class_label', 'board', 'academic_year'].forEach((k) => { const v = String(x[k] || '').trim(); if (v) out[k] = v; });
+    ['class_label', 'board', 'academic_year', 'batch_id', 'centre_id'].forEach((k) => { const v = String(x[k] || '').trim(); if (v) out[k] = v; });
     if (x.only_due) out.only_due = true;
     return out;
   }
@@ -423,7 +438,7 @@
   }
 
   const helpers = {
-    MODES, REF_MODES, BOARDS, PAGE_SIZE, LIST_LIMIT, RECORDED_IN_LEDGER, ACCOUNTS_TABS, IMPORT_FIELDS,
+    MODES, REF_MODES, BOARDS, PAGE_SIZE, LIST_LIMIT, RECORDED_IN_LEDGER, ACCOUNTS_TABS, IMPORT_FIELDS, CENTRE_FIELDS,
     modeLabel, needsReference, roleOf, isAccounts, canManage, canMakeCampaign, tabVisible, rupees2, amountInWords,
     receiptNo, parseDay, parseYear, parseBoard, guessImportColumns, buildImportRows, serverSkips, addImportCounts,
     importSummary, filtersToRpc, listTotals, pageOf, choices, paymentProblem, paymentRows, monthRange,
@@ -431,6 +446,8 @@
   };
   if (inNode) { module.exports = helpers; return; }
   window.VectorFeesHelpers = helpers;   // for js/admin/fees-basics.js
+  // The printable receipt, for js/admin/collect.js: show(detail, payment row of accounts_student_detail, onBack).
+  window.VectorFeesReceipt = { show: (d, pay, onBack) => showReceipt(paymentRows([pay])[0], d, onBack) };
 
   // ---------- the page (browser only) ----------
 
@@ -470,15 +487,19 @@
 
   function build() {
     const manage = canManage(ctx.seat);
-    box.appendChild(el('div', { className: 'tab-head fees-head' }, [
+    box.appendChild(el('div', { className: 'tab-head fees-head', id: 'fees-head' }, [
       el('div', null, [
         el('h1', { text: 'Fees' }),
         el('p', { className: 'muted', text: 'Students, their fees and the payments your fees office recorded.' }),
       ]),
-      el('a', { href: '#fees/today', id: 'fees-today-open', className: 'button-link primary', text: 'Today\'s collection' }),
+      el('div', { className: 'fees-head-acts' }, [
+        manage ? el('a', { href: '#fees/collect', id: 'fees-collect-open', className: 'button-link primary collect-open', text: 'Collect fee' }) : null,
+        el('a', { href: '#fees/today', id: 'fees-today-open', className: 'button-link', text: 'Today\'s collection' }),
+      ]),
     ]));
     box.appendChild(el('nav', { className: 'subnav', id: 'fees-subnav', 'aria-label': 'Fees' }, [
       el('a', { href: '#fees', id: 'fees-view-students', text: 'Students' }),
+      el('a', { href: '#fees/pending', id: 'fees-view-pending', text: 'Pending dues' }),
       el('a', { href: '#fees/plans', id: 'fees-view-plans', text: 'Fee plan' }),
       el('a', { href: '#fees/report', id: 'fees-view-report', text: 'Collection report' }),
     ]));
@@ -513,6 +534,8 @@
       el('form', { id: 'fees-filters', className: 'row fees-filters', role: 'search' }, [
         field('Search', el('input', { id: 'fees-f-search', type: 'search', placeholder: 'Name, parent, phone or admission no', autocomplete: 'off' }), 'grow'),
         field('Class', el('select', { id: 'fees-f-class' }, [el('option', { value: '', text: 'All classes' })])),
+        ctx.centres && window.VectorCentres && window.VectorCentres.batchesFor(ctx.centres.batches, ctx.centre).length
+          ? field('Batch', window.VectorCentres.batchPicker('fees-f-batch', ctx.centres, ctx.centre, '', null)) : null,
         field('Board', boardSel, 'adv'),
         field('Academic year', el('select', { id: 'fees-f-year' }, [el('option', { value: '', text: 'All years' })]), 'adv'),
         el('label', { className: 'check' }, [el('input', { type: 'checkbox', id: 'fees-f-due' }), ' Only with dues']),
@@ -543,6 +566,9 @@
     // Fee plan and Today's collection (js/admin/fees-basics.js).
     box.appendChild(el('div', { id: 'fees-plans', hidden: true }));
     box.appendChild(el('div', { id: 'fees-today', hidden: true }));
+    // Collect fee and Pending dues (js/admin/collect.js).
+    box.appendChild(el('div', { id: 'fees-collect', hidden: true }));
+    box.appendChild(el('div', { id: 'fees-pending', hidden: true }));
   }
 
   function wire() {
@@ -551,7 +577,7 @@
       clearTimeout(searchTimer);
       searchTimer = setTimeout(loadList, 300);
     });
-    ['fees-f-class', 'fees-f-board', 'fees-f-year', 'fees-f-due'].forEach((id) => $(id).addEventListener('change', loadList));
+    ['fees-f-class', 'fees-f-board', 'fees-f-year', 'fees-f-due', 'fees-f-batch'].forEach((id) => { if ($(id)) $(id).addEventListener('change', loadList); });
     $('fees-prev').addEventListener('click', () => { page--; renderList(); });
     $('fees-next').addEventListener('click', () => { page++; renderList(); });
     if ($('fees-import-open')) $('fees-import-open').addEventListener('click', () => togglePanel('fees-import', openImport));
@@ -584,10 +610,13 @@
     const report = sub === 'report';
     const plansView = sub === 'plans';
     const todayView = sub === 'today';
-    const other = report || plansView || todayView;
+    const collectView = sub === 'collect';
+    const pendingView = sub === 'pending';
+    const other = report || plansView || todayView || collectView || pendingView;
     const listView = !id && !other;
     const current = (node, on) => { if (on) node.setAttribute('aria-current', 'page'); else node.removeAttribute('aria-current'); };
     current($('fees-view-students'), !other);
+    current($('fees-view-pending'), pendingView);
     current($('fees-view-plans'), plansView);
     current($('fees-view-report'), report);
     $('fees-today-open').hidden = todayView;
@@ -597,6 +626,17 @@
     $('fees-report').hidden = !report;
     $('fees-plans').hidden = !plansView;
     $('fees-today').hidden = !todayView;
+    $('fees-collect').hidden = !collectView;
+    $('fees-pending').hidden = !pendingView;
+    // The counter screen alone: no Fees heading or views above it.
+    $('fees-head').hidden = collectView;
+    $('fees-subnav').hidden = collectView;
+    if (collectView || pendingView) {
+      const part = collectView ? 'collect' : 'pending';
+      ctx.part(part, $(collectView ? 'fees-collect' : 'fees-pending'));
+      ctx.showPart(part, params || {});
+      return;
+    }
     if (plansView || todayView) {
       const part = plansView ? 'fee-plans' : 'day-closing';
       ctx.part(part, $(plansView ? 'fees-plans' : 'fees-today'));
@@ -615,6 +655,8 @@
       studentId = null;
       detail = null;
       if (wasStudent) { loadAll(); loadList(); loadSummary(); }
+      // "+ Add student" from Collect: the add form, open.
+      if (params && params.add === '1' && $('fees-add-open') && $('fees-add').hidden) togglePanel('fees-add', openAddStudent);
       return;
     }
     wantPay = params && params.pay === '1';
@@ -715,6 +757,7 @@
     return {
       search: $('fees-f-search').value, class_label: $('fees-f-class').value, board: $('fees-f-board').value,
       academic_year: $('fees-f-year').value, only_due: $('fees-f-due').checked,
+      batch_id: $('fees-f-batch') ? $('fees-f-batch').value : '',
     };
   }
 
@@ -1150,12 +1193,15 @@
 
   // ---------- receipt ----------
 
-  function showReceipt(p) {
-    const st = (detail && detail.student) || {};
+  // d: the student D (the open student by default); onBack: called on Close (the Collect screen).
+  function showReceipt(p, d, onBack) {
+    const D = d || detail;
+    receiptBack = onBack || null;
+    const st = (D && D.student) || {};
     const r = $('fees-receipt');
     r.textContent = '';
     const line = (label, value, id) => el('div', { className: 'fees-r-line' }, [el('dt', { text: label }), el('dd', { text: value || '—', id: id || null })]);
-    const amount = detail.money_hidden ? null : num(p.amount);
+    const amount = D.money_hidden ? null : num(p.amount);
     r.appendChild(el('div', { className: 'fees-r-head' }, [
       el('div', { className: 'fees-r-inst', id: 'fees-r-inst', text: ctx.institute.name || 'Institute' }),
       el('h2', { id: 'fees-r-title', tabindex: '-1', text: 'Fee receipt' }),
@@ -1176,12 +1222,12 @@
       line('Received by', p.recorded_by_label),
     ]));
     // The year's account on the receipt: fees, discount (when there is one), paid so far, left to pay.
-    const b = detail.balance || {};
-    if (!detail.money_hidden && b.total_fees !== null && b.total_fees !== undefined) {
+    const b = D.balance || {};
+    if (!D.money_hidden && b.total_fees !== null && b.total_fees !== undefined) {
       const disc = Number(b.discounts) || 0;
       r.appendChild(el('dl', { className: 'fees-r-lines fees-r-account', id: 'fees-r-account' }, [
         line('Fees for the year', rupees2(Number(b.total_fees) + disc), 'fees-r-fees'),
-        disc ? line('Discount', '−' + rupees2(disc) + ' (' + (detail.discounts || []).filter((g) => !g.is_removed).map((g) => g.reason_label).join(', ') + ')', 'fees-r-discount') : null,
+        disc ? line('Discount', '−' + rupees2(disc) + ' (' + (D.discounts || []).filter((g) => !g.is_removed).map((g) => g.reason_label).join(', ') + ')', 'fees-r-discount') : null,
         line('Paid so far', rupees2(b.paid || 0), 'fees-r-paid'),
         line('Left to pay', rupees2(b.balance_total || 0), 'fees-r-left'),
       ]));
@@ -1190,18 +1236,26 @@
     const print = el('button', { type: 'button', className: 'primary', id: 'fees-r-print', text: 'Print' });
     const close = el('button', { type: 'button', id: 'fees-r-close', text: 'Close' });
     print.addEventListener('click', printReceipt);
-    close.addEventListener('click', () => { closeReceipt(); const b = document.querySelector('[data-payment="' + p.id + '"] button'); if (b) b.focus(); });
+    close.addEventListener('click', () => {
+      const back = receiptBack;
+      closeReceipt();
+      if (back) { back(); return; }
+      const b = document.querySelector('[data-payment="' + p.id + '"] button'); if (b) b.focus();
+    });
     r.appendChild(el('div', { className: 'row fees-r-actions' }, [print, close]));
     $('fees-student').hidden = true;
+    $('fees-collect').hidden = true;
     r.hidden = false;
     $('fees-r-title').focus();
   }
 
+  let receiptBack = null;   // set while the receipt was opened from Collect
   function closeReceipt() {
     const r = $('fees-receipt');
     if (!r || r.hidden) return;
     r.hidden = true;
     r.textContent = '';
+    if (receiptBack) { receiptBack = null; $('fees-collect').hidden = false; return; }
     if (studentId) $('fees-student').hidden = false;
   }
 
@@ -1243,7 +1297,7 @@
         field(phoneOptional ? 'Phone' : need('Phone'), input('phone', { type: 'tel', inputmode: 'tel', maxlength: '20', value: x.phone || '',
           placeholder: '98765 43210', 'aria-required': phoneOptional ? null : 'true' })),
         field('Alternate phone', input('alt', { type: 'tel', inputmode: 'tel', maxlength: '20', value: x.alt_phone || '' })),
-      ]),
+      ].concat(centreFields(prefix, x))),
     ]);
     if (withMoney) {
       const lines = el('div', { id: id('fees'), className: 'addrow-fees' });
@@ -1280,6 +1334,29 @@
     return form;
   }
 
+  // Centre and Batch for a student (only when the institute has centres): the student's, or for a new student
+  // the centre picked in the top bar. The batches follow the centre.
+  function centreFields(prefix, x) {
+    const CC = window.VectorCentres;
+    if (!ctx.centres || !CC) return [];
+    const id = (k) => prefix + '-' + k;
+    const fixed = CC.switchOptions(ctx.centres).fixed;
+    const centre = el('select', { id: id('centre') }, (fixed ? [] : [el('option', { value: '', text: 'Not set' })])
+      .concat(ctx.centres.centres.map((c) => el('option', { value: String(c.id), text: c.name }))));
+    centre.value = String(x.centre_id || (x.id ? '' : ctx.centre || (fixed ? fixed.id : '')) || '');
+    const batchBox = el('span', { className: 'fees-batch-box' });
+    const drawBatch = (keep) => {
+      batchBox.textContent = '';
+      const sel = CC.batchPicker(id('batch'), ctx.centres, centre.value, keep, null);
+      sel.hidden = false;
+      sel.firstChild.textContent = 'No batch';
+      batchBox.appendChild(sel);
+    };
+    drawBatch(x.batch_id || '');
+    centre.addEventListener('change', () => drawBatch($(id('batch')) ? $(id('batch')).value : ''));
+    return [field('Centre', centre), field('Batch', batchBox)];
+  }
+
   // One fee line: name, amount, due date and Remove. lines: the container (found by id when it is on the page).
   let feeLineSeq = 0;
   function addFeeLine(prefix, into) {
@@ -1306,6 +1383,7 @@
     return {
       name: v('name'), admission_no: v('adm'), class_label: v('class'), section: v('section'), board: v('board'),
       academic_year: v('year'), parent_name: v('parent'), phone: v('phone'), alt_phone: v('alt'),
+      centre_id: $(prefix + '-centre') ? v('centre') : undefined, batch_id: $(prefix + '-batch') ? v('batch') : undefined,
       fees: lines ? Array.from(lines.querySelectorAll('.addrow-fee')).map((line) => {
         const get = (k) => line.querySelector('[data-k="' + k + '"]').value;
         return { head: get('head'), amount: get('amount'), due_date: get('due_date') };
@@ -1367,6 +1445,14 @@
     p.appendChild(form);
   }
 
+  // p_data with the centre and batch picked in the form (only when the form has them).
+  function withCentreData(data, f) {
+    const out = Object.assign({}, data);
+    if (f.centre_id !== undefined) out.centre_id = f.centre_id || '';
+    if (f.batch_id !== undefined) out.batch_id = f.batch_id || '';
+    return out;
+  }
+
   let saving = false;
   async function saveNewStudent(force) {
     if (saving) return;
@@ -1380,7 +1466,7 @@
     say('fsa-msg', 'Saving…');
     let id = null;
     try {
-      id = await ctx.rpc('accounts_save_student', { p_student: null, p_data: AR.studentData(f) });
+      id = await ctx.rpc('accounts_save_student', { p_student: null, p_data: withCentreData(AR.studentData(f), f) });
       if (Array.isArray(id)) id = id[0];
     } catch (err) {
       saving = false;
@@ -1455,7 +1541,7 @@
     $('fse-save').disabled = true;
     say('fse-msg', 'Saving…');
     try {
-      await ctx.rpc('accounts_save_student', { p_student: studentId, p_data: AR.studentData(f) });
+      await ctx.rpc('accounts_save_student', { p_student: studentId, p_data: withCentreData(AR.studentData(f), f) });
       const bus = $('fse-bus');
       if (bus && bus.checked !== !!st.uses_bus) await ctx.rpc('accounts_set_uses_bus', { p_student: studentId, p_uses_bus: bus.checked });
       saving = false;
@@ -1550,8 +1636,8 @@
     box2.textContent = '';
     box2.hidden = false;
     const grid = el('div', { className: 'fees-map' });
-    IMPORT_FIELDS.forEach(([k, label]) => {
-      const sel = colSelect('fees-imp-col-' + k, imp.map[k], k === 'name' ? 'Pick a column' : null);
+    IMPORT_FIELDS.concat(ctx.centres ? CENTRE_FIELDS : []).forEach(([k, label]) => {
+      const sel = colSelect('fees-imp-col-' + k, imp.map[k], k === 'name' ? 'Pick a column' : k === 'centre' && ctx.centre ? 'Not in the sheet: ' + window.VectorCentres.centreName(ctx.centres, ctx.centre) : null);
       sel.addEventListener('change', () => { imp.map[k] = Number(sel.value); renderPreview(); });
       grid.appendChild(el('label', null, [label, sel]));
     });
@@ -1600,7 +1686,8 @@
     $('fees-imp-result').textContent = '';
     if (!imp || !imp.sheet) return;
     if (imp.map.name < 0) { say('fees-imp-msg', 'Pick the column with the student\'s name.', true); return; }
-    const built = buildImportRows(imp.sheet, imp.map, { academicYear: $('fees-imp-year') ? $('fees-imp-year').value : '' });
+    const built = buildImportRows(imp.sheet, imp.map, { academicYear: $('fees-imp-year') ? $('fees-imp-year').value : '',
+      centres: !!ctx.centres, centre: ctx.centres && ctx.centre ? window.VectorCentres.centreName(ctx.centres, ctx.centre) : '' });
     imp.built = built;
     const sample = built.rows.slice(0, 5);
     out.appendChild(el('h3', { text: 'Preview' }));

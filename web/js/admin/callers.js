@@ -226,6 +226,14 @@
         ]),
         msg('edit-role-msg'),
       ]),
+      // Centres (only when the institute has centres): where this person works; none ticked = every centre.
+      el('fieldset', { id: 'edit-centres', className: 'edit-block', hidden: true }, [
+        el('legend', { text: 'Works in' }),
+        el('p', { className: 'muted small', text: 'They see only the students, calling lists and money of the ticked centres. None ticked: every centre.' }),
+        el('div', { id: 'edit-centre-list', className: 'edit-checks' }),
+        el('div', { className: 'row' }, [button('Save centres', saveCentres, '', 'edit-centre-save')]),
+        msg('edit-centre-msg'),
+      ]),
       el('div', { id: 'edit-target', className: 'edit-block' }, [
         el('h3', { text: 'Daily target' }),
         el('div', { className: 'row' }, TARGETS.map((f, i) => field(i === 0 ? 'Calls a day' : f.name.charAt(0).toUpperCase() + f.name.slice(1) + ' a day',
@@ -496,6 +504,8 @@
     $('edit-money-field').hidden = role !== 'manager';
     $('edit-money').checked = !!s.can_see_money;
 
+    fillCentres(s, role, owner);
+
     // Target and notes: callers.
     $('edit-target').hidden = !caller;
     const p = progress.get(s.seat_id) || {};
@@ -545,6 +555,47 @@
     $('edit-reset-laptop').hidden = !(s.status === 'active' && kinds.includes('laptop'));
     $('edit-remove').hidden = role === 'owner' && !owner;
     $('edit-reassign').hidden = role === 'owner' && !owner;
+  }
+
+  // Works in: the institute's centres, ticked from the seat's centre_ids (read from the seats table).
+  let centreSeq = 0;
+  async function fillCentres(s, role, owner) {
+    const box = $('edit-centres');
+    const on = !!ctx.centres && owner && role !== 'owner' && s.status === 'active';
+    box.hidden = !on;
+    say('edit-centre-msg', '');
+    if (!on) return;
+    const list = $('edit-centre-list');
+    list.textContent = '';
+    const n = ++centreSeq;
+    let have = [];
+    try {
+      const { data, error } = await ctx.client.from('seats').select('id, centre_ids').eq('id', s.seat_id);
+      if (error) throw new Error(error.message);
+      have = ((data && data[0] && data[0].centre_ids) || []).map(String);
+    } catch (err) { say('edit-centre-msg', 'Could not read their centres: ' + err.message, true); }
+    if (n !== centreSeq || !ctx) return;
+    ctx.centres.all.filter((c) => c.active || have.includes(String(c.id))).forEach((c) => {
+      list.appendChild(el('label', { className: 'check' }, [
+        el('input', { type: 'checkbox', value: String(c.id), checked: have.includes(String(c.id)) }),
+        el('span', { text: c.name }),
+      ]));
+    });
+  }
+
+  async function saveCentres() {
+    const s = fullSeat(seatById(editing));
+    if (!s) return;
+    const ids = Array.from(document.querySelectorAll('#edit-centre-list input:checked')).map((x) => x.value);
+    const btn = $('edit-centre-save');
+    btn.disabled = true;
+    try {
+      await rpc('admin_set_seat_centres', { p_seat: s.seat_id, p_centres: ids });
+      const names = ctx.centres.all.filter((c) => ids.includes(String(c.id))).map((c) => c.name);
+      say('edit-centre-msg', '"' + s.label + '" now works in ' + (names.length ? names.join(', ') : 'every centre') + '. It starts at their next sign-in.');
+    } catch (err) {
+      say('edit-centre-msg', 'Not saved: ' + err.message, true);
+    } finally { btn.disabled = false; }
   }
 
   // ----- every change opens the in-page confirmation first -----

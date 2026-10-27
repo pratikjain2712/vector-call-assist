@@ -1,0 +1,115 @@
+/* Centres and Collect fee (js/admin/centres.js, js/admin/collect.js): the centre switcher in the top bar, the
+   Accounts bar at the bottom of a phone, the Collect fee counter screen, Pending dues, the "Collect fee"
+   buttons on Today and Fees, and Settings > Centres and batches. The app's type scale; big tap targets. */
+
+/* ---------- the centre switcher (top bar) ---------- */
+.centre-pick { display: inline-flex; align-items: center; }
+.centre-pick select { font-weight: 600; color: var(--heading); padding: 6px 30px 6px 12px; border-radius: var(--radius-pill);
+  border-color: var(--line); background-color: var(--accent-soft); max-width: 220px; }
+.centre-fixed { font-weight: 600; color: var(--heading); font-size: 14px; padding: 6px 12px; border-radius: var(--radius-pill);
+  background: var(--accent-soft); }
+
+/* ---------- "Collect fee" buttons and the "By you" line ---------- */
+.button-link.primary.collect-open { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600;
+  padding: 11px 20px; }
+.button-link.primary.collect-open:hover { background: var(--accent-hover); color: var(--on-accent); }
+.today-head-acts, .fees-head-acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.today-me { margin: 4px 0 0; font-size: 14px; color: var(--heading); font-weight: 500; }
+
+/* ---------- Collect fee ---------- */
+.collect { display: flex; flex-direction: column; gap: 14px; max-width: 720px; min-width: 0; }
+.collect-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px 16px; flex-wrap: wrap; }
+.collect-head h2 { font-family: var(--font-display); font-size: 22px; font-weight: 800; margin: 0; }
+.collect-head h2:focus { outline: none; }
+.collect-me { margin: 0; font-size: 14px; }
+.collect-find { display: flex; gap: 8px; flex-wrap: wrap; }
+.collect-find input[type="search"] { flex: 1 1 260px; min-width: 0; padding: 13px 14px; border-radius: var(--radius-button); }
+.collect-find select { flex: 0 0 auto; }
+.collect-results { display: flex; flex-direction: column; gap: 6px; }
+.collect-results li { border: 0; padding: 0; }
+.collect-hit { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 12px; text-align: left;
+  padding: 12px 14px; border-radius: var(--radius-button); border-color: var(--line); background: var(--panel); }
+.collect-hit:hover, .collect-hit:focus-visible { border-color: var(--accent); background: var(--accent-soft); }
+.collect-hit-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.collect-hit-name { font-weight: 600; color: var(--heading); overflow-wrap: anywhere; }
+.collect-hit-sub { font-size: 13px; overflow-wrap: anywhere; }
+.collect-hit-due { flex: 0 0 auto; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.collect-hit-due.due { color: var(--danger); }
+.collect-add { padding: 6px 2px 0; }
+.collect-add a { font-weight: 600; }
+
+.collect-pay { display: flex; flex-direction: column; gap: 14px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius-card); padding: var(--pad-card); }
+.collect-who { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.collect-who-name { font-weight: 700; font-size: 17px; color: var(--heading); overflow-wrap: anywhere; }
+.collect-who-due { font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.collect-who-due.due { color: var(--danger); }
+.collect-amount input { font-size: 17px; font-weight: 600; padding: 12px 14px; max-width: 260px; font-variant-numeric: tabular-nums; }
+.collect-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: -6px; }
+.collect-chip { border-radius: var(--radius-pill); padding: 7px 14px; font-size: 13px; }
+.collect-chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.collect-modes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.collect-mode { padding: 12px 6px; font-weight: 600; border-radius: var(--radius-button); text-align: center; }
+.collect-mode[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.collect-mode[aria-checked="true"]:hover { background: var(--accent-hover); color: var(--on-accent); }
+.collect-ref input { max-width: 320px; }
+.collect-extra { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.collect-pay #collect-date-wrap input, .collect-pay #collect-note-wrap input { max-width: 320px; }
+.collect-actions { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.collect-save { padding: 13px 26px; font-size: 15px; border-radius: var(--radius-button); min-width: 200px; }
+.collect-done { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+  border: 1px solid var(--ok); background: var(--ok-soft); color: var(--heading); border-radius: var(--radius-button); padding: 10px 14px; }
+.collect-done.undone { border-color: var(--line); background: var(--panel-soft); }
+.collect-done strong { color: var(--ok); }
+.collect-done-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.collect-done-acts button, .collect-done-acts .button-link { padding: 6px 12px; font-size: 13px; }
+
+/* ---------- Pending dues ---------- */
+.pending-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.pending-head h2 { margin: 0 0 2px; }
+.pending-head h2:focus { outline: none; }
+.pending-head p { margin: 0; }
+.pending-tools { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.pending-sort { padding: 7px 12px; font-size: 13px; border-radius: var(--radius-pill); }
+.pending-sort[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.pending-list { margin-top: 8px; }
+.pending-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 4px 16px; align-items: center; padding: 10px 0; }
+.pending-name { font-weight: 600; color: var(--heading); text-decoration: none; overflow-wrap: anywhere; }
+.pending-name:hover { text-decoration: underline; }
+.pending-due { text-align: right; }
+.pending-amt { font-weight: 700; color: var(--danger); font-variant-numeric: tabular-nums; }
+.pending-collect.button-link.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
+.pending-collect.button-link.primary:hover { background: var(--accent-hover); color: var(--on-accent); }
+
+/* ---------- Settings > Centres and batches ---------- */
+.cb-list { margin: 6px 0 12px; }
+.cb-row { display: flex; gap: 6px 14px; align-items: center; flex-wrap: wrap; }
+.cb-name { font-weight: 600; color: var(--heading); }
+.cb-name.muted { color: var(--muted); }
+.cb-acts { margin-left: auto; display: flex; gap: 14px; }
+#settings-centres h3 { margin-top: 18px; }
+@media (max-width: 699px) { .tab-fees .fees-head .muted { display: none; } }
+
+/* ---------- Accounts on a phone: Students · Collect · Pending at the bottom ---------- */
+.quickbar { display: none; }
+@media (max-width: 699px) {
+  body.has-quickbar .quickbar:not([hidden]) { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 15;
+    background: var(--panel); border-top: 1px solid var(--line); box-shadow: 0 -4px 14px rgba(14, 22, 40, .08);
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px)); gap: 6px; align-items: center; }
+  .quickbar a { flex: 1 1 0; text-align: center; padding: 12px 4px; font-size: 13px; font-weight: 500; color: var(--muted);
+    text-decoration: none; border-radius: var(--radius-control); }
+  .quickbar a[aria-current="page"] { color: var(--accent); font-weight: 600; background: var(--accent-soft); }
+  .quickbar a.quick-main { background: var(--accent); color: var(--on-accent); font-weight: 700; flex: 1.3 1 0; }
+  .quickbar a.quick-main[aria-current="page"] { background: var(--accent-hover); color: var(--on-accent); }
+  body.has-quickbar main { padding-bottom: 96px; }
+
+  .collect-modes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .collect-save { width: 100%; }
+  .collect-actions { flex-direction: column; align-items: stretch; }
+  .collect-amount input { max-width: none; }
+  .pending-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .pending-row .pending-collect { grid-column: 1 / -1; text-align: center; }
+  .today-head-acts, .fees-head-acts { width: 100%; }
+  .today-head-acts > *, .fees-head-acts > * { flex: 1 1 0; text-align: center; }
+  .centre-pick select { max-width: 160px; }
+}
