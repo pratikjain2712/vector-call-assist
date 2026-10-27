@@ -750,3 +750,86 @@ Rules (defaults: fees lists, reminders and balancing `auto`, setup `ask`):
 | `my_campaigns()` | seat | Two new columns `is_focus`, `focus_target`; focus lists first. |
 | `autopilot_claim_reminders(p_limit)` | service role | Reminders of missed-promise suggestions, same shape as `wa_claim_reminders`. |
 <!-- end Autopilot -->
+
+<!-- Centres and Collect -->
+## Centres, batches and Collect fee (migration 20261027100000_centres_batches.sql)
+
+_27 Oct 2026. Tests: `supabase/tests/centres_batches_test.sql`, `tests/web/collect.test.js`, `tests/e2e/collect.spec.js`.
+Screens: `web/js/admin/centres.js` (switcher, Settings > Centres and batches), `web/js/admin/collect.js` (#fees/collect,
+#fees/pending)._
+
+**Tables** (RLS on; any active seat of the institute reads them; writes through the functions below):
+- `centres (id, institute_id, name 1–60 unique per institute any case, short_code ^[A-Z0-9]{1,8}$ unique, active, sort_order)`.
+- `batches (id, institute_id, centre_id null = every centre, name 1–60 unique per centre, class_label, board, academic_year, timing ≤ 60, active)`.
+- `students.centre_id`, `students.batch_id`; `leads.centre_id` (browser SELECT granted); `campaigns.centre_id`, `campaigns.batch_id`
+  (null = every centre / batch); `seats.centre_ids uuid[]` (null = every centre; 1–50 ids).
+
+**Defaults.** A new student gets the centre given, else its admission lead's, else the page's (`vector.new_centre`, set by
+`accounts_save_student`), else the only centre of a person limited to one. A batch in one centre sets that centre; a batch of
+another centre is refused (22023). A new lead gets its student's centre, else its list's, else the upload's (`admin_add_leads`
+with `p_centre`), else the only centre of a person limited to one.
+
+**Scope.** Two things narrow every list and total:
+1. *The person.* A seat with `centre_ids` sees only rows of those centres **and rows with no centre** (shared). Enforced in RLS
+   (`students`, `fee_items`, `payments`, `discounts`, `leads` read/update, `campaigns`) and in the functions: `ledger_student()`
+   (so every `accounts_*` call on one student, including `accounts_record_payment` and `accounts_student_detail`),
+   `accounts_reverse_payment`, and the internals `student_balance_rows` (whole-institute mode), `ledger_collected`,
+   `report_fee_promise_rows`, `home_calls`, `ledger_day_closing`. The service role and Autopilot planning are not limited.
+2. *The filter of one call* (`p_centre`, `p_batch`), set with `scope_push` / `scope_pop` (transaction-local settings
+   `vector.centre`, `vector.batch`). Students, leads and payments must match it; calling lists match when their centre/batch is
+   the filter or null; calls match on the lead's centre (else the list's). Asking for a centre the person does not work in:
+   42501 "you can see only your own centres"; a centre of another institute: 42501 "centre not found".
+
+An institute with no centres has no `centre_ids` and sends no filter: everything is as before. The caller page
+(`my_call_queue`, `next_free_lead`) does not look at centres yet.
+
+**Lists and totals with a centre.** Each old function keeps its signature (it is already limited to the person's centres). A
+second function of the same name takes **all** the old arguments plus `p_centre uuid` (needed; null = every centre) and
+`p_batch uuid default null`, so a call with `p_centre` goes to it and a call without it to the old one (no ambiguity):
+
+| Function | New overload |
+|---|---|
+| `admin_fees_ledger` | `(p_institute, p_from, p_to, p_campaign, p_seat, p_centre, p_batch)`; the answer adds `centre_id`, `batch_id` |
+| `admin_promises_ledger` | `(p_institute, p_campaign, p_seat, p_days, p_centre, p_batch)` |
+| `admin_home_ledger`, `admin_home_summary` | `(p_day, p_campaign, p_centre, p_batch)` |
+| `autopilot_numbers` | `(p_centre, p_batch)` |
+| `my_suggestions` | `(p_centre)`: cards whose `plan.centre_id` is that centre or none. `my_suggestions()` leaves out cards of centres the person does not work in. |
+| `admin_campaign_list` | `(p_centre, p_batch)`: two more columns `centre_id`, `batch_id`. `admin_campaign_list()` leaves out lists of other centres. |
+| `admin_callers` | `(p_institute, p_centre)`: people of that centre and of every centre, one more column `centre_ids`. `admin_callers(p_institute)` leaves out people who share no centre with the viewer. |
+| `ledger_day_closing` | `(p_institute, p_day, p_centre, p_batch)` |
+| `accounts_create_fees_campaign` | the 8 old arguments + `p_centre, p_batch`: only that centre's or batch's students; the list carries the centre and batch. |
+| `admin_add_leads` | `(p_campaign, p_rows, p_centre)` |
+| `ledger_collected` | one function, now `(p_institute, p_from, p_to, p_campaign default null, p_centre default null, p_batch default null)` |
+
+Same signature, more: `accounts_students(p_filters)` takes `centre_id`, `batch_id` and returns four more columns `centre_id,
+batch_id, batch_name, centre_name`. `accounts_save_student(p_student, p_data)` takes `centre_id` / `centre` (id, name or short
+code) and `batch_id` / `batch` (id or name). `accounts_import_students(p_rows)` reads `centre` and `batch` per row; a row naming an
+unknown centre or batch, a centre the person does not work in, or an existing student of another centre is skipped with that
+reason. `autopilot_plan` plans every centre whoever asks. Internal (granted to nobody): `<name>__base` of `my_suggestions`,
+`admin_campaign_list`, `admin_callers`, `accounts_save_student`, `accounts_import_students`, `autopilot_plan`,
+`ap_exec_fees_list`; `ap_rule_fees_due_one`, `ap_centre_card`, `scope_*`, `in_scope`, `student_in_scope`, `centre_from_text`,
+`batch_from_text`. Granted for RLS: `my_centre_ids`, `centre_allowed`, `student_in_scope_rls`.
+
+**Autopilot per centre.** With active centres the fees-due rule runs once per centre: key `…:<centre id>`, plan `centre_id` and
+`centre_name`, a new list named "Term 2 fees – Class 8 State Board · Andheri" for that centre's students only (the list gets
+`centre_id`). An existing list counts for a centre when it is that centre's or every centre's.
+
+| Function | Returns | Who | What |
+|---|---|---|---|
+| `centres_list()` | jsonb `{has_centres, my_centre_ids, centres [{id, name, short_code, active, sort_order, students}], batches [{id, centre_id, name, class_label, board, academic_year, timing, active, students}]}` | any active seat | `students` (active) only for ledger readers. |
+| `admin_save_centre(p_id, p_name, p_short_code default null, p_active default true)` | uuid | owner | Adds (null id) or changes. 23505 for a repeated name or code. Audit `centre.added` / `.changed`. |
+| `admin_save_batch(p_id, p_data jsonb)` | uuid | owner, Accounts | `{name, centre_id, class_label, board, academic_year, timing, active}`. Audit `batch.added` / `.changed`. |
+| `admin_set_seat_centres(p_seat, p_centres uuid[])` | void | owner | Null or empty = every centre. Not an owner's seat. Audit `seat.centres_set`. |
+| `admin_set_campaign_centre(p_campaign, p_centre, p_batch default null)` | void | owner, manager | Audit `campaign.centre_set`. |
+| `collect_search(p_q, p_centre default null, p_batch default null, p_limit default 12)` | table `(student_id, name, admission_no, class_label, section, board, batch_id, batch_name, centre_id, centre_name, parent_name, phone, due_now, balance_total, has_dues, money_hidden, rank)` | ledger readers | Active students in scope. Rank: 0 admission no exact, 1 name starts, 2 a word of the name starts, 3 every word starts a word of name or parent, 4 admission no starts, 5 4+ phone digits, 6 name contains (3+ letters). Empty text: no rows. |
+| `collect_student(p_student)` | jsonb `{student {…, centre_name, batch_name}, today, money_hidden, due_now, balance_total, has_dues, unpaid [{fee_item_id, head, due_date, left, is_due}], whatsapp {connected, consent}}` | ledger readers (centre checked) | `unpaid`: fees net of discounts with what is left after payments, oldest paid first. |
+| `collect_pending(p_centre default null, p_batch default null, p_sort 'amount' or 'date', p_limit 200, p_offset 0)` | table `(student_id, name, admission_no, class_label, section, board, batch_name, centre_name, parent_name, phone, due_now, oldest_due_date, last_payment_on, money_hidden, total_rows, total_due)` | ledger readers | Balance due now > 0. |
+| `collected_by_me()` | jsonb `{seat_id, label, today, month_start, money_hidden, can_collect, today_payments, today_amount, month_payments, month_amount, top_mode}` | ledger readers | Payments the person recorded (`recorded_by`), standing, not opening imports, dated today / this month. `top_mode`: the institute's most used mode of 90 days (not `other`), else `cash`. |
+
+**Web.** `shell.js` reads `centres_list` at sign-in; with centres the top bar has the switcher (`#centre-switch`, or
+`#centre-fixed` for a person limited to one centre), remembered per login in localStorage (`vector-admin-centre:<email>`); every
+`ctx.rpc` goes through `VectorCentres.withCentre` (it fills the overload's other arguments) and a switch mounts every tab again.
+Collect fee records with `accounts_record_payment` and undoes (10 minutes, in the page) with
+`accounts_reverse_payment(p_payment, 'Entered by mistake')`; Receipt reuses the Fees receipt (`window.VectorFeesReceipt`); "Send
+on WhatsApp" is a wa.me link with the receipt, shown when the institute's WhatsApp is connected and a lead of the student agreed.
+<!-- end Centres and Collect -->
