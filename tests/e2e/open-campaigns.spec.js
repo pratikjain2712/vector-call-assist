@@ -100,11 +100,15 @@ test('a caller filters open campaigns by class 8th and Fees, gets a pool lead wi
   // Answers that need the institute's facts first stay hidden ("Which number can I call you back on?").
   await expect(help.locator('.help-q', { hasText: 'Which number can I call you back on?' })).toHaveCount(0);
 
-  // "Do not call me again": one tap saves the result, and the next pool lead comes up.
+  // "Do not call me again": the result is picked and confirmed with Save, and the next pool lead comes up.
   await page.locator('#help-search').fill('do not call');
   await help.locator('.help-q', { hasText: 'Do not call me again' }).click();
   await expect(page.locator('#help-save')).toHaveText('Save as Do not call again');
   await page.locator('#help-save').click();
+  await expect(page.locator('#res-do_not_call')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#res-save')).toBeFocused();
+  expect(backend.db.saved.length).toBe(0);
+  await page.locator('#res-save').click();
   await expect(page.locator('#sheet-msg')).toHaveText('Saved: Do not call again for Sunita Sharma.');
   await expect.poll(() => backend.db.saved.length).toBe(1);
   expect(backend.db.saved[0].p_result_key).toBe('do_not_call');

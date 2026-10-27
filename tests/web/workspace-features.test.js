@@ -73,48 +73,59 @@ test("i18n: every English string has a Hindi draft entry", () => {
 
 // ---- session timeout ----
 
-test("session timeout: warns after 30 idle minutes, signs out 5 minutes later when the cloud is on", () => {
+const HOUR = 60 * MIN;
+
+test("session lock: locks after 30 idle minutes and stays signed in for the working day", () => {
   const { SessionTimeout: T } = load(["js/i18n.js", "js/session-timeout.js"]);
   let s = T.initial(0);
   let r = T.step(s, "tick", 30 * MIN - 1000, { canSignOut: true });
   assert.equal(r.action, null);
   r = T.step(s, "tick", 30 * MIN, { canSignOut: true });
-  assert.equal(r.action, "warn");
-  assert.equal(r.state.phase, "warning");
+  assert.equal(r.action, "lock");
+  assert.equal(r.state.phase, "locked");
   s = r.state;
-  r = T.step(s, "tick", 34 * MIN + 59 * 1000, { canSignOut: true });
-  assert.equal(r.action, null, "no sign-out before the 5 minutes are up");
   r = T.step(s, "tick", 35 * MIN, { canSignOut: true });
+  assert.equal(r.action, null, "no sign-out at 35 minutes any more");
+  r = T.step(s, "tick", 12 * HOUR - 1000, { canSignOut: true });
+  assert.equal(r.action, null, "still signed in just before 12 hours");
+  r = T.step(s, "tick", 12 * HOUR, { canSignOut: true });
   assert.equal(r.action, "sign-out");
   assert.equal(r.state.phase, "signed_out");
-  assert.equal(T.step(r.state, "tick", 90 * MIN, { canSignOut: true }).action, null, "signed out is final until activity");
+  assert.equal(T.step(r.state, "tick", 13 * HOUR, { canSignOut: true }).action, null, "signed out is final");
 });
 
-test("session timeout: with the cloud off, the message shows but nobody is signed out", () => {
+test("session lock: with the cloud off, the lock shows but nobody is signed out", () => {
   const { SessionTimeout: T } = load(["js/i18n.js", "js/session-timeout.js"]);
   let r = T.step(T.initial(0), "tick", 30 * MIN, { canSignOut: false });
-  assert.equal(r.action, "warn");
-  r = T.step(r.state, "tick", 120 * MIN, { canSignOut: false });
+  assert.equal(r.action, "lock");
+  r = T.step(r.state, "tick", 24 * HOUR, { canSignOut: false });
   assert.equal(r.action, null);
-  assert.equal(r.state.phase, "warning");
+  assert.equal(r.state.phase, "locked");
 });
 
-test("session timeout: activity resets the timer, and dismisses the message while it shows", () => {
+test("session lock: activity resets the timer; once locked only Continue opens it", () => {
   const { SessionTimeout: T } = load(["js/i18n.js", "js/session-timeout.js"]);
   let r = T.step(T.initial(0), "activity", 20 * MIN, {});
   assert.equal(r.action, null);
   assert.equal(r.state.last, 20 * MIN);
   assert.equal(T.step(r.state, "tick", 49 * MIN, { canSignOut: true }).action, null, "30 minutes count from the last activity");
-  const warned = T.step(T.initial(0), "tick", 30 * MIN, { canSignOut: true });
-  const back = T.step(warned.state, "activity", 31 * MIN, { canSignOut: true });
-  assert.equal(back.action, "dismiss");
+  const locked = T.step(T.initial(0), "tick", 30 * MIN, { canSignOut: true });
+  const poked = T.step(locked.state, "activity", 31 * MIN, { canSignOut: true });
+  assert.equal(poked.action, null);
+  assert.equal(poked.state.phase, "locked", "a key press or a click elsewhere does not unlock");
+  const back = T.step(poked.state, "continue", 32 * MIN, { canSignOut: true });
+  assert.equal(back.action, "unlock");
   assert.equal(back.state.phase, "active");
+  assert.equal(back.state.last, 32 * MIN);
+  assert.equal(T.step(T.initial(0), "continue", 5 * MIN).action, null, "Continue when not locked does nothing to undo");
 });
 
-test("session timeout: a laptop that slept past both periods signs out at once when the cloud is on", () => {
+test("session lock: a laptop that slept past 12 hours signs out at once when the cloud is on", () => {
   const { SessionTimeout: T } = load(["js/i18n.js", "js/session-timeout.js"]);
-  assert.equal(T.step(T.initial(0), "tick", 40 * MIN, { canSignOut: true }).action, "sign-out");
-  assert.equal(T.step(T.initial(0), "tick", 40 * MIN, { canSignOut: false }).action, "warn");
+  assert.equal(T.step(T.initial(0), "tick", 13 * HOUR, { canSignOut: true }).action, "sign-out");
+  assert.equal(T.step(T.initial(0), "tick", 13 * HOUR, { canSignOut: false }).action, "lock");
+  assert.equal(T.step(T.initial(0), "tick", 40 * MIN, { canSignOut: true }).action, "lock", "40 minutes: locked, not signed out");
+  assert.equal(T.SIGN_OUT_MS, 12 * HOUR);
 });
 
 // ---- feedback ----

@@ -1,29 +1,29 @@
-/* Session timeout for the workspace. After 30 minutes with no input, "Still there?" appears. With the cloud
-   on, no answer within 5 more minutes signs the rep out of the cloud and the sign-in screen says why. With
-   the cloud off, only the message shows. Any input (or Continue) resets the timer. Times come from the wall
-   clock, so a laptop that slept counts the time it slept. The state machine (step) takes times as arguments. */
+/* Session lock for the caller page. After 30 minutes with no input the screen locks: the page is covered and
+   only Continue opens it again (other input does not), so nobody walking past sees lead names. The caller stays
+   signed in for the working day: with the cloud on, the real sign-out comes only after 12 hours with no input,
+   and the sign-in screen says why. With the cloud off, only the lock shows. Times come from the wall clock, so
+   a laptop that slept counts the time it slept. The state machine (step) takes times as arguments. */
 (function (root) {
   const IDLE_MS = 30 * 60 * 1000;
-  const GRACE_MS = 5 * 60 * 1000;
+  const SIGN_OUT_MS = 12 * 60 * 60 * 1000;
   const $ = (id) => document.getElementById(id);
 
-  function initial(now) { return { phase: "active", last: now, warnedAt: 0 }; }
+  function initial(now) { return { phase: "active", last: now, lockedAt: 0 }; }
 
-  /* ev: "activity" (any input, or Continue) or "tick" (a timer check).
-     o.canSignOut: true when a cloud session is open and must be ended after the grace period.
-     Returns { state, action }. action: "warn" (show the message), "dismiss" (hide it), "sign-out", or null. */
+  /* ev: "activity" (any input), "continue" (the Continue button) or "tick" (a timer check).
+     o.canSignOut: true when a cloud session is open and must be ended after SIGN_OUT_MS with no input.
+     Returns { state, action }. action: "lock" (cover the page), "unlock", "sign-out", or null. */
   function step(s, ev, now, o) {
     const canSignOut = !!(o && o.canSignOut);
-    if (ev === "activity") return { state: initial(now), action: s.phase === "warning" ? "dismiss" : null };
+    if (ev === "continue") return { state: initial(now), action: s.phase === "locked" ? "unlock" : null };
+    if (ev === "activity") {
+      if (s.phase === "locked") return { state: s, action: null };   // locked: only Continue opens it
+      return { state: initial(now), action: null };
+    }
     if (ev !== "tick" || s.phase === "signed_out") return { state: s, action: null };
     const idle = now - s.last;
-    if (s.phase === "active") {
-      if (canSignOut && idle >= IDLE_MS + GRACE_MS) return { state: { phase: "signed_out", last: s.last, warnedAt: now }, action: "sign-out" };
-      if (idle >= IDLE_MS) return { state: { phase: "warning", last: s.last, warnedAt: now }, action: "warn" };
-      return { state: s, action: null };
-    }
-    // warning: sign out only when a cloud session is open, and only after the grace period
-    if (canSignOut && now - s.warnedAt >= GRACE_MS) return { state: { phase: "signed_out", last: s.last, warnedAt: s.warnedAt }, action: "sign-out" };
+    if (canSignOut && idle >= SIGN_OUT_MS) return { state: { phase: "signed_out", last: s.last, lockedAt: s.lockedAt || now }, action: "sign-out" };
+    if (s.phase === "active" && idle >= IDLE_MS) return { state: { phase: "locked", last: s.last, lockedAt: now }, action: "lock" };
     return { state: s, action: null };
   }
 
@@ -41,9 +41,13 @@
   }
   function activity() {
     const now = Date.now();
-    const r = step(st || initial(now), "activity", now);
+    st = step(st || initial(now), "activity", now).state;
+  }
+  function onContinue() {
+    const now = Date.now();
+    const r = step(st || initial(now), "continue", now);
     st = r.state;
-    if (r.action === "dismiss") overlay(false);
+    overlay(false);
   }
   async function signOutForTimeout() {
     try { await root.Cloud.signOut(); } catch (e) {}
@@ -57,7 +61,7 @@
     const cloud = cloudOpen();
     const r = step(st, "tick", now, { canSignOut: cloud });
     st = r.state;
-    if (r.action === "warn") overlay(true, cloud);
+    if (r.action === "lock") overlay(true, cloud);
     if (r.action === "sign-out") { overlay(false); signOutForTimeout(); }
   }
 
@@ -65,9 +69,9 @@
     st = initial(Date.now());
     ["pointerdown", "keydown", "input", "touchstart", "wheel"].forEach((ev) =>
       document.addEventListener(ev, activity, { capture: true, passive: true }));
-    $("still-continue").addEventListener("click", activity);
+    $("still-continue").addEventListener("click", onContinue);
     setInterval(tick, 1000);
   }
 
-  root.SessionTimeout = { IDLE_MS, GRACE_MS, initial, step, init };
+  root.SessionTimeout = { IDLE_MS, SIGN_OUT_MS, initial, step, init };
 })(window);

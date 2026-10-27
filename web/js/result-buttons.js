@@ -1,7 +1,8 @@
 /* Result buttons of a campaign call: the call type's own results and the five common ones (from my_campaigns()
    results: { key, label, needs_date, needs_amount, needs_reason, needs_rating, reason_choices, counts_as_good,
    common }), the fields a result needs, and the save_call_result() arguments. Pure functions; the page draws
-   the buttons in main.js. Tested in tests/web/result-buttons.test.js. */
+   the buttons in main.js. Also the quick picks that save taps: the amount due to fill in, promise dates and
+   call back times. Tested in tests/web/result-buttons.test.js. */
 (function (root) {
   // Colour hint per result: good results green, a clear no red.
   const BAD = { refused: 1, not_interested: 1, cancelled: 1, not_coming: 1, not_renewing: 1, not_this_year: 1, joined_elsewhere: 1, do_not_call: 1 };
@@ -83,7 +84,52 @@
     return args;
   }
 
-  const api = { split, tone, parseAmount, fields, problems, callAt, toArgs };
+  /* One tap saves a result that asks for nothing else, except Do not call again: that stops a lead for good
+     (a compliance action), so it is always picked, then confirmed with Save. */
+  const CONFIRM = { do_not_call: 1 };
+  function oneTap(result) { return !!result && !fields(result).length && !CONFIRM[result.key]; }
+
+  /* The buttons in screen order (the call type's results, then the common ones): keys 1 to 9 pick them. */
+  function ordered(results) { const s = split(results); return s.main.concat(s.common); }
+
+  /* The amount to fill in for Paid or a promise: the amount due, when this caller is shown it. null otherwise. */
+  function defaultAmount(money) {
+    if (!money || money.money_hidden || money.amount_due == null || money.amount_due === "") return null;
+    const n = Number(money.amount_due);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+
+  // Quick picks for the date fields, worked out in India time from now (ms).
+  const IST = 330 * 60e3;
+  const pad = (n) => String(n).padStart(2, "0");
+  function india(now) {
+    const d = new Date(now + IST);
+    return { y: d.getUTCFullYear(), m: d.getUTCMonth(), day: d.getUTCDate(), dow: d.getUTCDay(), hh: d.getUTCHours(), mm: d.getUTCMinutes() };
+  }
+  function isoDay(y, m, day) { return new Date(Date.UTC(y, m, day)).toISOString().slice(0, 10); }
+
+  /* A promise date: tomorrow, in 3 days, the coming Saturday (never today), the 1st of next month. */
+  function promiseDates(now) {
+    const p = india(now);
+    const toSat = ((6 - p.dow + 7) % 7) || 7;
+    return [
+      { key: "tomorrow", date: isoDay(p.y, p.m, p.day + 1) },
+      { key: "in3", date: isoDay(p.y, p.m, p.day + 3) },
+      { key: "sat", date: isoDay(p.y, p.m, p.day + toSat) },
+      { key: "first", date: isoDay(p.y, p.m + 1, 1) },
+    ];
+  }
+
+  /* A call back: in 1 hour, 6 pm today (only before 6 pm), tomorrow at the same time. { key, date, time }. */
+  function callbackTimes(now) {
+    const p = india(now), h = india(now + 3600e3);
+    const out = [{ key: "hour", date: isoDay(h.y, h.m, h.day), time: pad(h.hh) + ":" + pad(h.mm) }];
+    if (p.hh < 18) out.push({ key: "evening", date: isoDay(p.y, p.m, p.day), time: "18:00" });
+    out.push({ key: "tomorrow", date: isoDay(p.y, p.m, p.day + 1), time: pad(p.hh) + ":" + pad(p.mm) });
+    return out;
+  }
+
+  const api = { split, tone, parseAmount, fields, problems, callAt, toArgs, oneTap, ordered, defaultAmount, promiseDates, callbackTimes };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   root.ResultButtons = api;
 })(typeof window !== "undefined" ? window : globalThis);
